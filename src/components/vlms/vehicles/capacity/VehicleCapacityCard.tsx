@@ -4,7 +4,8 @@ import { Package } from 'lucide-react';
 import { formatWeight } from '@/lib/vlms/capacityCalculations';
 import { VehicleWithRelations } from '@/types/vlms';
 import { TierConfig } from '@/types/vlms-onboarding';
-import { VehicleCapacityVisualizer } from './VehicleCapacityVisualizer';
+import { getVehicleSilhouette } from '@/lib/vehicleUtils';
+import { cn } from '@/lib/utils';
 
 interface VehicleCapacityCardProps {
   vehicle: VehicleWithRelations;
@@ -12,19 +13,11 @@ interface VehicleCapacityCardProps {
   currentVolume?: number; // Optional current volume for visualization
 }
 
-/**
- * Map VLMS vehicle types to visualizer types
- */
-function mapVehicleType(vehicleType?: string | null): 'truck' | 'van' | 'pickup' | 'car' {
-  const type = vehicleType?.toLowerCase();
-
-  if (type === 'truck' || type === 'bus') return 'truck';
-  if (type === 'van') return 'van';
-  if (type === 'pickup' || type === 'suv') return 'pickup';
-  if (type === 'sedan' || type === 'car') return 'car';
-
-  // Default to van for logistics use case
-  return 'van';
+function getCapacityColor(pct: number): string {
+  if (pct >= 90) return 'text-red-500';
+  if (pct >= 70) return 'text-blue-500';
+  if (pct >= 40) return 'text-green-500';
+  return 'text-muted-foreground';
 }
 
 export function VehicleCapacityCard({ vehicle, currentWeight, currentVolume }: VehicleCapacityCardProps) {
@@ -35,6 +28,16 @@ export function VehicleCapacityCard({ vehicle, currentWeight, currentVolume }: V
   // Sort tiers by order (Upper first for visual display)
   const sortedTiers = [...tierConfigs].sort((a, b) => (b.tier_order || 0) - (a.tier_order || 0));
 
+  // Capacity percentage
+  const maxWeight = vehicle.capacity_kg || 0;
+  const weightPct = maxWeight > 0 ? Math.min(Math.round(((currentWeight || 0) / maxWeight) * 100), 100) : 0;
+  const silhouetteSrc = getVehicleSilhouette(
+    (vehicle as any).type || vehicle.vehicle_type,
+    vehicle.make,
+    vehicle.model,
+  );
+  const capacityColor = getCapacityColor(weightPct);
+
   return (
     <Card>
       <CardHeader>
@@ -44,18 +47,23 @@ export function VehicleCapacityCard({ vehicle, currentWeight, currentVolume }: V
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Vehicle Capacity Visualizer */}
+        {/* Silhouette card with capacity overlay */}
         <div className="flex justify-center py-4 border-b">
-          <VehicleCapacityVisualizer
-            vehicleType={mapVehicleType(vehicle.vehicle_type)}
-            currentWeight={currentWeight}
-            maxWeight={vehicle.capacity_kg || undefined}
-            currentVolume={currentVolume}
-            maxVolume={vehicle.capacity_m3 || undefined}
-            size="lg"
-            showLabel={false}
-            showMetrics={true}
-          />
+          <div className="relative w-80 h-40 flex items-center justify-center">
+            <img
+              src={silhouetteSrc}
+              alt={`${vehicle.make || ''} ${vehicle.model} silhouette`}
+              className="h-full w-full object-contain opacity-80"
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className={cn('text-6xl font-bold drop-shadow-lg', capacityColor)}>
+                {weightPct}%
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="text-center text-sm text-muted-foreground -mt-2 pb-2 border-b">
+          Weight: {formatWeight(currentWeight || 0)} / {formatWeight(maxWeight)}
         </div>
 
         {/* Payload Capacity Header */}

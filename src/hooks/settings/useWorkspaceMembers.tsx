@@ -197,6 +197,23 @@ export function useToggleMemberStatus() {
   });
 }
 
+export function useSearchUsersForWorkspace(workspaceId: string | null, search: string) {
+  return useQuery({
+    queryKey: ['workspace-invite-search', workspaceId, search],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+      const { data, error } = await supabase.rpc('search_users_for_workspace_invite', {
+        p_workspace_id: workspaceId,
+        p_search: search || null,
+      });
+      if (error) throw error;
+      return (data as { id: string; email: string; full_name: string; phone: string | null }[]) || [];
+    },
+    enabled: !!workspaceId && search.length >= 2,
+    staleTime: 10000,
+  });
+}
+
 export function useAddWorkspaceMemberV2() {
   const queryClient = useQueryClient();
 

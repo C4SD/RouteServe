@@ -99,7 +99,7 @@ export function autoAssignFacilitiesToSlots(
         const validation = validateSlotAssignment(facility, slot);
 
         if (validation.valid) {
-          // Create assignment
+          // Create assignment — propagate program + storage_type for traceability
           result.assignments.push({
             slot_key: slot.slot_key,
             vehicle_id: vehicle.vehicle_id,
@@ -109,6 +109,8 @@ export function autoAssignFacilitiesToSlots(
             load_kg: facility.estimated_weight,
             load_volume_m3: facility.estimated_volume,
             sequence_order: result.assignments.length + 1,
+            program: facility.program,
+            storage_type: facility.storage_type,
           });
 
           // Mark slot as occupied
@@ -220,6 +222,9 @@ export function suggestOptimalVehicle(
   const facilityCount = facilities.length;
   const totalWeight = facilities.reduce((sum, f) => sum + (f.estimated_weight || 0), 0);
   const totalVolume = facilities.reduce((sum, f) => sum + (f.estimated_volume || 0), 0);
+  const requiresColdChain = facilities.some(
+    (f) => f.storage_type === 'cold' || f.storage_type === 'frozen'
+  );
 
   let bestVehicle: VehicleCapacity | null = null;
   let bestScore = -1;
@@ -229,6 +234,11 @@ export function suggestOptimalVehicle(
     const slots = generateVehicleSlotMap(vehicle);
     const vehicleCapacityKg = vehicle.capacity_kg || 0;
     const vehicleCapacityM3 = vehicle.capacity_m3 || 0;
+
+    // Hard reject: cold chain required but vehicle lacks it
+    if (requiresColdChain && !vehicle.is_cold_chain) {
+      continue;
+    }
 
     // Skip if insufficient slots
     if (slots.length < facilityCount) {
@@ -270,6 +280,34 @@ export function suggestOptimalVehicle(
     score: Math.round(bestScore),
     reason: bestReason,
   };
+}
+
+/**
+ * Compute load composition by program from slot assignments.
+ * Returns each program's share of total slots as a percentage.
+ * Slots with no program tag are grouped under "Untagged".
+ */
+export function computeLoadComposition(
+  assignments: SlotAssignment[]
+): Array<{ program: string; slots: number; pct: number }> {
+  if (assignments.length === 0) return [];
+
+  const countsByProgram = new Map<string, number>();
+
+  for (const assignment of assignments) {
+    const key = assignment.program ?? 'Untagged';
+    countsByProgram.set(key, (countsByProgram.get(key) ?? 0) + 1);
+  }
+
+  const total = assignments.length;
+
+  return Array.from(countsByProgram.entries())
+    .map(([program, slots]) => ({
+      program,
+      slots,
+      pct: Math.round((slots / total) * 100),
+    }))
+    .sort((a, b) => b.slots - a.slots);
 }
 
 /**

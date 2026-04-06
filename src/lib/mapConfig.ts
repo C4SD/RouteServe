@@ -34,10 +34,11 @@ export const MAP_CONFIG = {
   /**
    * MapLibre GL JS style URLs
    * Theme-aware basemap styles for vector rendering
+   * Using OpenFreeMap (https://openfreemap.org) — free, no API key required.
    */
   mapLibreStyles: {
-    light: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    dark: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    light: 'https://tiles.openfreemap.org/styles/positron',
+    dark: 'https://tiles.openfreemap.org/styles/fiord',
   },
 } as const;
 

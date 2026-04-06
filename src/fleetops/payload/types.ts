@@ -27,6 +27,8 @@ export interface VehicleSlot {
 
 /**
  * Slot assignment record.
+ * program and storage_type are propagated from the facility's requisition items
+ * and preserved here for load composition reporting and audit.
  */
 export interface SlotAssignment {
   slot_key: string;
@@ -37,6 +39,8 @@ export interface SlotAssignment {
   load_kg?: number;
   load_volume_m3?: number;
   sequence_order?: number;
+  program?: string;
+  storage_type?: 'ambient' | 'cold' | 'frozen';
 }
 
 /**
@@ -48,6 +52,7 @@ export interface VehicleCapacity {
   capacity_kg: number;
   capacity_m3: number;
   total_slots: number;
+  is_cold_chain?: boolean;
   tiered_config?: TieredConfig;
 }
 
@@ -71,6 +76,8 @@ export interface TierConfig {
 
 /**
  * Facility for slot assignment.
+ * program and storage_type are derived from the facility's dominant requisition items
+ * and propagated into SlotAssignment for traceability.
  */
 export interface AssignableFacility {
   id: string;
@@ -79,6 +86,8 @@ export interface AssignableFacility {
   estimated_volume?: number;
   priority?: 'high' | 'medium' | 'low';
   fragile?: boolean;
+  program?: string;
+  storage_type?: 'ambient' | 'cold' | 'frozen';
 }
 
 /**

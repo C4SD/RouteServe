@@ -1,20 +1,20 @@
 /**
  * Location Management Settings Page
  *
- * Allows admins to:
- * 1. Import OSM admin boundaries via Overpass API for any configured country
- * 2. View imported admin units (States/Regions, LGAs/Districts)
- * 3. Monitor boundary import progress
+ * Two-phase OSM boundary import:
+ *  Phase 1 — import States/Regions for the country (fast, ~40 results)
+ *  Phase 2 — select specific states, then import only their LGAs/Districts
  */
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -34,15 +34,28 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
-  fetchBoundariesFromOverpass,
+  fetchStatesFromOverpass,
+  fetchDistrictsForStates,
   saveBoundariesToDB,
   COUNTRY_ADMIN_LEVELS,
   type ImportProgress,
+  type BoundaryResult,
 } from '@/lib/overpass-boundaries';
-import { Download, MapPin, RefreshCw, AlertCircle, CheckCircle, Globe, Loader2 } from 'lucide-react';
+import {
+  Download,
+  MapPin,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
+  Globe,
+  Loader2,
+  ChevronRight,
+} from 'lucide-react';
 
 export default function LocationManagement() {
   const { workspaceId } = useWorkspace();
+  const queryClient = useQueryClient();
+
   const [importProgress, setImportProgress] = useState<ImportProgress>({
     status: 'idle',
     message: '',
@@ -50,6 +63,9 @@ export default function LocationManagement() {
   });
   const [isImporting, setIsImporting] = useState(false);
   const [selectedCountryId, setSelectedCountryId] = useState<string>('');
+
+  // State selection for district import
+  const [selectedStateOsmIds, setSelectedStateOsmIds] = useState<Set<number>>(new Set());
 
   // Fetch workspace countries
   const { data: workspaceCountries = [] } = useQuery({
@@ -70,7 +86,6 @@ export default function LocationManagement() {
     enabled: !!workspaceId,
   });
 
-  // Auto-select primary country
   const effectiveCountryId =
     selectedCountryId ||
     workspaceCountries.find((wc) => wc.is_primary)?.country_id ||
@@ -81,72 +96,108 @@ export default function LocationManagement() {
   const isoCode = selectedWC?.countries?.iso_code || '';
   const countryName = selectedWC?.countries?.name || 'Unknown';
   const adminConfig = COUNTRY_ADMIN_LEVELS[isoCode];
+  const stateLabel = adminConfig?.label_states || 'States';
+  const districtLabel = adminConfig?.label_districts || 'Districts';
+  const stateLevel = adminConfig?.states ?? 4;
+  const districtLevel = adminConfig?.districts ?? 6;
 
   // Fetch existing admin units for the selected country
   const { data: adminUnits = [], isLoading: unitsLoading, refetch: refetchUnits } = useQuery({
-    queryKey: ['admin-units', effectiveCountryId],
+    queryKey: ['admin-units', effectiveCountryId, workspaceId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('admin_units')
         .select('id, name, name_en, admin_level, osm_id, population, is_active')
         .eq('country_id', effectiveCountryId)
+        .eq('workspace_id', workspaceId!)
         .order('admin_level')
         .order('name');
       if (error) throw error;
       return data || [];
     },
-    enabled: !!effectiveCountryId,
+    enabled: !!effectiveCountryId && !!workspaceId,
   });
 
-  const stateUnits = adminUnits.filter((u) => u.admin_level === (adminConfig?.states || 4));
-  const districtUnits = adminUnits.filter((u) => u.admin_level === (adminConfig?.districts || 6));
+  const stateUnits = adminUnits.filter((u) => u.admin_level === stateLevel);
+  const districtUnits = adminUnits.filter((u) => u.admin_level === districtLevel);
+  const hasStates = stateUnits.length > 0;
 
-  /**
-   * Import boundaries from Overpass API
-   */
-  const handleImportBoundaries = async () => {
+  // Fetch workspace's registered states so Step 2 pre-selects them
+  const { data: workspaceStates = [] } = useQuery({
+    queryKey: ['workspace-states', workspaceId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('workspace_states')
+        .select('admin_unit_id')
+        .eq('workspace_id', workspaceId!);
+      if (error) throw error;
+      return (data || []) as Array<{ admin_unit_id: string }>;
+    },
+    enabled: !!workspaceId,
+  });
+
+  // Pre-select registered states once state units are loaded
+  const registeredUnitIds = new Set(workspaceStates.map((ws) => ws.admin_unit_id));
+  // Sync pre-selection when stateUnits or workspaceStates load
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
+  if (!hasAutoSelected && hasStates && registeredUnitIds.size > 0 && selectedStateOsmIds.size === 0) {
+    const preselect = new Set(
+      stateUnits
+        .filter((s) => s.osm_id && registeredUnitIds.has(s.id))
+        .map((s) => s.osm_id as number)
+    );
+    if (preselect.size > 0) {
+      setSelectedStateOsmIds(preselect);
+      setHasAutoSelected(true);
+    }
+  }
+
+  const toggleState = (osmId: number) => {
+    setSelectedStateOsmIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(osmId)) next.delete(osmId);
+      else next.add(osmId);
+      return next;
+    });
+  };
+
+  const toggleAllStates = () => {
+    if (selectedStateOsmIds.size === stateUnits.length) {
+      setSelectedStateOsmIds(new Set());
+    } else {
+      setSelectedStateOsmIds(new Set(stateUnits.map((s) => s.osm_id).filter(Boolean)));
+    }
+  };
+
+  // Phase 1: import states for the country
+  const handleImportStates = async () => {
     if (!effectiveCountryId || !isoCode) {
       toast.error('Please select a country first');
       return;
     }
 
-    const levels = adminConfig
-      ? [adminConfig.states, adminConfig.districts]
-      : [4, 6]; // sensible defaults
-
     try {
       setIsImporting(true);
       setImportProgress({ status: 'fetching', message: 'Starting...', progress: 0 });
 
-      // Step 1: Fetch from Overpass
-      const boundaries = await fetchBoundariesFromOverpass(isoCode, levels, setImportProgress);
+      const boundaries = await fetchStatesFromOverpass(isoCode, stateLevel, setImportProgress);
 
       if (boundaries.length === 0) {
-        toast.warning('No boundaries found', {
+        toast.warning('No states found', {
           description: `Overpass returned 0 results for ${countryName}. Check the country ISO code.`,
         });
-        setIsImporting(false);
-        setImportProgress({ status: 'idle', message: '', progress: 0 });
         return;
       }
 
-      // Step 2: Save to DB
       const imported = await saveBoundariesToDB(
-        supabase,
-        boundaries,
-        effectiveCountryId,
-        workspaceId!,
-        setImportProgress
+        supabase, boundaries, effectiveCountryId, workspaceId!, setImportProgress
       );
 
-      toast.success('Import Complete', {
-        description: `Imported ${imported} boundaries for ${countryName}`,
-      });
-
+      toast.success(`${imported} ${stateLabel} imported for ${countryName}`);
       refetchUnits();
+      queryClient.invalidateQueries({ queryKey: ['boundary-counts'] });
     } catch (error) {
-      console.error('Import error:', error);
-      toast.error('Import Failed', {
+      toast.error('Import failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
       });
       setImportProgress({
@@ -160,26 +211,93 @@ export default function LocationManagement() {
     }
   };
 
-  const renderStatusBadge = () => {
+  // Phase 2: import districts for selected states only
+  const handleImportDistricts = async () => {
+    if (selectedStateOsmIds.size === 0) {
+      toast.error(`Select at least one ${stateLabel.slice(0, -1)} first`);
+      return;
+    }
+
+    const selectedStates: Pick<BoundaryResult, 'osmId' | 'name'>[] = stateUnits
+      .filter((s) => s.osm_id && selectedStateOsmIds.has(s.osm_id))
+      .map((s) => ({ osmId: s.osm_id!, name: s.name }));
+
+    try {
+      setIsImporting(true);
+      setImportProgress({ status: 'fetching', message: 'Starting...', progress: 0 });
+
+      const boundaries = await fetchDistrictsForStates(
+        selectedStates, districtLevel, setImportProgress
+      );
+
+      if (boundaries.length === 0) {
+        toast.warning('No districts found for selected states');
+        return;
+      }
+
+      const imported = await saveBoundariesToDB(
+        supabase, boundaries, effectiveCountryId, workspaceId!, setImportProgress
+      );
+
+      toast.success(`${imported} ${districtLabel} imported`, {
+        description: `For: ${selectedStates.map((s) => s.name).join(', ')}`,
+      });
+      refetchUnits();
+      queryClient.invalidateQueries({ queryKey: ['boundary-counts'] });
+      setSelectedStateOsmIds(new Set());
+    } catch (error) {
+      toast.error('Import failed', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+      setImportProgress({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        progress: 0,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const renderProgress = () => {
     const { status } = importProgress;
     if (status === 'idle') return null;
 
-    const config: Record<string, { label: string; variant: 'default' | 'destructive'; icon: typeof Download }> = {
-      fetching: { label: 'Fetching', variant: 'default', icon: Download },
-      parsing: { label: 'Parsing', variant: 'default', icon: RefreshCw },
-      saving: { label: 'Saving', variant: 'default', icon: MapPin },
-      complete: { label: 'Complete', variant: 'default', icon: CheckCircle },
-      error: { label: 'Error', variant: 'destructive', icon: AlertCircle },
-    };
-
-    const cfg = config[status] || config.fetching;
-    const Icon = cfg.icon;
+    const isError = status === 'error';
+    const isComplete = status === 'complete';
 
     return (
-      <Badge variant={cfg.variant} className="flex items-center gap-1">
-        <Icon className="h-3 w-3" />
-        {cfg.label}
-      </Badge>
+      <div className="space-y-2 p-4 border rounded-lg bg-card">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Import Status</span>
+          <Badge
+            variant={isError ? 'destructive' : 'default'}
+            className={isComplete ? 'bg-emerald-500/10 text-emerald-600' : ''}
+          >
+            {isComplete ? (
+              <><CheckCircle className="h-3 w-3 mr-1" />Complete</>
+            ) : isError ? (
+              <><AlertCircle className="h-3 w-3 mr-1" />Error</>
+            ) : (
+              <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />{status.charAt(0).toUpperCase() + status.slice(1)}</>
+            )}
+          </Badge>
+        </div>
+        <Progress value={importProgress.progress} className="h-2" />
+        <p className="text-sm text-muted-foreground">{importProgress.message}</p>
+        {importProgress.total != null && (
+          <p className="text-xs text-muted-foreground">
+            {importProgress.imported ?? 0} / {importProgress.total} boundaries
+          </p>
+        )}
+        {isError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{importProgress.error}</AlertDescription>
+          </Alert>
+        )}
+      </div>
     );
   };
 
@@ -194,10 +312,7 @@ export default function LocationManagement() {
         </div>
 
         {workspaceCountries.length > 1 && (
-          <Select
-            value={effectiveCountryId}
-            onValueChange={setSelectedCountryId}
-          >
+          <Select value={effectiveCountryId} onValueChange={setSelectedCountryId}>
             <SelectTrigger className="w-52">
               <Globe className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Select country..." />
@@ -226,7 +341,7 @@ export default function LocationManagement() {
         <Tabs defaultValue="boundaries" className="space-y-4">
           <TabsList>
             <TabsTrigger value="boundaries">
-              {adminConfig?.label_states || 'States'} &amp; {adminConfig?.label_districts || 'Districts'}
+              {stateLabel} &amp; {districtLabel}
             </TabsTrigger>
             <TabsTrigger value="import">Import from OSM</TabsTrigger>
           </TabsList>
@@ -235,12 +350,10 @@ export default function LocationManagement() {
           <TabsContent value="boundaries" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>
-                  Administrative Boundaries — {countryName}
-                </CardTitle>
+                <CardTitle>Administrative Boundaries — {countryName}</CardTitle>
                 <CardDescription>
-                  {stateUnits.length} {adminConfig?.label_states || 'states'},{' '}
-                  {districtUnits.length} {adminConfig?.label_districts || 'districts'} imported
+                  {stateUnits.length} {stateLabel.toLowerCase()},{' '}
+                  {districtUnits.length} {districtLabel.toLowerCase()} imported
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -252,7 +365,7 @@ export default function LocationManagement() {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      No boundaries imported yet. Use the "Import from OSM" tab to download boundaries for {countryName}.
+                      No boundaries imported yet. Use the "Import from OSM" tab to get started.
                     </AlertDescription>
                   </Alert>
                 ) : (
@@ -272,9 +385,7 @@ export default function LocationManagement() {
                             <TableCell className="font-medium">{unit.name}</TableCell>
                             <TableCell>
                               <Badge variant="outline" className="text-xs">
-                                {unit.admin_level === (adminConfig?.states || 4)
-                                  ? adminConfig?.label_states || 'State'
-                                  : adminConfig?.label_districts || 'District'}
+                                {unit.admin_level === stateLevel ? stateLabel.slice(0, -1) : districtLabel.slice(0, -1)}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-muted-foreground">
@@ -283,11 +394,7 @@ export default function LocationManagement() {
                             <TableCell>
                               <Badge
                                 variant={unit.is_active ? 'default' : 'outline'}
-                                className={
-                                  unit.is_active
-                                    ? 'bg-emerald-500/10 text-emerald-600'
-                                    : 'text-muted-foreground'
-                                }
+                                className={unit.is_active ? 'bg-emerald-500/10 text-emerald-600' : 'text-muted-foreground'}
                               >
                                 {unit.is_active ? 'Active' : 'Inactive'}
                               </Badge>
@@ -309,86 +416,140 @@ export default function LocationManagement() {
 
           {/* Import Tab */}
           <TabsContent value="import" className="space-y-4">
+
+            {/* Step 1: Import States */}
             <Card>
               <CardHeader>
-                <CardTitle>Import Boundaries from OpenStreetMap</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
+                  Import {stateLabel}
+                  {hasStates && (
+                    <Badge className="ml-1 bg-emerald-500/10 text-emerald-600">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      {stateUnits.length} imported
+                    </Badge>
+                  )}
+                </CardTitle>
                 <CardDescription>
-                  Download admin boundaries for {countryName} via the Overpass API
+                  Download {stateLabel.toLowerCase()} for {countryName} from OpenStreetMap.
+                  This is a fast query (~{isoCode === 'NG' ? '37' : '40'} results).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button
+                  onClick={handleImportStates}
+                  disabled={isImporting}
+                  variant={hasStates ? 'outline' : 'default'}
+                >
+                  {isImporting && importProgress.status === 'fetching' ? (
+                    <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Importing...</>
+                  ) : (
+                    <><Download className="h-4 w-4 mr-2" />{hasStates ? `Re-import ${stateLabel}` : `Import ${stateLabel}`}</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Step 2: Select States → Import Districts */}
+            <Card className={!hasStates ? 'opacity-50 pointer-events-none' : ''}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
+                  Select {stateLabel} &amp; Import {districtLabel}
+                  {districtUnits.length > 0 && (
+                    <Badge className="ml-1 bg-emerald-500/10 text-emerald-600">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      {districtUnits.length} {districtLabel.toLowerCase()} imported
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Choose which {stateLabel.toLowerCase()} to import {districtLabel.toLowerCase()} for.
+                  One Overpass request per state — large states may take 20–30 s each.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Alert>
-                  <MapPin className="h-4 w-4" />
-                  <AlertDescription>
-                    This queries the Overpass API for {countryName} ({isoCode}) administrative boundaries.
-                    {adminConfig ? (
-                      <> Importing {adminConfig.label_states} (level {adminConfig.states}) and{' '}
-                        {adminConfig.label_districts} (level {adminConfig.districts}).</>
-                    ) : (
-                      <> Importing admin levels 4 and 6.</>
-                    )}
-                    {' '}The query may take 30-60 seconds.
-                  </AlertDescription>
-                </Alert>
-
-                {/* Progress */}
-                {importProgress.status !== 'idle' && (
-                  <div className="space-y-2 p-4 border rounded-lg bg-card">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Import Status</span>
-                      {renderStatusBadge()}
-                    </div>
-                    <Progress value={importProgress.progress} className="h-2" />
-                    <p className="text-sm text-muted-foreground">{importProgress.message}</p>
-                    {importProgress.total != null && (
-                      <p className="text-xs text-muted-foreground">
-                        {importProgress.imported || 0} / {importProgress.total} boundaries
-                      </p>
-                    )}
-                    {importProgress.error && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{importProgress.error}</AlertDescription>
-                      </Alert>
-                    )}
+                {!hasStates ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <ChevronRight className="h-4 w-4" />
+                    Complete Step 1 first to see available {stateLabel.toLowerCase()}.
                   </div>
+                ) : (
+                  <>
+                    {/* State checklist */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
+                        <Checkbox
+                          id="select-all"
+                          checked={selectedStateOsmIds.size === stateUnits.length && stateUnits.length > 0}
+                          onCheckedChange={toggleAllStates}
+                        />
+                        <label htmlFor="select-all" className="text-xs font-medium cursor-pointer select-none">
+                          Select all ({stateUnits.length} {stateLabel.toLowerCase()})
+                        </label>
+                        {selectedStateOsmIds.size > 0 && selectedStateOsmIds.size < stateUnits.length && (
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {selectedStateOsmIds.size} selected
+                          </span>
+                        )}
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-0 divide-y">
+                          {stateUnits.map((state) => {
+                            const hasDistricts = districtUnits.some(
+                              (d) => d.admin_level === districtLevel
+                              // Note: we can't easily match by parent without parent_id, so
+                              // we just track total count as an indicator
+                            );
+                            return (
+                              <label
+                                key={state.id}
+                                className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 cursor-pointer select-none"
+                              >
+                                <Checkbox
+                                  checked={state.osm_id ? selectedStateOsmIds.has(state.osm_id) : false}
+                                  onCheckedChange={() => state.osm_id && toggleState(state.osm_id)}
+                                  disabled={!state.osm_id}
+                                />
+                                <span className="text-sm">{state.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleImportDistricts}
+                      disabled={isImporting || selectedStateOsmIds.size === 0}
+                    >
+                      {isImporting ? (
+                        <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Importing...</>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          Import {districtLabel} for{' '}
+                          {selectedStateOsmIds.size === 0
+                            ? `selected ${stateLabel.toLowerCase()}`
+                            : selectedStateOsmIds.size === stateUnits.length
+                            ? `all ${stateUnits.length} ${stateLabel.toLowerCase()}`
+                            : `${selectedStateOsmIds.size} ${selectedStateOsmIds.size === 1 ? stateLabel.slice(0, -1).toLowerCase() : stateLabel.toLowerCase()}`}
+                        </>
+                      )}
+                    </Button>
+                  </>
                 )}
-
-                {/* Import Button */}
-                <div className="flex items-center gap-4">
-                  <Button
-                    onClick={handleImportBoundaries}
-                    disabled={isImporting || !effectiveCountryId}
-                    size="lg"
-                  >
-                    {isImporting ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Importing...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Import {countryName} Boundaries
-                      </>
-                    )}
-                  </Button>
-
-                  {importProgress.status === 'complete' && (
-                    <Badge className="flex items-center gap-1 bg-emerald-500/10 text-emerald-600">
-                      <CheckCircle className="h-3 w-3" />
-                      Last import successful
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p><strong>Source:</strong> OpenStreetMap via Overpass API</p>
-                  <p><strong>License:</strong> OpenStreetMap ODbL</p>
-                  <p><strong>Note:</strong> Existing boundaries with the same OSM ID will be updated (upsert)</p>
-                </div>
               </CardContent>
             </Card>
+
+            {/* Progress */}
+            {renderProgress()}
+
+            <div className="text-xs text-muted-foreground space-y-1 px-1">
+              <p><strong>Source:</strong> OpenStreetMap via Overpass API</p>
+              <p><strong>License:</strong> OpenStreetMap ODbL</p>
+              <p><strong>Note:</strong> Re-importing updates existing records (upsert on OSM ID)</p>
+            </div>
           </TabsContent>
         </Tabs>
       )}

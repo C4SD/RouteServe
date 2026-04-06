@@ -105,7 +105,7 @@ export function UnifiedWorkflowDialog({
 
   // Data hooks
   const { data: facilitiesData } = useFacilities();
-  const { data: warehousesData } = useWarehouses();
+  const { data: warehousesData } = useWarehouses({ can_dispatch: true });
   const { data: vehiclesData } = useVehicles();
   const { data: driversData } = useDrivers();
 

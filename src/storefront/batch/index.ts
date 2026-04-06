@@ -26,3 +26,4 @@
 export * from './types';
 export * from './batch-builder';
 export * from './capacity-validator';
+export * from './facility-assembler';

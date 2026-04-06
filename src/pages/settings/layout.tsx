@@ -1,5 +1,5 @@
 import { Outlet, useLocation, NavLink } from 'react-router-dom';
-import { Settings, Users, Shield, MapPin, Link2, User } from 'lucide-react';
+import { Settings, Users, Shield, MapPin, Link2, User, Map } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SecondarySidebar, NavigationGroup } from '@/components/layout/SecondarySidebar';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -12,6 +12,7 @@ const settingsTabs = [
   { id: 'members', label: 'Members', icon: Users, path: '/settings/members' },
   { id: 'access-control', label: 'Access Control', icon: Shield, path: '/settings/access-control' },
   { id: 'locations', label: 'Locations', icon: MapPin, path: '/settings/locations' },
+  { id: 'map', label: 'Map', icon: Map, path: '/settings/map' },
   { id: 'integration', label: 'Integration', icon: Link2, path: '/settings/integration' },
 ];
 
@@ -24,6 +25,7 @@ const sidebarGroups: NavigationGroup[] = [
       { label: 'Members', href: '/settings/members', icon: Users },
       { label: 'Access Control', href: '/settings/access-control', icon: Shield },
       { label: 'Locations', href: '/settings/locations', icon: MapPin },
+      { label: 'Map', href: '/settings/map', icon: Map },
       { label: 'Integration', href: '/settings/integration', icon: Link2 },
     ],
   },
@@ -38,6 +40,7 @@ function SettingsTabs() {
     if (path.includes('/profile')) return 'profile';
     if (path.includes('/members')) return 'members';
     if (path.includes('/locations')) return 'locations';
+    if (path.includes('/map')) return 'map';
     if (path.includes('/integration')) return 'integration';
     return 'general';
   }, [location.pathname]);
@@ -86,6 +89,7 @@ export default function SettingsLayout() {
     else if (path.includes('/members')) crumbs.push({ label: 'Members' });
     else if (path.includes('/access-control')) crumbs.push({ label: 'Access Control' });
     else if (path.includes('/locations')) crumbs.push({ label: 'Locations' });
+    else if (path.includes('/map')) crumbs.push({ label: 'Map' });
     else if (path.includes('/integration')) crumbs.push({ label: 'Integration' });
     else if (path.includes('/general')) crumbs.push({ label: 'General' });
 

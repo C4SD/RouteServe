@@ -17,6 +17,8 @@ export interface MapOptions {
   zoom?: number;
   minZoom?: number;
   maxZoom?: number;
+  /** CARTO GL style URL from workspace settings; falls back to getBasemapStyle() */
+  style?: string;
 }
 
 export interface LayerOptions {

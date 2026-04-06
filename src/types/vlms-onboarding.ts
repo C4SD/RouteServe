@@ -87,6 +87,9 @@ export interface DimensionalConfig {
 export interface CapacityConfig {
   capacity_kg?: number;
   capacity_m3?: number;
+  /** Overall vehicle body dimensions */
+  vehicle_dimensions?: DimensionalConfig;
+  /** Cargo hold / usable cargo area dimensions */
   dimensions?: DimensionalConfig;
   tiered_config: TierConfig[];
   use_dimensions: boolean; // Toggle between manual capacity vs. calculated from dimensions
@@ -192,6 +195,11 @@ export interface VehicleOnboardingFormData extends VehicleRegistrationData {
   // Capacity
   capacity_kg?: number;
   capacity_m3?: number;
+  // Overall vehicle body dimensions
+  vehicle_length_cm?: number;
+  vehicle_width_cm?: number;
+  vehicle_height_cm?: number;
+  // Cargo hold dimensions
   length_cm?: number;
   width_cm?: number;
   height_cm?: number;

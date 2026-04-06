@@ -1,4 +1,4 @@
-import { MoreHorizontal, Edit, Trash, Eye, MapPin, Phone, Mail } from 'lucide-react';
+import { MoreHorizontal, Edit, Trash, Eye, MapPin, Phone, Zap, ZapOff } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -24,6 +24,7 @@ import { useDeleteWarehouse } from '@/hooks/useWarehouses';
 
 interface WarehouseTableProps {
   warehouses: Warehouse[];
+  allWarehouses?: Warehouse[];
   isLoading: boolean;
   onWarehouseClick: (warehouse: Warehouse) => void;
   onEdit: (warehouse: Warehouse) => void;
@@ -37,6 +38,7 @@ interface WarehouseTableProps {
 
 export function WarehouseTable({
   warehouses,
+  allWarehouses,
   isLoading,
   onWarehouseClick,
   onEdit,
@@ -58,6 +60,12 @@ export function WarehouseTable({
   const getUtilization = (warehouse: Warehouse) => {
     if (!warehouse.total_capacity_m3 || warehouse.total_capacity_m3 === 0) return 0;
     return ((warehouse.used_capacity_m3 || 0) / warehouse.total_capacity_m3) * 100;
+  };
+
+  const getParentName = (warehouse: Warehouse): string | null => {
+    if (!warehouse.parent_id) return null;
+    const parent = (allWarehouses || warehouses).find(w => w.id === warehouse.parent_id);
+    return parent?.name || null;
   };
 
   if (isLoading) {
@@ -88,17 +96,19 @@ export function WarehouseTable({
               <TableRow>
                 <TableHead className="min-w-[200px]">Warehouse</TableHead>
                 <TableHead className="min-w-[100px]">Code</TableHead>
+                <TableHead className="min-w-[120px]">Parent</TableHead>
                 <TableHead className="min-w-[120px]">Location</TableHead>
                 <TableHead className="min-w-[140px]">Contact</TableHead>
                 <TableHead className="text-right min-w-[110px]">Capacity</TableHead>
                 <TableHead className="min-w-[180px]">Utilization</TableHead>
-                <TableHead className="min-w-[90px]">Status</TableHead>
+                <TableHead className="min-w-[100px]">Storage</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
             {warehouses.map((warehouse) => {
               const utilization = getUtilization(warehouse);
+              const parentName = getParentName(warehouse);
 
               return (
                 <TableRow
@@ -111,7 +121,14 @@ export function WarehouseTable({
                 >
                   <TableCell>
                     <div>
-                      <p className="font-medium">{warehouse.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-medium">{warehouse.name}</p>
+                        {warehouse.parent_id && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 bg-purple-50 text-purple-700 border-purple-200">
+                            Store
+                          </Badge>
+                        )}
+                      </div>
                       {warehouse.address && (
                         <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                           {warehouse.address}
@@ -123,6 +140,13 @@ export function WarehouseTable({
                     <Badge variant="outline" className="font-mono">
                       {warehouse.code}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {parentName ? (
+                      <span className="text-sm text-muted-foreground">{parentName}</span>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">Root</Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -177,12 +201,17 @@ export function WarehouseTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={warehouse.is_active ? 'default' : 'secondary'}
-                      className={warehouse.is_active ? 'bg-green-100 text-green-800' : ''}
-                    >
-                      {warehouse.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
+                    {warehouse.storage_mode === 'active' ? (
+                      <Badge className="bg-green-100 text-green-800 gap-1">
+                        <Zap className="h-3 w-3" />
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="gap-1">
+                        <ZapOff className="h-3 w-3" />
+                        Passive
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

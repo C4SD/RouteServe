@@ -37,7 +37,15 @@ const DEFAULTS: Omit<WorkspaceSettings, 'id' | 'workspace_id' | 'created_at' | '
   map_center_lng: 8.5167,
   map_default_zoom: 11,
   timezone: 'Africa/Lagos',
-  metadata: {},
+  metadata: {
+    // Map display preferences — used by useMapSettings and Map Settings page
+    basemap_style: 'auto',       // 'auto' | 'light' | 'dark'
+    show_zones: true,
+    show_facilities: true,
+    show_routes: true,
+    enable_clustering: true,
+    realtime_refresh_interval: 30, // seconds
+  },
 };
 
 /**

@@ -197,6 +197,42 @@ export function checkBatchIntegrity(
   };
 }
 
+// =====================================================
+// BATCH GROUPING (route-aware order assembly)
+// =====================================================
+
+/**
+ * A single delivery order to be grouped into a batch.
+ */
+export interface OrderItem {
+  id: string;
+  facility_id: string;
+  slot_demand?: number;
+  weight_kg?: number;
+  volume_m3?: number;
+  program?: string;
+}
+
+/**
+ * A pre-defined route with an ordered stop sequence.
+ */
+export interface RouteDefinition {
+  route_id: string;
+  facility_ids: string[]; // ordered stop sequence
+}
+
+/**
+ * Output of groupOrdersIntoBatches: orders co-located on the same route.
+ */
+export interface BatchGrouping {
+  route_id: string;
+  facility_ids: string[];   // sorted by route stop sequence
+  order_ids: string[];
+  total_slot_demand: number;
+  total_weight_kg: number;
+  total_volume_m3: number;
+}
+
 /**
  * Slot utilization metrics for a batch.
  */

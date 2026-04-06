@@ -22,6 +22,7 @@ export class LiveMapKernel {
   private events: MapKernelEvents;
   private destroyed = false;
   private styleLoaded = false;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(events?: MapKernelEvents) {
     this.events = events ?? {};
@@ -47,11 +48,12 @@ export class LiveMapKernel {
       zoom = DEFAULT_MAP_ZOOM,
       minZoom = 3,
       maxZoom = 18,
+      style,
     } = options;
 
     this.map = new maplibregl.Map({
       container,
-      style: getBasemapStyle(),
+      style: style ?? getBasemapStyle(),
       center,
       zoom,
       minZoom,
@@ -71,9 +73,18 @@ export class LiveMapKernel {
       'bottom-right'
     );
 
+    // Watch the container for size changes (e.g. sidebar toggle, panel open)
+    this.resizeObserver = new ResizeObserver(() => {
+      this.map?.resize();
+    });
+    this.resizeObserver.observe(container);
+
     // Handle map load event
     this.map.on('load', () => {
       this.styleLoaded = true;
+      // Force resize in case the container's dimensions weren't yet settled when
+      // MapLibre read them during construction (common with flex/absolute layouts).
+      this.map!.resize();
       this.attachAllLayers();
       this.events.onReady?.();
     });
@@ -182,6 +193,9 @@ export class LiveMapKernel {
 
     this.destroyed = true;
     this.detachAllLayers();
+
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
 
     if (this.map) {
       this.map.remove();

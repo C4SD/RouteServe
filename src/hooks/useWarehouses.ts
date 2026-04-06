@@ -1,18 +1,29 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import type { Warehouse, WarehouseFilters, WarehouseFormData, WarehouseStats } from '@/types/warehouse';
+import type { Warehouse, WarehouseFilters, WarehouseFormData, WarehouseStats, NodeCapabilities, StorageMode } from '@/types/warehouse';
 import { toast } from 'sonner';
 
 // ========================================
 // Helper Functions
 // ========================================
 
+const DEFAULT_CAPABILITIES: NodeCapabilities = {
+  can_receive: true,
+  can_dispatch: true,
+  can_store: true,
+};
+
 function mapDbToWarehouse(dbWarehouse: any): Warehouse {
   return {
     id: dbWarehouse.id,
     name: dbWarehouse.name,
     code: dbWarehouse.code || '',
+    parent_id: dbWarehouse.parent_id || null,
+    storage_mode: (dbWarehouse.storage_mode as StorageMode) || 'active',
+    activated_at: dbWarehouse.activated_at || null,
+    capabilities: dbWarehouse.capabilities || DEFAULT_CAPABILITIES,
+    storage_conditions: dbWarehouse.storage_conditions || [],
     address: dbWarehouse.address || undefined,
     city: dbWarehouse.city || undefined,
     state: dbWarehouse.state || undefined,
@@ -37,6 +48,10 @@ function mapWarehouseToDb(warehouse: WarehouseFormData) {
   return {
     name: warehouse.name,
     code: warehouse.code || null,
+    parent_id: warehouse.parent_id || null,
+    storage_mode: warehouse.storage_mode || 'active',
+    capabilities: warehouse.capabilities || DEFAULT_CAPABILITIES,
+    storage_conditions: warehouse.storage_conditions || [],
     address: warehouse.address || null,
     city: warehouse.city || null,
     state: warehouse.state || null,
@@ -53,6 +68,43 @@ function mapWarehouseToDb(warehouse: WarehouseFormData) {
     warehouse_type: 'zonal', // Add default warehouse_type
   };
 }
+
+// Build warehouse tree from flat list
+function buildWarehouseTree(warehouses: Warehouse[]): Warehouse[] {
+  const map = new Map<string, Warehouse>();
+  const roots: Warehouse[] = [];
+
+  // First pass: index all warehouses
+  for (const w of warehouses) {
+    map.set(w.id, { ...w, children: [] });
+  }
+
+  // Second pass: build parent-child relationships
+  for (const w of map.values()) {
+    if (w.parent_id && map.has(w.parent_id)) {
+      map.get(w.parent_id)!.children!.push(w);
+    } else {
+      roots.push(w);
+    }
+  }
+
+  return roots;
+}
+
+// Get all descendants of a warehouse (for cycle prevention in selectors)
+function getDescendantIds(warehouse: Warehouse): Set<string> {
+  const ids = new Set<string>();
+  function walk(node: Warehouse) {
+    ids.add(node.id);
+    for (const child of node.children || []) {
+      walk(child);
+    }
+  }
+  walk(warehouse);
+  return ids;
+}
+
+export { buildWarehouseTree, getDescendantIds };
 
 // ========================================
 // Core CRUD Hooks
@@ -88,6 +140,18 @@ export function useWarehouses(filters?: WarehouseFilters, page?: number, pageSiz
         query = query.eq('is_active', filters.is_active);
       }
 
+      if (filters?.parent_id !== undefined) {
+        if (filters.parent_id === null) {
+          query = query.is('parent_id', null);
+        } else {
+          query = query.eq('parent_id', filters.parent_id);
+        }
+      }
+
+      if (filters?.can_dispatch) {
+        query = query.contains('capabilities', { can_dispatch: true });
+      }
+
       // Pagination
       if (page !== undefined && pageSize) {
         const from = page * pageSize;
@@ -121,6 +185,30 @@ export function useWarehouse(id: string | undefined) {
 
       if (error) throw error;
       return data ? mapDbToWarehouse(data) : null;
+    },
+  });
+}
+
+// Fetch all warehouses and build tree structure
+export function useWarehouseTree() {
+  const { workspaceId } = useWorkspace();
+
+  return useQuery({
+    queryKey: ['warehouses', 'tree', workspaceId],
+    enabled: !!workspaceId,
+    staleTime: 30000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('warehouses')
+        .select('*')
+        .eq('workspace_id', workspaceId!)
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+
+      const warehouses = (data || []).map(mapDbToWarehouse);
+      return buildWarehouseTree(warehouses);
     },
   });
 }
@@ -231,7 +319,47 @@ export function useWarehousesStats(): { data: WarehouseStats | undefined; isLoad
 }
 
 // ========================================
-// Warehouse Inventory Hook
+// Storage Mode Mutations
+// ========================================
+
+export function useActivateWarehouse() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (warehouseId: string) => {
+      const { error } = await supabase.rpc('activate_warehouse', { p_warehouse_id: warehouseId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['warehouses'] });
+      toast.success('Storage activated — this node can now hold inventory');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to activate storage: ${error.message}`);
+    },
+  });
+}
+
+export function useDeactivateWarehouse() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (warehouseId: string) => {
+      const { error } = await supabase.rpc('deactivate_warehouse', { p_warehouse_id: warehouseId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['warehouses'] });
+      toast.success('Storage deactivated — this node is now structural only');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to deactivate storage: ${error.message}`);
+    },
+  });
+}
+
+// ========================================
+// Warehouse Inventory Hook (legacy - items table)
 // ========================================
 
 export function useWarehouseInventory(warehouseId: string | undefined) {

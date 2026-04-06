@@ -15,6 +15,7 @@ import { ZoneMarkerLayer } from '@/maps-v3/layers/ZoneMarkerLayer';
 import { useLiveTracking } from '@/hooks/useLiveTracking';
 import { useLiveMapStore } from '@/stores/liveMapStore';
 import { useDebouncedCallback } from 'use-debounce';
+import { useMapSettings } from '@/hooks/settings/useMapSettings';
 
 interface LiveMapViewProps {
   onEntitySelect?: (entityId: string, entityType: 'driver' | 'vehicle' | 'delivery' | 'facility') => void;
@@ -24,6 +25,13 @@ export function LiveMapView({ onEntitySelect }: LiveMapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const kernelRef = useRef<LiveMapKernel | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const initializedRef = useRef(false);
+
+  // Workspace map settings (center, zoom, basemap style, layer defaults)
+  const { settings: mapSettings } = useMapSettings();
+  // Capture latest settings in a ref so the init effect can read them without re-running
+  const mapSettingsRef = useRef(mapSettings);
+  useEffect(() => { mapSettingsRef.current = mapSettings; }, [mapSettings]);
 
   // Get filter state
   const filters = useLiveMapStore((s) => s.filters);
@@ -84,9 +92,13 @@ export function LiveMapView({ onEntitySelect }: LiveMapViewProps) {
     layersRef.current?.zone.update(data);
   }, 500);
 
-  // Initialize map kernel
+  // Initialize map kernel — uses workspace settings if already cached, otherwise
+  // falls back to defaults from mapSettingsRef (computed at render time).
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || initializedRef.current) return;
+    initializedRef.current = true;
+
+    const s = mapSettingsRef.current;
 
     const kernel = new LiveMapKernel({
       onReady: () => {
@@ -118,11 +130,17 @@ export function LiveMapView({ onEntitySelect }: LiveMapViewProps) {
     kernel.registerLayer('driver', layers.driver);
     kernel.registerLayer('vehicle', layers.vehicle);
 
-    // Initialize map
+    // Apply default layer visibility from workspace settings
+    layers.zone.setVisibility(s.layers.showZones);
+    layers.facility.setVisibility(s.layers.showFacilities);
+    layers.route.setVisibility(s.layers.showRoutes);
+
+    // Initialize map with workspace-configured center, zoom and basemap
     kernel.init({
       container: containerRef.current,
-      center: viewState.center,
-      zoom: viewState.zoom,
+      center: s.center,
+      zoom: s.zoom,
+      style: s.resolvedStyleUrl,
     });
 
     kernelRef.current = kernel;
@@ -132,6 +150,7 @@ export function LiveMapView({ onEntitySelect }: LiveMapViewProps) {
       kernel.destroy();
       kernelRef.current = null;
       layersRef.current = null;
+      initializedRef.current = false;
       setMapReady(false);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

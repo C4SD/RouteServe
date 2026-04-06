@@ -89,3 +89,45 @@ export interface VehicleAssignmentRequest {
   total_weight_kg?: number;
   total_volume_m3?: number;
 }
+
+// =====================================================
+// VEHICLE PLAN (single vs multi-vehicle recommendation)
+// =====================================================
+
+/**
+ * Recommendation to cover the entire batch with one vehicle.
+ * score: 0–100, where 100 = perfect 80% utilization across all dimensions.
+ */
+export interface SingleVehiclePlan {
+  type: 'single';
+  vehicle_id: string;
+  score: number;
+  slot_utilization_pct: number;
+  weight_utilization_pct: number;
+  volume_utilization_pct: number;
+  reason: string;
+}
+
+/**
+ * One vehicle's share in a multi-vehicle plan.
+ */
+export interface MultiVehicleSegment {
+  vehicle_id: string;
+  facility_ids: string[];
+  slot_utilization_pct: number;
+  score: number;
+}
+
+/**
+ * Recommendation to split the batch across multiple vehicles.
+ * total_score: average segment score.
+ */
+export interface MultiVehiclePlan {
+  type: 'multi';
+  segments: MultiVehicleSegment[];
+  vehicles_needed: number;
+  total_score: number;
+  reason: string;
+}
+
+export type VehiclePlan = SingleVehiclePlan | MultiVehiclePlan;

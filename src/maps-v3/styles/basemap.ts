@@ -1,44 +1,19 @@
 /**
  * Basemap style configuration for Live Map
- * Uses OpenStreetMap tiles with custom styling
+ * Delegates to CARTO GL vector styles (free, no API key required).
+ * Returns a style URL string accepted by MapLibre's `style` option.
  */
 
-import type { StyleSpecification } from 'maplibre-gl';
+import { getMapLibreStyle } from '@/lib/mapConfig';
 
-export function getBasemapStyle(): StyleSpecification {
-  return {
-    version: 8,
-    name: 'BIKO Live Map',
-    metadata: {
-      'mapbox:autocomposite': false,
-      'mapbox:type': 'template',
-    },
-    sources: {
-      'osm-tiles': {
-        type: 'raster',
-        tiles: [
-          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ],
-        tileSize: 256,
-        attribution: '&copy; OpenStreetMap contributors',
-        maxzoom: 19,
-      },
-    },
-    sprite: 'https://api.maptiler.com/maps/streets-v2/sprite',
-    glyphs: 'https://api.maptiler.com/fonts/{fontstack}/{range}.pbf',
-    layers: [
-      {
-        id: 'osm-tiles-layer',
-        type: 'raster',
-        source: 'osm-tiles',
-        minzoom: 0,
-        maxzoom: 22,
-        paint: {
-          'raster-opacity': 1,
-        },
-      },
-    ],
-  };
+export type BasemapTheme = 'light' | 'dark' | 'system';
+
+/**
+ * Get the CARTO GL basemap style URL for the given theme.
+ * - 'light'  → CARTO Positron (clean light map with full place labels)
+ * - 'dark'   → CARTO Dark Matter
+ * - 'system' / undefined → follows window.matchMedia prefers-color-scheme
+ */
+export function getBasemapStyle(theme?: BasemapTheme): string {
+  return getMapLibreStyle(theme as 'light' | 'dark' | 'system' | undefined);
 }

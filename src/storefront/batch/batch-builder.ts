@@ -14,11 +14,16 @@
 
 import type {
   StorefrontBatch,
+  StorefrontBatchStatus,
   CreateBatchRequest,
   BatchSlotSnapshot,
   FacilitySlotDemand,
+  OrderItem,
+  RouteDefinition,
+  BatchGrouping,
 } from './types';
 import type { RequisitionPackaging } from '@/types/requisitions';
+import type { VehicleCapacity } from '@/fleetops/payload';
 
 /**
  * Build a batch from requisitions.
@@ -207,6 +212,173 @@ export function removeFacilitiesFromBatch(
     slot_snapshot: slotSnapshot,
     updated_at: new Date().toISOString(),
   };
+}
+
+/**
+ * Split a batch into sub-batches that each fit within a single vehicle's capacity.
+ *
+ * Uses Best-Fit Decreasing bin-packing: facilities sorted by slot demand (desc),
+ * each placed into the first existing bin that can still accommodate it.
+ * A new bin is opened when no existing bin fits the facility.
+ *
+ * Returns a single-element array when the batch already fits one vehicle.
+ * Sub-batch IDs are suffixed: BATCH-xxx-1, BATCH-xxx-2, …
+ */
+export function splitBatch(
+  batch: StorefrontBatch,
+  vehicleCapacity: VehicleCapacity
+): StorefrontBatch[] {
+  const { total_slots, capacity_kg, capacity_m3 } = vehicleCapacity;
+
+  // Build per-facility demand items, sorted heaviest-first
+  const items = batch.facilities
+    .map((facilityId) => {
+      const fd = batch.slot_snapshot.facility_demands.find(
+        (d) => d.facility_id === facilityId
+      );
+      return {
+        facility_id: facilityId,
+        slot_demand: batch.slot_demand_per_facility[facilityId] ?? 1,
+        weight_kg: fd?.weight_kg ?? 0,
+        volume_m3: fd?.volume_m3 ?? 0,
+      };
+    })
+    .sort((a, b) => b.slot_demand - a.slot_demand);
+
+  type Bin = {
+    items: typeof items;
+    slots: number;
+    weight: number;
+    volume: number;
+  };
+
+  const bins: Bin[] = [];
+
+  for (const item of items) {
+    // Find first bin that can hold this item
+    const bin = bins.find(
+      (b) =>
+        b.slots + item.slot_demand <= total_slots &&
+        b.weight + item.weight_kg <= capacity_kg &&
+        b.volume + item.volume_m3 <= capacity_m3
+    );
+
+    if (bin) {
+      bin.items.push(item);
+      bin.slots += item.slot_demand;
+      bin.weight += item.weight_kg;
+      bin.volume += item.volume_m3;
+    } else {
+      bins.push({
+        items: [item],
+        slots: item.slot_demand,
+        weight: item.weight_kg,
+        volume: item.volume_m3,
+      });
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  return bins.map((bin, index) => {
+    const slotDemandPerFacility: Record<string, number> = {};
+    const facilityDemands: FacilitySlotDemand[] = [];
+
+    for (const item of bin.items) {
+      slotDemandPerFacility[item.facility_id] = item.slot_demand;
+      facilityDemands.push({
+        facility_id: item.facility_id,
+        slot_demand: item.slot_demand,
+        weight_kg: item.weight_kg,
+        volume_m3: item.volume_m3,
+      });
+    }
+
+    const slotSnapshot: BatchSlotSnapshot = {
+      total_slot_demand: bin.slots,
+      facility_demands: facilityDemands,
+      computed_at: now,
+      version: batch.slot_snapshot.version + 1,
+    };
+
+    return {
+      ...batch,
+      batch_id: `${batch.batch_id}-${index + 1}`,
+      facilities: bin.items.map((i) => i.facility_id),
+      slot_demand_per_facility: slotDemandPerFacility,
+      slot_snapshot: slotSnapshot,
+      status: 'draft' as StorefrontBatchStatus,
+      updated_at: now,
+      finalized_at: undefined,
+    };
+  });
+}
+
+/**
+ * Group orders into batch groupings by route affinity.
+ *
+ * Each order is matched to a route via its facility_id.
+ * Orders whose facility has no matching route are collected in an 'unrouted' group.
+ * Facility IDs within each grouping are deduplicated and sorted by route stop sequence.
+ */
+export function groupOrdersIntoBatches(
+  orders: OrderItem[],
+  routes: RouteDefinition[]
+): BatchGrouping[] {
+  // Build facility → route lookup
+  const facilityToRoute = new Map<string, string>();
+  for (const route of routes) {
+    for (const facilityId of route.facility_ids) {
+      facilityToRoute.set(facilityId, route.route_id);
+    }
+  }
+
+  // Accumulate orders per route
+  const groups = new Map<
+    string,
+    { routeId: string; orders: OrderItem[] }
+  >();
+
+  for (const order of orders) {
+    const routeId = facilityToRoute.get(order.facility_id) ?? 'unrouted';
+    const existing = groups.get(routeId);
+    if (existing) {
+      existing.orders.push(order);
+    } else {
+      groups.set(routeId, { routeId, orders: [order] });
+    }
+  }
+
+  return Array.from(groups.values()).map(({ routeId, orders: grpOrders }) => {
+    const route = routes.find((r) => r.route_id === routeId);
+    const stopSequence = route?.facility_ids ?? [];
+
+    // Deduplicate facility IDs, preserve route stop order
+    const seen = new Set<string>();
+    const facilityIds: string[] = [];
+    for (const fid of stopSequence) {
+      if (!seen.has(fid) && grpOrders.some((o) => o.facility_id === fid)) {
+        facilityIds.push(fid);
+        seen.add(fid);
+      }
+    }
+    // Append any unrouted facilities that didn't appear in the stop sequence
+    for (const order of grpOrders) {
+      if (!seen.has(order.facility_id)) {
+        facilityIds.push(order.facility_id);
+        seen.add(order.facility_id);
+      }
+    }
+
+    return {
+      route_id: routeId,
+      facility_ids: facilityIds,
+      order_ids: grpOrders.map((o) => o.id),
+      total_slot_demand: grpOrders.reduce((s, o) => s + (o.slot_demand ?? 0), 0),
+      total_weight_kg: grpOrders.reduce((s, o) => s + (o.weight_kg ?? 0), 0),
+      total_volume_m3: grpOrders.reduce((s, o) => s + (o.volume_m3 ?? 0), 0),
+    };
+  });
 }
 
 /**

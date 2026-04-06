@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAbilityContext } from '@/rbac/AbilityProvider';
@@ -7,6 +8,9 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -16,7 +20,9 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, AlertCircle, AlertTriangle, Plus, Archive, Globe } from 'lucide-react';
+import { Loader2, AlertCircle, AlertTriangle, Plus, Archive, Globe, Download, ChevronDown, X, Check, MapPin, RefreshCw } from 'lucide-react';
+import { COUNTRY_ADMIN_LEVELS, fetchStatesFromOverpass, saveBoundariesToDB } from '@/lib/overpass-boundaries';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,6 +63,7 @@ const DAYS_OF_WEEK = [
 
 export default function SettingsGeneralPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { workspaceId, workspaceName, role, archiveWorkspace } = useWorkspace();
   const { can } = useAbilityContext();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -184,6 +191,122 @@ export default function SettingsGeneralPage() {
     enabled: !!workspaceId,
   });
 
+  // Check which countries have OSM boundaries already imported
+  const linkedCountryIdsList = workspaceCountries.map((wc) => wc.country_id);
+  const { data: boundaryCountsRaw = [] } = useQuery({
+    queryKey: ['boundary-counts', workspaceId, linkedCountryIdsList.join(',')],
+    queryFn: async () => {
+      if (linkedCountryIdsList.length === 0) return [];
+      const { data, error } = await supabase
+        .from('admin_units')
+        .select('country_id')
+        .in('country_id', linkedCountryIdsList)
+        .eq('workspace_id', workspaceId!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!workspaceId && linkedCountryIdsList.length > 0,
+  });
+
+  // Map country_id → count of imported boundaries
+  const boundaryCounts: Record<string, number> = boundaryCountsRaw.reduce(
+    (acc, row) => {
+      acc[row.country_id] = (acc[row.country_id] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  // Track which country's state panel is expanded (one at a time)
+  const [expandedCountryId, setExpandedCountryId] = useState<string | null>(null);
+  const [stateSearchOpen, setStateSearchOpen] = useState<Record<string, boolean>>({});
+  // Track loading state per country for the "Load States" OSM fetch
+  const [loadingStatesForCountry, setLoadingStatesForCountry] = useState<string | null>(null);
+
+  // Fetch admin_units states from DB (all supported admin levels for states)
+  const { data: allImportedStates = [], refetch: refetchImportedStates } = useQuery({
+    queryKey: ['imported-states', workspaceId, linkedCountryIdsList.join(',')],
+    queryFn: async () => {
+      if (linkedCountryIdsList.length === 0) return [];
+      const { data, error } = await supabase
+        .from('admin_units')
+        .select('id, name, admin_level, country_id, osm_id')
+        .in('country_id', linkedCountryIdsList)
+        .eq('workspace_id', workspaceId!)
+        .in('admin_level', [4, 5])
+        .order('name');
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; name: string; admin_level: number; country_id: string; osm_id: number | null }>;
+    },
+    enabled: !!workspaceId && linkedCountryIdsList.length > 0,
+  });
+
+  // Load all states for a country from Overpass and save to admin_units
+  const handleLoadStates = async (wc: { country_id: string; countries: { iso_code: string; name: string } | null }) => {
+    const isoCode = wc.countries?.iso_code;
+    if (!isoCode || !workspaceId) return;
+    const adminConfig = COUNTRY_ADMIN_LEVELS[isoCode];
+    const stateLevel = adminConfig?.states ?? 4;
+
+    try {
+      setLoadingStatesForCountry(wc.country_id);
+      const boundaries = await fetchStatesFromOverpass(isoCode, stateLevel);
+      if (boundaries.length === 0) {
+        toast.warning('No states found from Overpass');
+        return;
+      }
+      await saveBoundariesToDB(supabase, boundaries, wc.country_id, workspaceId);
+      await refetchImportedStates();
+      queryClient.invalidateQueries({ queryKey: ['boundary-counts'] });
+      toast.success(`${boundaries.length} ${adminConfig?.label_states ?? 'states'} loaded for ${wc.countries?.name}`);
+    } catch (err) {
+      toast.error('Failed to load states', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setLoadingStatesForCountry(null);
+    }
+  };
+
+  // Fetch current workspace_states assignments
+  const { data: workspaceStates = [], refetch: refetchWorkspaceStates } = useQuery({
+    queryKey: ['workspace-states', workspaceId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('workspace_states')
+        .select('id, admin_unit_id')
+        .eq('workspace_id', workspaceId!);
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; admin_unit_id: string }>;
+    },
+    enabled: !!workspaceId,
+  });
+
+  const workspaceStateUnitIds = new Set(workspaceStates.map((ws) => ws.admin_unit_id));
+
+  const addWorkspaceStateMutation = useMutation({
+    mutationFn: async (adminUnitId: string) => {
+      const { error } = await supabase
+        .from('workspace_states')
+        .insert({ workspace_id: workspaceId!, admin_unit_id: adminUnitId });
+      if (error) throw error;
+    },
+    onSuccess: () => refetchWorkspaceStates(),
+    onError: () => toast.error('Failed to add state'),
+  });
+
+  const removeWorkspaceStateMutation = useMutation({
+    mutationFn: async (wsId: string) => {
+      const { error } = await supabase
+        .from('workspace_states')
+        .delete()
+        .eq('id', wsId);
+      if (error) throw error;
+    },
+    onSuccess: () => refetchWorkspaceStates(),
+    onError: () => toast.error('Failed to remove state'),
+  });
+
   // Form state
   const [name, setName] = useState('');
   const [orgType, setOrgType] = useState<string | null>(null);
@@ -278,11 +401,20 @@ export default function SettingsGeneralPage() {
         .from('workspace_countries')
         .insert({ workspace_id: workspaceId, country_id: countryId, is_primary: isPrimary });
       if (error) throw error;
+      return countryId;
     },
-    onSuccess: () => {
-      toast.success('Country added');
+    onSuccess: (countryId) => {
+      const country = allCountries.find((c) => c.id === countryId);
+      toast.success(`${country?.name || 'Country'} added`, {
+        description: 'Import OSM boundaries to enable location features.',
+        action: {
+          label: 'Import boundaries',
+          onClick: () => navigate('/settings/locations'),
+        },
+      });
       setAddingCountryId('');
       refetchWorkspaceCountries();
+      queryClient.invalidateQueries({ queryKey: ['boundary-counts', workspaceId] });
     },
     onError: (err) => {
       console.error('Failed to add country:', err);
@@ -333,8 +465,7 @@ export default function SettingsGeneralPage() {
     },
   });
 
-  const linkedCountryIds = workspaceCountries.map((wc) => wc.country_id);
-  const availableCountries = allCountries.filter((c) => !linkedCountryIds.includes(c.id));
+  const availableCountries = allCountries.filter((c) => !linkedCountryIdsList.includes(c.id));
 
   if (!can('workspace.manage')) return null;
 
@@ -491,7 +622,7 @@ export default function SettingsGeneralPage() {
           </div>
         </div>
 
-        {/* Section 2: Region / Countries */}
+        {/* Section 2: Region / Countries + States */}
         <div className="border rounded-lg bg-card">
           <div className="px-6 pt-1 pb-1">
             <h2 className="text-base font-semibold pt-4 pb-2">Region</h2>
@@ -506,49 +637,183 @@ export default function SettingsGeneralPage() {
                   <p className="text-sm text-muted-foreground">No countries configured yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {workspaceCountries.map((wc) => (
-                      <div
-                        key={wc.id}
-                        className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/30"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Globe className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm font-medium">
-                            {wc.countries?.name || 'Unknown'}
-                          </span>
-                          <Badge variant="outline" className="text-xs">
-                            {wc.countries?.iso_code}
-                          </Badge>
-                          {wc.is_primary && (
-                            <Badge className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              Primary
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {!wc.is_primary && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => setPrimaryCountryMutation.mutate(wc.id)}
-                              disabled={setPrimaryCountryMutation.isPending}
-                            >
-                              Set Primary
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive"
-                            onClick={() => removeCountryMutation.mutate(wc.id)}
-                            disabled={removeCountryMutation.isPending}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                    {workspaceCountries.map((wc) => {
+                      const hasBoundaries = (boundaryCounts[wc.country_id] || 0) > 0;
+                      const isoCode = wc.countries?.iso_code || '';
+                      const adminConfig = COUNTRY_ADMIN_LEVELS[isoCode];
+                      const stateLabel = adminConfig?.label_states || 'States';
+                      const stateLevel = adminConfig?.states ?? 4;
+                      const importedStatesForCountry = allImportedStates.filter(
+                        (s) => s.country_id === wc.country_id && s.admin_level === stateLevel
+                      );
+                      const assignedStatesForCountry = importedStatesForCountry.filter(
+                        (s) => workspaceStateUnitIds.has(s.id)
+                      );
+                      const isExpanded = expandedCountryId === wc.country_id;
+
+                      return (
+                        <Collapsible
+                          key={wc.id}
+                          open={isExpanded}
+                          onOpenChange={(open) => setExpandedCountryId(open ? wc.country_id : null)}
+                        >
+                          <div className="rounded-lg border bg-muted/30 overflow-hidden">
+                            {/* Country row */}
+                            <div className="flex items-center justify-between p-2.5">
+                              <div className="flex items-center gap-2">
+                                <Globe className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm font-medium">
+                                  {wc.countries?.name || 'Unknown'}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  {isoCode}
+                                </Badge>
+                                {wc.is_primary && (
+                                  <Badge className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                    Primary
+                                  </Badge>
+                                )}
+                                {assignedStatesForCountry.length > 0 && (
+                                  <Badge variant="outline" className="text-xs gap-1">
+                                    <MapPin className="h-2.5 w-2.5" />
+                                    {assignedStatesForCountry.length} {stateLabel.toLowerCase()}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <CollapsibleTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {stateLabel}
+                                    <ChevronDown className={cn('h-3 w-3 transition-transform', isExpanded && 'rotate-180')} />
+                                  </Button>
+                                </CollapsibleTrigger>
+                                {!wc.is_primary && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => setPrimaryCountryMutation.mutate(wc.id)}
+                                    disabled={setPrimaryCountryMutation.isPending}
+                                  >
+                                    Set Primary
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs text-destructive hover:text-destructive"
+                                  onClick={() => removeCountryMutation.mutate(wc.id)}
+                                  disabled={removeCountryMutation.isPending}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* States panel */}
+                            <CollapsibleContent>
+                              <div className="border-t px-3 pb-3 pt-2 space-y-2.5 bg-background/50">
+                                <p className="text-xs text-muted-foreground">
+                                  Select which {stateLabel.toLowerCase()} this workspace operates in.
+                                  The Locations import will then pull LGAs only for these states.
+                                </p>
+
+                                {/* Assigned states chips */}
+                                {assignedStatesForCountry.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {assignedStatesForCountry.map((state) => {
+                                      const ws = workspaceStates.find((w) => w.admin_unit_id === state.id);
+                                      return (
+                                        <Badge key={state.id} variant="secondary" className="gap-1 pr-1 text-xs">
+                                          {state.name}
+                                          <button
+                                            onClick={() => ws && removeWorkspaceStateMutation.mutate(ws.id)}
+                                            disabled={removeWorkspaceStateMutation.isPending}
+                                            className="ml-0.5 rounded-sm hover:bg-muted-foreground/20 p-0.5"
+                                          >
+                                            <X className="h-2.5 w-2.5" />
+                                          </button>
+                                        </Badge>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-2">
+                                  {/* Add state popover — always available once states are loaded */}
+                                  {importedStatesForCountry.length > 0 && (
+                                    <Popover
+                                      open={stateSearchOpen[wc.country_id]}
+                                      onOpenChange={(open) =>
+                                        setStateSearchOpen((prev) => ({ ...prev, [wc.country_id]: open }))
+                                      }
+                                    >
+                                      <PopoverTrigger asChild>
+                                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                                          <Plus className="h-3 w-3" />
+                                          Add {stateLabel.slice(0, -1)}
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-56 p-0" align="start">
+                                        <Command>
+                                          <CommandInput placeholder={`Search ${stateLabel.toLowerCase()}...`} className="h-8 text-xs" />
+                                          <CommandList>
+                                            <CommandEmpty>No {stateLabel.toLowerCase()} found.</CommandEmpty>
+                                            <CommandGroup>
+                                              {importedStatesForCountry.map((state) => {
+                                                const assigned = workspaceStateUnitIds.has(state.id);
+                                                return (
+                                                  <CommandItem
+                                                    key={state.id}
+                                                    value={state.name}
+                                                    onSelect={() => {
+                                                      if (!assigned) addWorkspaceStateMutation.mutate(state.id);
+                                                      setStateSearchOpen((prev) => ({ ...prev, [wc.country_id]: false }));
+                                                    }}
+                                                    className="text-xs"
+                                                  >
+                                                    <Check className={cn('mr-2 h-3 w-3', assigned ? 'opacity-100' : 'opacity-0')} />
+                                                    {state.name}
+                                                  </CommandItem>
+                                                );
+                                              })}
+                                            </CommandGroup>
+                                          </CommandList>
+                                        </Command>
+                                      </PopoverContent>
+                                    </Popover>
+                                  )}
+
+                                  {/* Load / refresh states from Overpass */}
+                                  <Button
+                                    variant={importedStatesForCountry.length === 0 ? 'default' : 'ghost'}
+                                    size="sm"
+                                    className="h-7 text-xs gap-1"
+                                    disabled={loadingStatesForCountry === wc.country_id}
+                                    onClick={() => handleLoadStates(wc)}
+                                  >
+                                    {loadingStatesForCountry === wc.country_id ? (
+                                      <><Loader2 className="h-3 w-3 animate-spin" />Loading...</>
+                                    ) : importedStatesForCountry.length === 0 ? (
+                                      <><Download className="h-3 w-3" />Load {stateLabel} from OSM</>
+                                    ) : (
+                                      <><RefreshCw className="h-3 w-3" />Refresh {stateLabel}</>
+                                    )}
+                                  </Button>
+                                </div>
+
+                                {importedStatesForCountry.length === 0 && loadingStatesForCountry !== wc.country_id && (
+                                  <p className="text-xs text-muted-foreground italic">
+                                    Click "Load {stateLabel} from OSM" to fetch all {stateLabel.toLowerCase()} for {wc.countries?.name}.
+                                  </p>
+                                )}
+                              </div>
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      );
+                    })}
                   </div>
                 )}
 

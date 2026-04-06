@@ -311,10 +311,13 @@ export const useVehicleOnboardState = create<OnboardingState & OnboardingActions
         }
 
         // Build the form data
+        // Note: category_id and vehicle_type_id are DB UUID FKs — the static taxonomy
+        // uses non-UUID string IDs (e.g. 'cat-passenger'), so we omit them here.
+        // The type/category info is captured in the `type` text field below.
         const formData: VehicleOnboardingFormData = {
-          // Taxonomy
-          category_id: selectedCategory.id,
-          vehicle_type_id: selectedType?.id,
+          // Taxonomy — leave FK fields undefined (nullable in DB)
+          category_id: undefined as any,
+          vehicle_type_id: undefined,
 
           // Registration data
           ...registrationData,
@@ -322,6 +325,9 @@ export const useVehicleOnboardState = create<OnboardingState & OnboardingActions
           // Capacity
           capacity_kg: capacityConfig.capacity_kg,
           capacity_m3: capacityConfig.capacity_m3,
+          vehicle_length_cm: capacityConfig.vehicle_dimensions?.length_cm,
+          vehicle_width_cm: capacityConfig.vehicle_dimensions?.width_cm,
+          vehicle_height_cm: capacityConfig.vehicle_dimensions?.height_cm,
           length_cm: capacityConfig.dimensions?.length_cm,
           width_cm: capacityConfig.dimensions?.width_cm,
           height_cm: capacityConfig.dimensions?.height_cm,

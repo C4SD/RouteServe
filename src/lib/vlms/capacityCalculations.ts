@@ -240,6 +240,156 @@ export function createDefaultTierConfig(
 }
 
 // =====================================================
+// BOX PRESETS
+// =====================================================
+
+export interface BoxPreset {
+  id: string;
+  name: string;
+  description: string;
+  length_cm: number;
+  width_cm: number;
+  height_cm: number;
+}
+
+/**
+ * Standard packaging presets used for slot computation.
+ * Each preset represents the footprint of one "slot unit".
+ */
+export const BOX_PRESETS: BoxPreset[] = [
+  {
+    id: 'box-xs',
+    name: 'XS',
+    description: 'Vials, syringes, small packs',
+    length_cm: 20,
+    width_cm: 15,
+    height_cm: 10,
+  },
+  {
+    id: 'box-s',
+    name: 'Small',
+    description: 'Blister packs, diagnostic kits',
+    length_cm: 30,
+    width_cm: 20,
+    height_cm: 15,
+  },
+  {
+    id: 'box-m',
+    name: 'Medium',
+    description: 'Standard distribution carton',
+    length_cm: 40,
+    width_cm: 30,
+    height_cm: 25,
+  },
+  {
+    id: 'box-l',
+    name: 'Large',
+    description: 'Bulk commodity box',
+    length_cm: 60,
+    width_cm: 40,
+    height_cm: 35,
+  },
+  {
+    id: 'box-xl',
+    name: 'XL',
+    description: 'Program bulk pallet unit',
+    length_cm: 80,
+    width_cm: 60,
+    height_cm: 50,
+  },
+];
+
+export function getBoxPresetById(id: string): BoxPreset | undefined {
+  return BOX_PRESETS.find((b) => b.id === id);
+}
+
+// =====================================================
+// SLOT CAPACITY ENGINE
+// =====================================================
+
+export interface SlotConstraints {
+  maxTiers: number;
+  maxSlotsPerTier: number;
+}
+
+export interface SlotLayoutResult {
+  /** Raw fit before operational constraints */
+  rawFit: { n_L: number; n_W: number; n_H: number };
+  /** Number of vertical tiers (after constraints) */
+  tiers: number;
+  /** Slots per tier (after constraints) */
+  slotsPerTier: number;
+  /** Grid columns for visual rendering */
+  gridCols: number;
+  /** Grid rows per tier for visual rendering */
+  gridRows: number;
+  /** Total slots = tiers × slotsPerTier */
+  totalSlots: number;
+  /** True when at least one constraint was applied */
+  isConstrained: boolean;
+}
+
+/**
+ * Compute slot layout from vehicle cargo dimensions, box preset, and operational constraints.
+ *
+ * Formula (per axis):
+ *   n_L = floor(vehicle.length / box.length)
+ *   n_W = floor(vehicle.width  / box.width)
+ *   n_H = floor(vehicle.height / box.height)
+ *
+ * Then:
+ *   rawTiers      = n_H
+ *   rawSlots      = n_L × n_W
+ *   tiers         = min(rawTiers, constraints.maxTiers)
+ *   slotsPerTier  = min(rawSlots, constraints.maxSlotsPerTier)
+ */
+export function computeSlotLayout(
+  vehicle: { length_cm: number; width_cm: number; height_cm: number },
+  box: BoxPreset,
+  constraints: SlotConstraints
+): SlotLayoutResult {
+  const nL = Math.max(1, Math.floor(vehicle.length_cm / box.length_cm));
+  const nW = Math.max(1, Math.floor(vehicle.width_cm / box.width_cm));
+  const nH = Math.max(1, Math.floor(vehicle.height_cm / box.height_cm));
+
+  const rawSlots = nL * nW;
+  const rawTiers = nH;
+
+  const tiers = Math.min(rawTiers, constraints.maxTiers);
+  const slotsPerTier = Math.min(rawSlots, constraints.maxSlotsPerTier);
+
+  const { rows: gridRows, cols: gridCols } = deriveSlotGrid(slotsPerTier);
+
+  return {
+    rawFit: { n_L: nL, n_W: nW, n_H: nH },
+    tiers,
+    slotsPerTier,
+    gridCols,
+    gridRows,
+    totalSlots: tiers * slotsPerTier,
+    isConstrained: rawTiers > constraints.maxTiers || rawSlots > constraints.maxSlotsPerTier,
+  };
+}
+
+/**
+ * Map a slot count to a clean (rows × cols) grid for visual rendering.
+ * Favours landscape layouts (wider than tall).
+ */
+export function deriveSlotGrid(count: number): { rows: number; cols: number } {
+  if (count <= 1) return { rows: 1, cols: 1 };
+  if (count <= 2) return { rows: 1, cols: 2 };
+  if (count <= 3) return { rows: 1, cols: 3 };
+  if (count <= 4) return { rows: 2, cols: 2 };
+  if (count <= 6) return { rows: 2, cols: 3 };
+  if (count <= 8) return { rows: 2, cols: 4 };
+  if (count <= 9) return { rows: 3, cols: 3 };
+  if (count <= 12) return { rows: 3, cols: 4 };
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
+  return { rows, cols };
+}
+
+// =====================================================
 // AUTO-CALCULATION: TIERS & SLOTS FROM DIMENSIONS
 // =====================================================
 
@@ -482,7 +632,8 @@ export function formatWeight(weightKg: number): string {
  * Format dimensions
  */
 export function formatDimensions(dimensions: DimensionalConfig): string {
-  return `${dimensions.length_cm} × ${dimensions.width_cm} × ${dimensions.height_cm} cm`;
+  const fmt = (cm: number) => (cm / 100).toFixed(2);
+  return `${fmt(dimensions.length_cm)} × ${fmt(dimensions.width_cm)} × ${fmt(dimensions.height_cm)} m`;
 }
 
 /**

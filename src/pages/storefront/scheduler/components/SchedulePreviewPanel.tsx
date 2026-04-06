@@ -5,7 +5,7 @@
  * Right drawer showing detailed batch information
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   X,
   MapPin,
@@ -20,11 +20,19 @@ import {
   Navigation,
   CircleDot,
   CheckCircle2,
+  Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { SchedulerBatchStatusActions } from '@/components/storefront/scheduler/SchedulerBatchStatusActions';
 import {
   getStatusColor,
@@ -39,9 +47,15 @@ import {
   computeRouteMetrics,
 } from '@/lib/schedulerUtils';
 import { usePreBatch } from '@/hooks/usePreBatch';
+import { useVehiclesStore } from '@/stores/vlms/vehiclesStore';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useBatchSlotAssignments } from '@/hooks/useBatchSlotAssignments';
+import { BatchAllocationPanel } from '@/components/vlms/vehicles/capacity/BatchAllocationPanel';
+import type { VehicleCapacity } from '@/fleetops/payload/types';
 import type { SchedulerBatch, SchedulerBatchStatus } from '@/types/scheduler';
 import type { PreBatchWithRelations } from '@/types/unified-workflow';
 import type { Facility, Warehouse, Vehicle } from '@/types';
+import type { VehicleWithRelations } from '@/types/vlms';
 
 function mapPreBatchToSchedulerBatch(pb: PreBatchWithRelations): SchedulerBatch {
   const statusMap: Record<string, SchedulerBatchStatus> = {
@@ -83,6 +97,137 @@ function mapPreBatchToSchedulerBatch(pb: PreBatchWithRelations): SchedulerBatch 
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Adapter: VehicleWithRelations → VehicleCapacity (fleetops type)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toVehicleCapacity(v: VehicleWithRelations): VehicleCapacity | null {
+  const tieredConfig = (v.tiered_config as any) ?? null;
+  if (!tieredConfig?.tiers?.length) return null;
+  return {
+    vehicle_id: (v as any).vehicle_id || v.id,
+    license_plate: v.license_plate ?? undefined,
+    capacity_kg: v.capacity_kg ?? 0,
+    capacity_m3: v.capacity_m3 ?? 0,
+    total_slots: tieredConfig.tiers.reduce(
+      (s: number, t: any) => s + (t.slot_count || 0),
+      0,
+    ),
+    tiered_config: tieredConfig,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LoadPlanDialog — fetches vehicle data + renders BatchAllocationPanel
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface LoadPlanDialogProps {
+  open: boolean;
+  onClose: () => void;
+  batch: SchedulerBatch;
+  facilityMap: Record<string, Facility>;
+  workspaceId: string;
+}
+
+function LoadPlanDialog({ open, onClose, batch, facilityMap, workspaceId }: LoadPlanDialogProps) {
+  const { selectedVehicle, fetchVehicleById, isLoading: vehicleLoading } = useVehiclesStore();
+
+  const { assignments, loading: assignmentsLoading, saving, save } = useBatchSlotAssignments({
+    workspaceId,
+    batchId: batch.id,
+    vehicleId: batch.vehicle_id ?? undefined,
+  });
+
+  // Fetch full vehicle (with tiered_config) when dialog opens
+  useEffect(() => {
+    if (open && batch.vehicle_id) {
+      fetchVehicleById(batch.vehicle_id);
+    }
+  }, [open, batch.vehicle_id, fetchVehicleById]);
+
+  const vehicleCapacity = useMemo<VehicleCapacity | null>(() => {
+    if (!selectedVehicle) return null;
+    // Only use this vehicle if it matches the batch's vehicle
+    if (selectedVehicle.id !== batch.vehicle_id &&
+        (selectedVehicle as any).vehicle_id !== batch.vehicle_id) return null;
+    return toVehicleCapacity(selectedVehicle);
+  }, [selectedVehicle, batch.vehicle_id]);
+
+  // Map batch facility IDs → AssignableFacility[]
+  const assignableFacilities = useMemo(
+    () =>
+      (batch.facility_ids ?? []).map((id) => {
+        const f = facilityMap[id];
+        return {
+          id,
+          name: f?.name ?? id,
+          estimated_weight: undefined,
+          estimated_volume:
+            f?.storage_capacity ? f.storage_capacity / 1000 : undefined,
+        };
+      }),
+    [batch.facility_ids, facilityMap],
+  );
+
+  const isLoading = vehicleLoading || assignmentsLoading;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-muted-foreground" />
+            Vehicle Load Plan
+          </DialogTitle>
+          <DialogDescription>
+            {batch.name || batch.batch_code} · Assign delivery stops to vehicle slots
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-auto px-6 pb-6 pt-4 min-h-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !vehicleCapacity ? (
+            <div className="flex flex-col items-center justify-center h-48 gap-3 text-center">
+              <Truck className="h-10 w-10 text-muted-foreground/40" />
+              <div>
+                <p className="font-medium text-sm">No slot configuration found</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {batch.vehicle_id
+                    ? 'This vehicle has not been configured with tier/slot data. Re-onboard it via the Fleet module.'
+                    : 'No vehicle assigned to this batch yet.'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <BatchAllocationPanel
+              vehicle={vehicleCapacity}
+              facilities={assignableFacilities}
+              initialAssignments={assignments}
+              onSave={async (plan) => {
+                await save(batch.vehicle_id!, plan);
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+        </div>
+
+        {saving && (
+          <div className="px-6 pb-4 flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Saving load plan…
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface SchedulePreviewPanelProps {
   batchId: string;
   batch?: SchedulerBatch;
@@ -100,6 +245,9 @@ export function SchedulePreviewPanel({
   warehouses = [],
   vehicles = [],
 }: SchedulePreviewPanelProps) {
+  const [loadPlanOpen, setLoadPlanOpen] = useState(false);
+  const { workspaceId } = useWorkspace();
+
   // Fetch batch data independently as fallback
   const { data: preBatchData, isLoading } = usePreBatch(batchId, {
     enabled: !batchProp,
@@ -455,6 +603,20 @@ export function SchedulePreviewPanel({
           currentStatus={batch.status}
           batchName={batch.name || batch.batch_code}
         />
+
+        {/* Plan Load button — only when vehicle is assigned */}
+        {batch.vehicle_id && (batch.status === 'ready' || batch.status === 'scheduled') && (
+          <Button
+            variant="secondary"
+            className="w-full gap-2"
+            size="sm"
+            onClick={() => setLoadPlanOpen(true)}
+          >
+            <Layers className="h-4 w-4" />
+            Plan Vehicle Load
+          </Button>
+        )}
+
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1 gap-2" size="sm">
             <Edit className="h-4 w-4" />
@@ -470,6 +632,17 @@ export function SchedulePreviewPanel({
           </Button>
         </div>
       </div>
+
+      {/* Load Plan Dialog */}
+      {loadPlanOpen && workspaceId && (
+        <LoadPlanDialog
+          open={loadPlanOpen}
+          onClose={() => setLoadPlanOpen(false)}
+          batch={batch}
+          facilityMap={facilityMap}
+          workspaceId={workspaceId}
+        />
+      )}
     </div>
   );
 }

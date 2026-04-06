@@ -7,6 +7,7 @@ import {
   useRemoveWorkspaceMemberV2,
   useAddWorkspaceMemberV2,
   useToggleMemberStatus,
+  useSearchUsersForWorkspace,
   RBAC_ROLES,
   ROLE_LABELS,
   ROLE_COLORS,
@@ -57,7 +58,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Loader2, ChevronDown, MoreHorizontal, Trash2, UserPlus, Search, ShieldOff, ShieldCheck, Crown } from 'lucide-react';
-import { useUsers, User } from '@/hooks/admin/useUsers';
 
 export default function SettingsMembersPage() {
   const { workspaceId, role } = useWorkspace();
@@ -321,12 +321,10 @@ function AddMemberDialogV2({
   const [search, setSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState('viewer');
-  const { data: usersData, isLoading } = useUsers({ search });
-  const users = usersData?.users || [];
+  const { data: users = [], isLoading } = useSearchUsersForWorkspace(workspaceId, search);
   const addMember = useAddWorkspaceMemberV2();
 
-  const availableUsers = users.filter((u: User) => !existingMemberIds.includes(u.id));
-  const selectedUser = users.find((u: User) => u.id === selectedUserId);
+  const selectedUser = users.find((u) => u.id === selectedUserId);
 
   const handleAdd = async () => {
     if (!selectedUserId) return;
@@ -371,17 +369,21 @@ function AddMemberDialogV2({
             </div>
           </div>
 
-          {isLoading ? (
+          {search.length < 2 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Type at least 2 characters to search
+            </p>
+          ) : isLoading ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : availableUsers.length === 0 ? (
+          ) : users.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
-              {search ? 'No users found' : 'Start typing to search users'}
+              No users found
             </p>
           ) : (
             <div className="max-h-48 overflow-auto border rounded-lg divide-y">
-              {availableUsers.slice(0, 10).map((user: User) => (
+              {users.map((user) => (
                 <div
                   key={user.id}
                   className={`p-3 cursor-pointer hover:bg-muted/50 ${

@@ -183,8 +183,10 @@ export type Database = {
           actual_end_time: string | null
           actual_start_time: string | null
           batch_snapshot: Json | null
+          correlation_id: string | null
           created_at: string | null
           current_stop_index: number | null
+          dispatch_node_id: string | null
           driver_id: string | null
           driver_status: Database["public"]["Enums"]["driver_status"] | null
           estimated_distance_km: number | null
@@ -224,8 +226,10 @@ export type Database = {
           actual_end_time?: string | null
           actual_start_time?: string | null
           batch_snapshot?: Json | null
+          correlation_id?: string | null
           created_at?: string | null
           current_stop_index?: number | null
+          dispatch_node_id?: string | null
           driver_id?: string | null
           driver_status?: Database["public"]["Enums"]["driver_status"] | null
           estimated_distance_km?: number | null
@@ -265,8 +269,10 @@ export type Database = {
           actual_end_time?: string | null
           actual_start_time?: string | null
           batch_snapshot?: Json | null
+          correlation_id?: string | null
           created_at?: string | null
           current_stop_index?: number | null
+          dispatch_node_id?: string | null
           driver_id?: string | null
           driver_status?: Database["public"]["Enums"]["driver_status"] | null
           estimated_distance_km?: number | null
@@ -303,6 +309,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "delivery_batches_dispatch_node_id_fkey"
+            columns: ["dispatch_node_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "delivery_batches_driver_id_fkey"
             columns: ["driver_id"]
@@ -375,6 +388,100 @@ export type Database = {
           },
           {
             foreignKeyName: "delivery_batches_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_logs: {
+        Row: {
+          actual_qty: number | null
+          batch_id: string | null
+          correlation_id: string | null
+          discrepancy_reason: string | null
+          event_type: string
+          expected_qty: number | null
+          facility_id: string | null
+          id: string
+          item_id: string | null
+          logged_at: string
+          logged_by: string | null
+          metadata: Json | null
+          transfer_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          actual_qty?: number | null
+          batch_id?: string | null
+          correlation_id?: string | null
+          discrepancy_reason?: string | null
+          event_type: string
+          expected_qty?: number | null
+          facility_id?: string | null
+          id?: string
+          item_id?: string | null
+          logged_at?: string
+          logged_by?: string | null
+          metadata?: Json | null
+          transfer_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          actual_qty?: number | null
+          batch_id?: string | null
+          correlation_id?: string | null
+          discrepancy_reason?: string | null
+          event_type?: string
+          expected_qty?: number | null
+          facility_id?: string | null
+          id?: string
+          item_id?: string | null
+          logged_at?: string
+          logged_by?: string | null
+          metadata?: Json | null
+          transfer_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_logs_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_logs_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_logs_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "zone_facility_hierarchy"
+            referencedColumns: ["facility_id"]
+          },
+          {
+            foreignKeyName: "delivery_logs_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_logs_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_transfers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_logs_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -2003,6 +2110,121 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      inventory_transfer_items: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          notes: string | null
+          quantity_received: number
+          quantity_sent: number
+          transfer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          notes?: string | null
+          quantity_received?: number
+          quantity_sent: number
+          transfer_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          notes?: string | null
+          quantity_received?: number
+          quantity_sent?: number
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transfer_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transfer_items_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_transfers: {
+        Row: {
+          completed_at: string | null
+          correlation_id: string | null
+          created_at: string
+          dispatched_at: string | null
+          from_node_id: string
+          id: string
+          initiated_by: string | null
+          notes: string | null
+          status: string
+          to_node_id: string
+          transfer_number: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          from_node_id: string
+          id?: string
+          initiated_by?: string | null
+          notes?: string | null
+          status?: string
+          to_node_id: string
+          transfer_number: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          from_node_id?: string
+          id?: string
+          initiated_by?: string | null
+          notes?: string | null
+          status?: string
+          to_node_id?: string
+          transfer_number?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transfers_from_node_id_fkey"
+            columns: ["from_node_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transfers_to_node_id_fkey"
+            columns: ["to_node_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transfers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       invoice_line_items: {
         Row: {
@@ -7961,9 +8183,65 @@ export type Database = {
           },
         ]
       }
+      warehouse_inventory: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          node_id: string
+          quantity: number
+          reserved_qty: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          node_id: string
+          quantity?: number
+          reserved_qty?: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          node_id?: string
+          quantity?: number
+          reserved_qty?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_inventory_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "warehouse_inventory_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "warehouse_inventory_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       warehouses: {
         Row: {
           address: string | null
+          capabilities: Json
           capacity: number
           city: string | null
           code: string | null
@@ -7979,7 +8257,9 @@ export type Database = {
           lng: number | null
           name: string
           operating_hours: string | null
+          parent_id: string | null
           state: string | null
+          storage_conditions: string[]
           storage_zones: Json | null
           total_capacity_m3: number | null
           updated_at: string | null
@@ -7989,6 +8269,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          capabilities?: Json
           capacity: number
           city?: string | null
           code?: string | null
@@ -8004,7 +8285,9 @@ export type Database = {
           lng?: number | null
           name: string
           operating_hours?: string | null
+          parent_id?: string | null
           state?: string | null
+          storage_conditions?: string[]
           storage_zones?: Json | null
           total_capacity_m3?: number | null
           updated_at?: string | null
@@ -8014,6 +8297,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          capabilities?: Json
           capacity?: number
           city?: string | null
           code?: string | null
@@ -8029,7 +8313,9 @@ export type Database = {
           lng?: number | null
           name?: string
           operating_hours?: string | null
+          parent_id?: string | null
           state?: string | null
+          storage_conditions?: string[]
           storage_zones?: Json | null
           total_capacity_m3?: number | null
           updated_at?: string | null
@@ -8038,6 +8324,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "warehouses_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "warehouses_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -10039,6 +10332,15 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: Database["public"]["Enums"]["org_status"]
       }
+      allocate_inventory: {
+        Args: {
+          p_item_id: string
+          p_node_id: string
+          p_quantity: number
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
       archive_workspace: {
         Args: { p_workspace_id: string }
         Returns: undefined
@@ -10149,6 +10451,7 @@ export type Database = {
         Returns: string
       }
       disablelongtransactions: { Args: never; Returns: string }
+      dispatch_transfer: { Args: { p_transfer_id: string }; Returns: boolean }
       dropgeometrycolumn:
         | {
             Args: {
@@ -11047,7 +11350,20 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      receive_transfer: {
+        Args: { p_items: Json; p_transfer_id: string }
+        Returns: string
+      }
       refresh_user_permissions_fn: { Args: never; Returns: undefined }
+      release_reservation: {
+        Args: {
+          p_item_id: string
+          p_node_id: string
+          p_quantity: number
+          p_workspace_id: string
+        }
+        Returns: boolean
+      }
       remove_user_role: {
         Args: { p_role: string; p_user_id: string }
         Returns: boolean
