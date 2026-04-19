@@ -120,9 +120,16 @@ export class FacilityMarkerLayer extends BaseLayer<MapFeatureCollection<Facility
     if (!e.features || e.features.length === 0) return;
     const feature = e.features[0];
     if (feature.properties?.id) {
+      const coords = (feature.geometry as any)?.coordinates as [number, number] | undefined;
       window.dispatchEvent(
         new CustomEvent('facility-marker-click', {
-          detail: { facilityId: feature.properties.id, properties: feature.properties },
+          detail: {
+            facilityId: feature.properties.id,
+            properties: feature.properties,
+            lngLat: coords
+              ? { lng: coords[0], lat: coords[1] }
+              : { lng: e.lngLat.lng, lat: e.lngLat.lat },
+          },
         })
       );
     }
