@@ -666,6 +666,9 @@ export function useLiveTracking(options: UseLiveTrackingOptions = {}) {
     drivers: liveDrivers,
     vehicles: liveVehicles,
     deliveries: liveDeliveries,
+    facilities: facilitiesQuery.data || [],
+    warehouses: warehousesQuery.data || [],
+    zones: zonesQuery.data || [],
 
     // Filtered data
     filteredDrivers,

@@ -30,14 +30,15 @@ import { format } from 'date-fns';
 interface CreateInspectionDialogProps {
   open: boolean;
   onClose: () => void;
+  defaultVehicleId?: string;
 }
 
-export function CreateInspectionDialog({ open, onClose }: CreateInspectionDialogProps) {
+export function CreateInspectionDialog({ open, onClose, defaultVehicleId }: CreateInspectionDialogProps) {
   const { data: vehicles = [] } = useVehicles();
   const { createInspection, isCreating } = useInspectionsStore();
 
   const [formData, setFormData] = useState({
-    vehicleId: '',
+    vehicleId: defaultVehicleId || '',
     inspectionDate: new Date(),
     inspectionType: 'routine',
     inspectorName: '',
@@ -91,7 +92,7 @@ export function CreateInspectionDialog({ open, onClose }: CreateInspectionDialog
 
   const handleClose = () => {
     setFormData({
-      vehicleId: '',
+      vehicleId: defaultVehicleId || '',
       inspectionDate: new Date(),
       inspectionType: 'routine',
       inspectorName: '',
@@ -117,24 +118,26 @@ export function CreateInspectionDialog({ open, onClose }: CreateInspectionDialog
 
         <div className="grid gap-4 py-4">
           {/* Vehicle Selection */}
-          <div className="grid gap-2">
-            <Label htmlFor="vehicle">Vehicle *</Label>
-            <Select
-              value={formData.vehicleId}
-              onValueChange={(value) => setFormData({ ...formData, vehicleId: value })}
-            >
-              <SelectTrigger id="vehicle">
-                <SelectValue placeholder="Select a vehicle" />
-              </SelectTrigger>
-              <SelectContent>
-                {vehicles.map((vehicle) => (
-                  <SelectItem key={vehicle.id} value={vehicle.id}>
-                    {vehicle.model} - {vehicle.plateNumber}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!defaultVehicleId && (
+            <div className="grid gap-2">
+              <Label htmlFor="vehicle">Vehicle *</Label>
+              <Select
+                value={formData.vehicleId}
+                onValueChange={(value) => setFormData({ ...formData, vehicleId: value })}
+              >
+                <SelectTrigger id="vehicle">
+                  <SelectValue placeholder="Select a vehicle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vehicles.map((vehicle) => (
+                    <SelectItem key={vehicle.id} value={vehicle.id}>
+                      {vehicle.model} - {vehicle.plateNumber}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Inspection Date */}
           <div className="grid gap-2">

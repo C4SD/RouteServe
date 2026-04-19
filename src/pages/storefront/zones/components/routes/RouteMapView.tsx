@@ -93,7 +93,7 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('warehouses')
-        .select('id, name, lat, lng, type')
+        .select('id, name, lat, lng')
         .not('lat', 'is', null)
         .not('lng', 'is', null);
       if (error) throw error;

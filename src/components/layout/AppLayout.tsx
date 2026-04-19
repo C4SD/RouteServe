@@ -86,7 +86,7 @@ export function AppLayout({ children, sidebar, breadcrumbs, headerActions }: App
             </header>
 
             {/* Page Content */}
-            <main className={cn('flex-1 min-w-0 overflow-auto', isMobile && 'pb-16')}>
+            <main className={cn('flex-1 min-w-0 min-h-0 overflow-auto relative', isMobile && 'pb-16')}>
               {children}
             </main>
           </SidebarInset>

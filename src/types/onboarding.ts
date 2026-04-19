@@ -90,18 +90,18 @@ export interface UserInvitation {
   id: string;
   email: string;
   workspace_id: string;
-  pre_assigned_role: string; // app_role
-  workspace_role: WorkspaceRole;
+  workspace_name: string;
+  role_code: string;
+  workspace_role: string;
   invitation_token: string;
   status: InvitationStatus;
   invited_by: string;
+  invited_by_name: string | null;
   invited_at: string;
   expires_at: string;
   personal_message: string | null;
   accepted_at: string | null;
-  accepted_by: string | null;
   revoked_at: string | null;
-  revoked_by: string | null;
 }
 
 export interface PendingInvitation {
@@ -109,8 +109,8 @@ export interface PendingInvitation {
   email: string;
   workspace_id: string;
   workspace_name: string;
-  pre_assigned_role: string;
-  workspace_role: WorkspaceRole;
+  role_code: string;
+  workspace_role: string;
   invitation_token: string;
   invited_by: string;
   invited_by_name: string | null;
@@ -125,7 +125,7 @@ export interface InvitationDetails {
   email: string;
   workspace_id: string;
   workspace_name: string;
-  pre_assigned_role: string;
+  role_code: string;
   workspace_role: WorkspaceRole;
   invited_by_name: string | null;
   invited_at: string;
@@ -138,17 +138,18 @@ export interface InvitationDetails {
 export interface InviteUserParams {
   email: string;
   workspace_id: string;
-  app_role: string;
+  role_code?: string;
+  app_role?: string; // legacy compat
   workspace_role?: WorkspaceRole;
   personal_message?: string;
 }
 
 export interface AcceptInvitationResult {
-  invitation_id: string;
+  success: boolean;
   workspace_id: string;
   workspace_name: string;
-  app_role: string;
-  workspace_role: WorkspaceRole;
+  role_code: string;
+  workspace_role: string;
 }
 
 // =====================================================

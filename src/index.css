@@ -145,35 +145,34 @@
   }
 }
 
-/* Leaflet Map Controls Styling */
+/* Map Controls Styling */
 @layer components {
-  :global(.leaflet-control-zoom) {
+  :global(.leaflet-control-zoom), :global(.maplibregl-ctrl-group) {
     border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
     box-shadow: var(--shadow-sm) !important;
     background: var(--background) !important;
   }
 
-  :global(.leaflet-control-zoom a) {
+  :global(.leaflet-control-zoom a), :global(.maplibregl-ctrl-group button) {
     color: var(--foreground) !important;
     background: var(--background) !important;
     border-bottom: 1px solid var(--border) !important;
-    width: 32px !important;
-    height: 32px !important;
-    line-height: 32px !important;
+    width: 29px !important;
+    height: 29px !important;
     transition: background-color 0.2s ease;
   }
 
-  :global(.leaflet-control-zoom a:hover) {
+  :global(.leaflet-control-zoom a:hover), :global(.maplibregl-ctrl-group button:hover) {
     background: var(--muted) !important;
   }
 
-  :global(.leaflet-control-zoom a.leaflet-disabled) {
+  :global(.leaflet-control-zoom a.leaflet-disabled), :global(.maplibregl-ctrl-group button:disabled) {
     opacity: 0.4 !important;
     cursor: not-allowed !important;
   }
 
-  :global(.leaflet-control-zoom a:last-child) {
+  :global(.leaflet-control-zoom a:last-child), :global(.maplibregl-ctrl-group button:last-child) {
     border-bottom: none !important;
   }
   

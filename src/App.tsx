@@ -1,4 +1,5 @@
 import React, { useEffect, lazy, Suspense, ReactNode } from "react";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { Toaster } from "@/components/ui/sonner";
 import { Toaster as RadixToaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -70,6 +71,8 @@ const AdminSessionDetailPage = lazy(() => import("./pages/admin/sessions/[id]/pa
 // Map
 const LiveMapPage = lazy(() => import("./pages/map/live/page"));
 const PlaybackMapPage = lazy(() => import("./pages/map/playback/page"));
+const IntelligenceLayout = lazy(() => import("./pages/intelligence/layout").then(m => ({ default: m.IntelligenceLayout })));
+const MapIntelligencePage = lazy(() => import("./pages/intelligence/page"));
 
 // Settings
 const PermissionsPage = lazy(() => import("./pages/settings/permissions/page"));
@@ -80,6 +83,7 @@ const SettingsAccessControlPage = lazy(() => import("./pages/settings/access-con
 const SettingsLocationsPage = lazy(() => import("./pages/admin/LocationManagement"));
 const SettingsIntegrationPage = lazy(() => import("./pages/admin/integration/page"));
 const SettingsProfilePage = lazy(() => import("./pages/settings/profile/page"));
+const SettingsMapPage = lazy(() => import("./pages/settings/map/page"));
 
 // Onboarding
 const OnboardingWizardV2 = lazy(() => import("./components/onboarding/OnboardingWizardV2"));
@@ -245,6 +249,15 @@ const App = () => (
                     <Route path="playback" element={<PlaybackMapPage />} />
                   </Route>
 
+                  {/* Intelligence — unified map platform */}
+                  <Route path="/intelligence" element={
+                    <ProtectedRoute>
+                      <IntelligenceLayout />
+                    </ProtectedRoute>
+                  }>
+                    <Route index element={<MapIntelligencePage />} />
+                  </Route>
+
                   {/* Legacy routes - redirect to workspace structure */}
                   <Route path="/" element={<Navigate to="/fleetops" replace />} />
                   <Route path="/command-center" element={<Navigate to="/fleetops" replace />} />
@@ -280,6 +293,7 @@ const App = () => (
                     <Route path="members" element={<SettingsMembersPage />} />
                     <Route path="access-control" element={<SettingsAccessControlPage />} />
                     <Route path="locations" element={<SettingsLocationsPage />} />
+                    <Route path="map" element={<SettingsMapPage />} />
                     <Route path="integration" element={<SettingsIntegrationPage />} />
                   </Route>
                   

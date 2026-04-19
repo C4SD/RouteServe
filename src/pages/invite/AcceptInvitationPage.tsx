@@ -45,14 +45,13 @@ export default function AcceptInvitationPage() {
       const result = await acceptInvitation.mutateAsync(token);
       setAccepted(true);
 
-      // Redirect to profile completion after a short delay
       setTimeout(() => {
         navigate('/onboarding/profile', {
           replace: true,
           state: {
             fromInvitation: true,
             workspaceName: result.workspace_name,
-            appRole: result.app_role,
+            roleCode: result.role_code,
             workspaceRole: result.workspace_role,
           },
         });
@@ -173,7 +172,7 @@ export default function AcceptInvitationPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Your Role</p>
                 <div className="flex gap-2 mt-1">
-                  <Badge variant="outline">{invitation.pre_assigned_role.replace('_', ' ')}</Badge>
+                  <Badge variant="outline">{invitation.role_code.replace('_', ' ')}</Badge>
                   <Badge variant="secondary">{invitation.workspace_role}</Badge>
                 </div>
               </div>

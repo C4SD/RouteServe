@@ -66,7 +66,7 @@ export default function PlaybackMapPage() {
   }, [reset]);
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="absolute inset-0 flex flex-col overflow-hidden bg-background">
       {/* Top context bar */}
       <TopContextBar
         selectedBatchId={selectedBatchId}

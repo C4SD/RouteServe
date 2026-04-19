@@ -26,7 +26,8 @@ interface MapInsightsOverlayProps {
   onClose: () => void;
 }
 
-function formatDistance(km: number): string {
+function formatDistance(km: number | null | undefined): string {
+  if (km == null) return '—';
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
 
@@ -72,11 +73,13 @@ function FacilityInsights({ facility, onClose }: { facility: FacilityClickPayloa
         <Separator />
 
         <div className="space-y-2">
-          <MetricRow
-            icon={Warehouse}
-            label="To warehouse"
-            value={formatDistance(facility.distanceToWarehouseKm)}
-          />
+          {facility.distanceToWarehouseKm != null && (
+            <MetricRow
+              icon={Warehouse}
+              label="To warehouse"
+              value={formatDistance(facility.distanceToWarehouseKm)}
+            />
+          )}
           {facility.distanceToPreviousKm != null && (
             <MetricRow
               icon={Ruler}

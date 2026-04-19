@@ -53,10 +53,10 @@ export function VehicleOnboardSummary() {
       const uploadPromises: Promise<void>[] = [];
 
       for (const doc of stagedDocuments) {
-        uploadPromises.push(uploadDocument(newVehicle.id, doc, 'registration'));
+        uploadPromises.push(uploadDocument(newVehicle.id, doc.file, doc.type));
       }
       for (const photo of stagedPhotos) {
-        uploadPromises.push(uploadPhoto(newVehicle.id, photo));
+        uploadPromises.push(uploadPhoto(newVehicle.id, photo.file, photo.caption || undefined));
       }
 
       if (uploadPromises.length > 0) {

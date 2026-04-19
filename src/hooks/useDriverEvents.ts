@@ -9,6 +9,10 @@ import { supabase } from '@/integrations/supabase/client';
 import type { DriverEvent, DriverStatus, EventType } from '@/types/live-map';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+// Generate a stable unique suffix per hook instance to avoid channel name
+// conflicts in React StrictMode (which double-mounts in development)
+let eventsChannelCounter = 0;
+
 interface UseDriverEventsOptions {
   driverIds?: string[];
   batchIds?: string[];
@@ -48,6 +52,7 @@ export function useDriverEvents(options: UseDriverEventsOptions = {}) {
   const { driverIds, batchIds, enabled = true, limit = 100 } = options;
   const queryClient = useQueryClient();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelNameRef = useRef<string>(`driver-events-live-${++eventsChannelCounter}`);
 
   // Fetch recent driver events
   const fetchDriverEvents = useCallback(async (): Promise<DriverEventsData> => {
@@ -119,7 +124,7 @@ export function useDriverEvents(options: UseDriverEventsOptions = {}) {
     }
 
     const channel = supabase
-      .channel('driver-events-live')
+      .channel(channelNameRef.current)
       .on(
         'postgres_changes',
         {

@@ -133,6 +133,65 @@ export type Database = {
           },
         ]
       }
+      batch_slot_assignments: {
+        Row: {
+          batch_id: string
+          created_at: string
+          facility_id: string
+          id: string
+          load_kg: number | null
+          load_volume_m3: number | null
+          sequence_order: number | null
+          slot_key: string
+          slot_number: number
+          status: string
+          tier_name: string
+          updated_at: string
+          vehicle_id: string
+          workspace_id: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          facility_id: string
+          id?: string
+          load_kg?: number | null
+          load_volume_m3?: number | null
+          sequence_order?: number | null
+          slot_key: string
+          slot_number: number
+          status?: string
+          tier_name: string
+          updated_at?: string
+          vehicle_id: string
+          workspace_id: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          facility_id?: string
+          id?: string
+          load_kg?: number | null
+          load_volume_m3?: number | null
+          sequence_order?: number | null
+          slot_key?: string
+          slot_number?: number
+          status?: string
+          tier_name?: string
+          updated_at?: string
+          vehicle_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_slot_assignments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       countries: {
         Row: {
           bounds: unknown
@@ -3442,6 +3501,96 @@ export type Database = {
         }
         Relationships: []
       }
+      policy_cluster_facilities: {
+        Row: {
+          assigned_at: string
+          cluster_id: string
+          facility_id: string
+          id: string
+        }
+        Insert: {
+          assigned_at?: string
+          cluster_id: string
+          facility_id: string
+          id?: string
+        }
+        Update: {
+          assigned_at?: string
+          cluster_id?: string
+          facility_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_cluster_facilities_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "policy_clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_cluster_facilities_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_cluster_facilities_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "zone_facility_hierarchy"
+            referencedColumns: ["facility_id"]
+          },
+        ]
+      }
+      policy_clusters: {
+        Row: {
+          avg_distance_km: number | null
+          centroid_lat: number | null
+          centroid_lng: number | null
+          code: string
+          created_at: string
+          facility_count: number
+          id: string
+          name: string | null
+          service_policy_id: string
+          sort_order: number
+        }
+        Insert: {
+          avg_distance_km?: number | null
+          centroid_lat?: number | null
+          centroid_lng?: number | null
+          code: string
+          created_at?: string
+          facility_count?: number
+          id?: string
+          name?: string | null
+          service_policy_id: string
+          sort_order?: number
+        }
+        Update: {
+          avg_distance_km?: number | null
+          centroid_lat?: number | null
+          centroid_lng?: number | null
+          code?: string
+          created_at?: string
+          facility_count?: number
+          id?: string
+          name?: string | null
+          service_policy_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_clusters_service_policy_id_fkey"
+            columns: ["service_policy_id"]
+            isOneToOne: false
+            referencedRelation: "service_policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           activated_at: string | null
@@ -5010,6 +5159,63 @@ export type Database = {
             columns: ["zone_id"]
             isOneToOne: false
             referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_policies: {
+        Row: {
+          clustering_mode: string
+          code: string | null
+          constraints: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          service_area_id: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          clustering_mode?: string
+          code?: string | null
+          constraints?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          service_area_id: string
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          clustering_mode?: string
+          code?: string | null
+          constraints?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          service_area_id?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_policies_service_area_id_fkey"
+            columns: ["service_area_id"]
+            isOneToOne: false
+            referencedRelation: "service_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_policies_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -8240,6 +8446,7 @@ export type Database = {
       }
       warehouses: {
         Row: {
+          activated_at: string | null
           address: string | null
           capabilities: Json
           capacity: number
@@ -8260,6 +8467,7 @@ export type Database = {
           parent_id: string | null
           state: string | null
           storage_conditions: string[]
+          storage_mode: string
           storage_zones: Json | null
           total_capacity_m3: number | null
           updated_at: string | null
@@ -8268,6 +8476,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          activated_at?: string | null
           address?: string | null
           capabilities?: Json
           capacity: number
@@ -8288,6 +8497,7 @@ export type Database = {
           parent_id?: string | null
           state?: string | null
           storage_conditions?: string[]
+          storage_mode?: string
           storage_zones?: Json | null
           total_capacity_m3?: number | null
           updated_at?: string | null
@@ -8296,6 +8506,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          activated_at?: string | null
           address?: string | null
           capabilities?: Json
           capacity?: number
@@ -8316,6 +8527,7 @@ export type Database = {
           parent_id?: string | null
           state?: string | null
           storage_conditions?: string[]
+          storage_mode?: string
           storage_zones?: Json | null
           total_capacity_m3?: number | null
           updated_at?: string | null
@@ -10246,6 +10458,7 @@ export type Database = {
       }
       _st_within: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
       accept_invitation: { Args: { p_token: string }; Returns: Json }
+      activate_warehouse: { Args: { p_warehouse_id: string }; Returns: boolean }
       activate_zone_configuration: {
         Args: { p_activated_by: string; p_zone_id: string }
         Returns: boolean
@@ -10445,6 +10658,10 @@ export type Database = {
           p_slug: string
         }
         Returns: string
+      }
+      deactivate_warehouse: {
+        Args: { p_warehouse_id: string }
+        Returns: boolean
       }
       determine_packaging_type: {
         Args: { p_volume_m3: number; p_weight_kg: number }
@@ -10944,6 +11161,7 @@ export type Database = {
       }
       get_map_data_in_view: {
         Args: {
+          _workspace_id: string
           max_lat: number
           max_lon: number
           min_lat: number
@@ -10990,7 +11208,10 @@ export type Database = {
           total_slot_cost: number
         }[]
       }
-      get_program_metrics: { Args: { _program_code: string }; Returns: Json }
+      get_program_metrics: {
+        Args: { _program_code: string; _workspace_id: string }
+        Returns: Json
+      }
       get_program_performance: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: {
@@ -11392,6 +11613,14 @@ export type Database = {
       save_workspace_states: {
         Args: { p_admin_unit_ids: string[]; p_workspace_id: string }
         Returns: undefined
+      }
+      search_users_for_workspace_invite: {
+        Args: { p_search?: string; p_workspace_id: string }
+        Returns: Json
+      }
+      shares_workspace_with_caller: {
+        Args: { p_user_id: string }
+        Returns: boolean
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

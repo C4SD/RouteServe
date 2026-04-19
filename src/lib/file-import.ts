@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import { CSVFacilityData, csvFacilitySchema } from './facility-validation';
+import { detectCoordinateIssues } from './geo-bounds';
 
 export type FileFormat = 'csv' | 'xlsx' | 'xls';
 
@@ -171,11 +172,30 @@ function parseGeoCoordinates(value: string, columnName?: string): { latitude?: n
     };
   }
 
-  // Default assumption: first is longitude, second is latitude
-  // (common in many systems like Google Maps)
+  // Nigeria-aware heuristic: when both values are ambiguous (< 90),
+  // check if they fall in Nigeria's coordinate ranges. Nigerian health sector
+  // CSVs typically export as "latitude longitude" order, so prefer that.
+  // Nigeria lat: 4.3–13.9, lng: 2.7–14.7
+  const firstCouldBeNigeriaLat = first >= 4.3 && first <= 13.9;
+  const secondCouldBeNigeriaLng = second >= 2.7 && second <= 14.7;
+  const firstCouldBeNigeriaLng = first >= 2.7 && first <= 14.7;
+  const secondCouldBeNigeriaLat = second >= 4.3 && second <= 13.9;
+
+  if (firstCouldBeNigeriaLat && secondCouldBeNigeriaLng && !(firstCouldBeNigeriaLng && secondCouldBeNigeriaLat)) {
+    // Only one interpretation is valid for Nigeria — use it
+    return { latitude: first, longitude: second };
+  }
+
+  if (firstCouldBeNigeriaLng && secondCouldBeNigeriaLat && !(firstCouldBeNigeriaLat && secondCouldBeNigeriaLng)) {
+    // Only the swapped interpretation is valid for Nigeria
+    return { longitude: first, latitude: second };
+  }
+
+  // Both interpretations are ambiguous for Nigeria — default to lat-first
+  // (most common format in Nigerian health sector data exports)
   return {
-    longitude: first,
-    latitude: second,
+    latitude: first,
+    longitude: second,
   };
 }
 
@@ -507,6 +527,24 @@ export function validateFacilityRow(
       severity: 'error',
       value: row.longitude,
     });
+  }
+
+  // Geographic bounds check (Nigeria)
+  if (row.latitude && row.longitude) {
+    const lat = parseFloat(String(row.latitude));
+    const lng = parseFloat(String(row.longitude));
+    if (!isNaN(lat) && !isNaN(lng)) {
+      const geoIssues = detectCoordinateIssues(lat, lng, row.state);
+      for (const issue of geoIssues) {
+        issues.push({
+          row: rowIndex + 1,
+          field: 'coordinates',
+          message: issue.message + (issue.suggestion ? ` — ${issue.suggestion}` : ''),
+          severity: issue.type === 'outside_state' ? 'warning' : 'error',
+          value: `${lat}, ${lng}`,
+        });
+      }
+    }
   }
 
   // Validate email format

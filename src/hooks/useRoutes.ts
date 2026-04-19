@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -5,7 +6,9 @@ import {
   Route,
   RouteFacility,
   CreateRouteInput,
+  RoutePolicyMetadata,
 } from '@/types/routes';
+import { useServicePolicyDetail } from '@/hooks/useServicePolicies';
 import { toast } from 'sonner';
 
 export interface RouteFilters {
@@ -91,6 +94,10 @@ export function useRoutes(filters?: RouteFilters) {
         r.service_areas = saMap.get(r.service_area_id) || null;
         r.warehouses = whMap.get(r.warehouse_id) || null;
         r.facility_count = facCountMap[r.id] || 0;
+        // Extract policy metadata from JSON for service_policy routes
+        if (r.creation_mode === 'service_policy' && r.metadata?.service_policy_id) {
+          r.policy_metadata = r.metadata as RoutePolicyMetadata;
+        }
       });
 
       return routes;
@@ -134,6 +141,9 @@ export function useRoute(id: string | null | undefined) {
       route.zones = zoneRes.data || null;
       route.service_areas = saRes.data || null;
       route.warehouses = whRes.data || null;
+      if (route.creation_mode === 'service_policy' && route.metadata?.service_policy_id) {
+        route.policy_metadata = route.metadata as RoutePolicyMetadata;
+      }
 
       return route;
     },
@@ -164,10 +174,16 @@ export function useRouteFacilities(routeId: string | null | undefined) {
 
       // Fetch facility details separately
       const facilityIds = [...new Set(routeFacilities.map(rf => rf.facility_id))];
-      const { data: facilities } = await supabase
-        .from('facilities')
-        .select('id, name, lat, lng, type, level_of_care, lga')
-        .in('id', facilityIds);
+      const CHUNK_SIZE = 100;
+      const chunks = Array.from({ length: Math.ceil(facilityIds.length / CHUNK_SIZE) }, (_, i) =>
+        facilityIds.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+      );
+      const facilityResults = await Promise.all(
+        chunks.map(chunk =>
+          supabase.from('facilities').select('id, name, lat, lng, type, level_of_care, lga').in('id', chunk)
+        )
+      );
+      const facilities = facilityResults.flatMap(r => r.data || []);
 
       const facilityMap = new Map((facilities || []).map(f => [f.id, f]));
       routeFacilities.forEach(rf => {
@@ -192,12 +208,13 @@ export function useCreateRoute() {
     mutationFn: async (input: CreateRouteInput) => {
       if (!workspaceId) throw new Error('No workspace selected');
 
-      const { facility_ids, facility_distances, total_distance_km, estimated_duration_min, optimized_geometry, ...routeData } = input;
+      const { facility_ids, facility_distances, total_distance_km, estimated_duration_min, optimized_geometry, metadata, ...routeData } = input;
       const routePayload = {
         ...routeData,
         ...(total_distance_km != null && { total_distance_km }),
         ...(estimated_duration_min != null && { estimated_duration_min }),
         ...(optimized_geometry != null && { optimized_geometry }),
+        ...(metadata != null && { metadata }),
         workspace_id: workspaceId,
       };
 
@@ -326,6 +343,47 @@ export function useDeleteRoute() {
       toast.error(`Failed to delete route: ${error.message}`);
     },
   });
+}
+
+/**
+ * Detect whether a service_policy route is out of sync with its source policy cluster.
+ * Returns mismatch details only for routes created from a Service Policy.
+ */
+export function useRoutePolicySync(route: Route | null) {
+  const isServicePolicy = route?.creation_mode === 'service_policy';
+  const policyId = isServicePolicy ? (route?.metadata?.service_policy_id as string | null) : null;
+  const clusterCode = isServicePolicy ? (route?.metadata?.cluster_code as string | null) : null;
+
+  const policyDetailQuery = useServicePolicyDetail(policyId ?? null);
+  const routeFacilitiesQuery = useRouteFacilities(isServicePolicy ? (route?.id ?? null) : null);
+
+  const syncResult = useMemo(() => {
+    if (!isServicePolicy) return { isOutOfSync: false, added: [] as string[], removed: [] as string[] };
+    if (!policyDetailQuery.data || !routeFacilitiesQuery.data) return null;
+
+    const cluster = policyDetailQuery.data.clusters.find(c => c.code === clusterCode);
+    if (!cluster) return { isOutOfSync: false, added: [] as string[], removed: [] as string[] };
+
+    const currentFacilityIds = new Set(
+      (cluster.facilities ?? []).map(pcf => pcf.facility_id),
+    );
+    const routeFacilityIds = new Set(
+      routeFacilitiesQuery.data.map(rf => rf.facility_id),
+    );
+
+    const added = [...currentFacilityIds].filter(id => !routeFacilityIds.has(id));
+    const removed = [...routeFacilityIds].filter(id => !currentFacilityIds.has(id));
+
+    return { isOutOfSync: added.length > 0 || removed.length > 0, added, removed };
+  }, [isServicePolicy, policyDetailQuery.data, routeFacilitiesQuery.data, clusterCode]);
+
+  return {
+    isServicePolicy,
+    syncResult,
+    isLoading: policyDetailQuery.isLoading || routeFacilitiesQuery.isLoading,
+    policyName: policyDetailQuery.data?.policy?.name ?? null,
+    clusterCode,
+  };
 }
 
 /**

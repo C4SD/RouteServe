@@ -80,7 +80,7 @@ export function BatchRouteMap({
     facilities: facilityPoints,
     orderedFacilityIds,
     tetherMode,
-    enabled: enableControls && facilityPoints.length > 0 && !!depot,
+    enabled: enableControls && facilityPoints.length > 0,
   });
 
   // Calculate map bounds to fit all points
@@ -608,12 +608,6 @@ export function BatchRouteMap({
         </div>
       )}
 
-      {/* Warning when no depot for road routing */}
-      {enableControls && !depot && facilityPoints.length > 0 && !isFetching && (
-        <div className="absolute bottom-[10px] left-[10px] z-10 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 text-xs text-amber-700 shadow">
-          Warehouse has no coordinates — showing straight-line preview
-        </div>
-      )}
     </div>
   );
 }

@@ -24,14 +24,15 @@ import { FuelLogFormData, FuelType, PaymentMethod } from '@/types/vlms';
 interface LogFuelPurchaseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultVehicleId?: string;
 }
 
-export function LogFuelPurchaseDialog({ open, onOpenChange }: LogFuelPurchaseDialogProps) {
+export function LogFuelPurchaseDialog({ open, onOpenChange, defaultVehicleId }: LogFuelPurchaseDialogProps) {
   const { data: vehicles = [] } = useVehicles();
   const { createLog, isLoading } = useFuelLogsStore();
 
   // Form state
-  const [vehicleId, setVehicleId] = useState('');
+  const [vehicleId, setVehicleId] = useState(defaultVehicleId || '');
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
   const [stationName, setStationName] = useState('');
   const [stationLocation, setStationLocation] = useState('');
@@ -71,7 +72,7 @@ export function LogFuelPurchaseDialog({ open, onOpenChange }: LogFuelPurchaseDia
       onOpenChange(false);
 
       // Reset form
-      setVehicleId('');
+      setVehicleId(defaultVehicleId || '');
       setTransactionDate(new Date().toISOString().split('T')[0]);
       setStationName('');
       setStationLocation('');
@@ -99,21 +100,23 @@ export function LogFuelPurchaseDialog({ open, onOpenChange }: LogFuelPurchaseDia
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="vehicle">Vehicle *</Label>
-              <Select value={vehicleId} onValueChange={setVehicleId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vehicle" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vehicles.map((vehicle) => (
-                    <SelectItem key={vehicle.id} value={vehicle.id}>
-                      {vehicle.make} {vehicle.model} - {vehicle.license_plate}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!defaultVehicleId && (
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="vehicle">Vehicle *</Label>
+                <Select value={vehicleId} onValueChange={setVehicleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vehicle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.make} {vehicle.model} - {vehicle.license_plate}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="transaction-date">Transaction Date *</Label>

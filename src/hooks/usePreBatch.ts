@@ -373,6 +373,7 @@ export function useConvertPreBatchToBatch() {
         .from('delivery_batches')
         .insert({
           name: payload.batchName,
+          workspace_id: preBatch.workspace_id,
           warehouse_id: warehouseId,
           facility_ids: preBatch.facility_order,
           scheduled_date: preBatch.planned_date,

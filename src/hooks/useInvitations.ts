@@ -159,7 +159,7 @@ export function useInviteUser() {
       const { data, error } = await supabase.rpc('invite_user', {
         p_email: params.email,
         p_workspace_id: params.workspace_id,
-        p_app_role: params.app_role,
+        p_role_code: params.role_code ?? params.app_role ?? 'viewer',
         p_workspace_role: params.workspace_role ?? 'member',
         p_personal_message: params.personal_message ?? null,
       });

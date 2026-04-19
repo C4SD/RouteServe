@@ -28,6 +28,7 @@ import {
   ArrowRight,
   ArrowLeft,
   ShieldOff,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,6 +55,7 @@ import { useAllLGAsWithZones } from '@/hooks/useAdminUnits';
 import { batchGenerateWarehouseCodes } from '@/lib/warehouse-code-generator';
 import { chunk } from '@/lib/utils';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { detectCoordinateIssues } from '@/lib/geo-bounds';
 
 interface EnhancedCSVImportDialogProps {
   open: boolean;
@@ -739,6 +741,59 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
                           />
                         </div>
                       )}
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
+
+              {/* Coordinate Swap Action */}
+              {(() => {
+                if (!parsedData) return null;
+                const swappedRowIndices = parsedData.rows
+                  .map((row, i) => {
+                    const merged = { ...row, ...(editedRows[i] || {}) };
+                    const lat = parseFloat(String(merged.latitude ?? merged.lat ?? ''));
+                    const lng = parseFloat(String(merged.longitude ?? merged.lng ?? ''));
+                    if (isNaN(lat) || isNaN(lng)) return null;
+                    const issues = detectCoordinateIssues(lat, lng);
+                    return issues.some((x) => x.type === 'likely_swapped') ? i : null;
+                  })
+                  .filter((i): i is number => i !== null);
+
+                if (swappedRowIndices.length === 0) return null;
+
+                return (
+                  <Alert className="border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20">
+                    <ArrowLeftRight className="h-4 w-4 text-yellow-600" />
+                    <AlertTitle className="text-yellow-800 dark:text-yellow-300">
+                      {swappedRowIndices.length} {swappedRowIndices.length === 1 ? 'row has' : 'rows have'} likely swapped lat/lng
+                    </AlertTitle>
+                    <AlertDescription className="text-yellow-700 dark:text-yellow-400">
+                      <p className="text-sm mb-2">
+                        Coordinates appear to be in longitude/latitude order instead of latitude/longitude.
+                        This is a common issue with Nigerian health facility exports.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-yellow-400 text-yellow-800 hover:bg-yellow-100"
+                        onClick={() => {
+                          setEditedRows((prev) => {
+                            const next = { ...prev };
+                            swappedRowIndices.forEach((i) => {
+                              const row = { ...parsedData.rows[i], ...(prev[i] || {}) };
+                              const lat = parseFloat(String(row.latitude ?? row.lat ?? ''));
+                              const lng = parseFloat(String(row.longitude ?? row.lng ?? ''));
+                              next[i] = { ...row, latitude: lng, longitude: lat };
+                            });
+                            return next;
+                          });
+                          toast.success(`Swapped coordinates for ${swappedRowIndices.length} rows`);
+                        }}
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" />
+                        Swap all {swappedRowIndices.length} rows
+                      </Button>
                     </AlertDescription>
                   </Alert>
                 );

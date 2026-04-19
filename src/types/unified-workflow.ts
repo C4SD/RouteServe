@@ -14,13 +14,27 @@ import type { TimeWindow, Priority, RoutePoint } from './scheduler';
 
 export type UnifiedWorkflowStep = 1 | 2 | 3 | 4 | 5;
 
-export type SourceMethod = 'ready' | 'upload' | 'manual';
+export type SourceMethod = 'ready' | 'upload' | 'manual' | 'service_policy';
 
 export type SourceSubOption = 'manual_scheduling' | 'ai_optimization';
 
 export type StartLocationType = 'warehouse' | 'facility';
 
 export type PreBatchStatus = 'draft' | 'ready' | 'converted' | 'cancelled';
+
+// =====================================================
+// POLICY CONTEXT (service_policy source method)
+// =====================================================
+
+export interface PolicyContext {
+  service_area_id: string;
+  service_area_name: string;
+  policy_id: string;
+  policy_name: string;
+  cluster_id: string;
+  cluster_code: string; // Z1, Z2, …
+  cluster_name: string | null;
+}
 
 // =====================================================
 // WORKING SET TYPES (Step 2)
@@ -240,6 +254,7 @@ export interface UnifiedWorkflowState {
 
   // Step 4: Route
   optimized_route: RoutePoint[];
+  route_geometry: Array<[number, number]> | null; // [lng, lat] road path from routing API
   total_distance_km: number | null;
   estimated_duration_min: number | null;
 
@@ -250,6 +265,9 @@ export interface UnifiedWorkflowState {
   // File Upload (for 'upload' source method)
   uploaded_file: File | null;
   parsed_facilities: ParsedFacility[] | null;
+
+  // Policy Context (for 'service_policy' source method)
+  policy_context: PolicyContext | null;
 }
 
 // =====================================================
@@ -371,6 +389,9 @@ export interface UnifiedWorkflowActions {
   setUploadedFile: (file: File | null) => void;
   setParsedFacilities: (facilities: ParsedFacility[] | null) => void;
   updateParsedFacility: (rowIndex: number, updates: Partial<ParsedFacility>) => void;
+
+  // Step 2: Policy Context (service_policy source method)
+  setPolicyContext: (context: PolicyContext | null) => void;
 
   // Step 2 -> Pre-batch
   savePreBatch: () => Promise<string>;

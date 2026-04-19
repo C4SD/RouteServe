@@ -40,11 +40,11 @@ interface InviteUserDialogProps {
 }
 
 const APP_ROLES: { value: string; label: string; description: string }[] = [
-  { value: 'warehouse_officer', label: 'Warehouse Officer', description: 'Manages warehouses and batches' },
-  { value: 'dispatcher', label: 'Dispatcher', description: 'Assigns drivers and manages dispatch' },
-  { value: 'driver', label: 'Driver', description: 'Executes deliveries via Mod4' },
-  { value: 'zonal_manager', label: 'Zonal Manager', description: 'Oversees zonal operations' },
-  { value: 'viewer', label: 'Viewer', description: 'Read-only access' },
+  { value: 'admin', label: 'Admin', description: 'Full system access across all features' },
+  { value: 'ops_manager', label: 'Ops Manager', description: 'Storefront, inventory, and reporting access' },
+  { value: 'fleet_manager', label: 'Fleet Manager', description: 'Batch management, fleet operations, and basic reporting' },
+  { value: 'driver', label: 'Driver', description: 'Driver-specific delivery operations via Mod4' },
+  { value: 'viewer', label: 'Viewer', description: 'Read-only access to inventory and reports' },
 ];
 
 export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSuccess }: InviteUserDialogProps) {
@@ -66,7 +66,7 @@ export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSucces
       const invitationId = await inviteUser.mutateAsync({
         email,
         workspace_id: workspaceId,
-        app_role: appRole,
+        role_code: appRole,
         workspace_role: workspaceRole,
         personal_message: personalMessage || undefined,
       });

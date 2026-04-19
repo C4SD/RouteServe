@@ -89,6 +89,16 @@ export class LiveMapKernel {
       this.events.onReady?.();
     });
 
+    // Provide a 1×1 transparent fallback for any sprite image the basemap
+    // style references but that isn't in the sprite sheet (e.g. "circle-11"
+    // in some OpenFreeMap variants). Without this MapLibre logs a warning and
+    // skips the icon; with it the map renders silently.
+    this.map.on('styleimagemissing', (e) => {
+      if (this.map && !this.map.hasImage(e.id)) {
+        this.map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+      }
+    });
+
     // Handle errors
     this.map.on('error', (e) => {
       const error = new Error(e.error?.message ?? 'Map error');
