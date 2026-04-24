@@ -17,6 +17,7 @@ import { LiveTrackingProvider, useLiveTrackingCtx } from '@/contexts/LiveTrackin
 import { IntelligenceSidebar, type IntelligenceTab } from './components/IntelligenceSidebar';
 import { IntelligenceMapView, type IntelligenceMode } from './components/IntelligenceMapView';
 import { useIntelligencePlanningData } from './hooks/useIntelligencePlanningData';
+import { useGeospatialZoning } from './hooks/useGeospatialZoning';
 import { EntityDetailPanel } from '../components/EntityDetailPanel';
 import { PlaybackMap } from '../playback/components/PlaybackMap';
 import { PlaybackDock } from '../playback/components/PlaybackDock';
@@ -52,6 +53,9 @@ function MapIntelligencePageInner() {
     serviceAreaHulls,
     stats: planningStats,
   } = useIntelligencePlanningData();
+
+  // Geospatial zoning
+  const zoning = useGeospatialZoning();
 
   const handleEntitySelect = useCallback((_entityId: string, _entityType: EntityType) => {
     setDetailPanelOpen(true);
@@ -92,8 +96,18 @@ function MapIntelligencePageInner() {
     return () => { resetPlayback(); };
   }, [resetPlayback]);
 
+  // Initialize zoning when tab becomes active
+  useEffect(() => {
+    if (activeTab === 'zoning') {
+      zoning.initialize('ng');
+    }
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Derive IntelligenceMapView mode from active tab
-  const mapMode: IntelligenceMode = activeTab === 'analytics' ? 'analytics' : 'track';
+  const mapMode: IntelligenceMode =
+    activeTab === 'analytics' ? 'analytics'
+    : activeTab === 'zoning' ? 'zoning'
+    : 'track';
 
   return (
     <div className="absolute inset-0 flex overflow-hidden">
@@ -108,6 +122,7 @@ function MapIntelligencePageInner() {
         onSelectBatch={handleSelectBatch}
         filterDate={filterDate}
         onDateFilter={handleDateFilter}
+        zoning={zoning}
       />
 
       {/* Main map area */}
@@ -127,6 +142,17 @@ function MapIntelligencePageInner() {
             showZonePolygons={layerToggles.showZonePolygons}
             showRouteGeometry={layerToggles.showRouteGeometry}
             showServiceAreas={layerToggles.showServiceAreas}
+            zoningProps={{
+              stateFeatures: zoning.stateFeatures,
+              lgaFeatures: zoning.lgaFeatures,
+              selectedLgaIds: zoning.selectedLgaIds,
+              assignedMap: zoning.assignedMap,
+              zones: zoning.zones,
+              editMode: zoning.editMode,
+              editingZoneId: zoning.editingZoneId,
+              onToggleLga: zoning.toggleLga,
+              onToggleState: zoning.toggleState,
+            }}
           />
         </div>
 

@@ -11,7 +11,7 @@ import { useState } from 'react';
 import {
   Radio, History, BarChart3, ChevronLeft, ChevronRight,
   Layers, Map as MapIcon, Route, Eye, EyeOff, MapPin, Activity,
-  ChevronDown, Calendar as CalendarIcon, Loader2,
+  ChevronDown, Calendar as CalendarIcon, Loader2, Pentagon,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -30,12 +30,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { LiveFilterPanel } from '../../components/LiveFilterPanel';
 import { EventAnalyticsTab } from '../../playback/components/EventAnalyticsTab';
 import { RouteIntelligenceTab } from '../../playback/components/RouteIntelligenceTab';
+import { ZoningPanel } from './ZoningPanel';
 import { usePlaybackEngine } from '@/hooks/usePlaybackEngine';
 import { usePlaybackBatches } from '@/hooks/usePlaybackData';
 import { useLiveTrackingCtx } from '@/contexts/LiveTrackingContext';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import type { UseGeospatialZoningReturn } from '../hooks/useGeospatialZoning';
 
-export type IntelligenceTab = 'track' | 'playback' | 'analytics';
+export type IntelligenceTab = 'track' | 'playback' | 'analytics' | 'zoning';
 
 interface PlanningStats {
   totalZones: number;
@@ -64,6 +66,7 @@ interface IntelligenceSidebarProps {
   onSelectBatch: (id: string) => void;
   filterDate: Date | null;
   onDateFilter: (date: Date | null) => void;
+  zoning?: UseGeospatialZoningReturn;
 }
 
 export function IntelligenceSidebar({
@@ -76,6 +79,7 @@ export function IntelligenceSidebar({
   onSelectBatch,
   filterDate,
   onDateFilter,
+  zoning,
 }: IntelligenceSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { counts } = useLiveTrackingCtx();
@@ -110,6 +114,7 @@ export function IntelligenceSidebar({
               { tab: 'track' as const, Icon: Radio, label: 'Track' },
               { tab: 'playback' as const, Icon: History, label: 'Playback' },
               { tab: 'analytics' as const, Icon: BarChart3, label: 'Analytics' },
+              { tab: 'zoning' as const, Icon: Pentagon, label: 'Zoning' },
             ].map(({ tab, Icon, label }) => (
               <Tooltip key={tab}>
                 <TooltipTrigger asChild>
@@ -137,7 +142,7 @@ export function IntelligenceSidebar({
         >
           {/* Tab bar */}
           <div className="p-4 pb-0 shrink-0">
-            <TabsList className="w-full grid grid-cols-3 h-9">
+            <TabsList className="w-full grid grid-cols-4 h-9">
               <TabsTrigger value="track" className="gap-1 text-xs">
                 <Radio className="h-3 w-3" />
                 Track
@@ -149,11 +154,15 @@ export function IntelligenceSidebar({
               </TabsTrigger>
               <TabsTrigger value="playback" className="gap-1 text-xs">
                 <History className="h-3 w-3" />
-                Playback
+                Replay
               </TabsTrigger>
               <TabsTrigger value="analytics" className="gap-1 text-xs">
                 <BarChart3 className="h-3 w-3" />
                 Analytics
+              </TabsTrigger>
+              <TabsTrigger value="zoning" className="gap-1 text-xs">
+                <Pentagon className="h-3 w-3" />
+                Zones
               </TabsTrigger>
             </TabsList>
           </div>
@@ -189,6 +198,20 @@ export function IntelligenceSidebar({
               layerToggles={layerToggles}
               onLayerToggle={onLayerToggle}
             />
+          </TabsContent>
+
+          {/* Zoning tab */}
+          <TabsContent
+            value="zoning"
+            className="flex-1 min-h-0 mt-0 data-[state=active]:flex data-[state=active]:flex-col overflow-hidden"
+          >
+            {zoning ? (
+              <ZoningPanel zoning={zoning} />
+            ) : (
+              <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+                Zoning unavailable
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       )}

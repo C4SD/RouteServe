@@ -48,8 +48,12 @@ import type { TetherMode } from '@/lib/algorithms/routeOptimizer';
 import type { ZonePolygonData } from '@/maps-v3/layers/ZonePolygonLayer';
 import type { RouteGeometryData } from '@/maps-v3/layers/RouteGeometryLayer';
 import type { ServiceAreaHullData } from '@/maps-v3/layers/ServiceAreaPolygonLayer';
+import type { BoundaryFeature, ZoningEditMode } from '../hooks/useGeospatialZoning';
+import type { AssignedLgaMap } from '@/services/zoningService';
+import type { OperationalZone } from '@/types/zones';
+import { zoneColor } from '@/services/zoningService';
 
-export type IntelligenceMode = 'track' | 'analytics';
+export type IntelligenceMode = 'track' | 'analytics' | 'zoning';
 
 interface IntelligenceMapViewProps {
   mode: IntelligenceMode;
@@ -62,6 +66,18 @@ interface IntelligenceMapViewProps {
   showZonePolygons?: boolean;
   showRouteGeometry?: boolean;
   showServiceAreas?: boolean;
+  /** Zoning mode props */
+  zoningProps?: {
+    stateFeatures: BoundaryFeature[];
+    lgaFeatures: BoundaryFeature[];
+    selectedLgaIds: string[];
+    assignedMap: AssignedLgaMap;
+    zones: OperationalZone[];
+    editMode: ZoningEditMode;
+    editingZoneId: string | null;
+    onToggleLga: (id: string) => void;
+    onToggleState: (id: string) => void;
+  };
 }
 
 export function IntelligenceMapView({
@@ -73,6 +89,7 @@ export function IntelligenceMapView({
   showZonePolygons = true,
   showRouteGeometry = true,
   showServiceAreas = true,
+  zoningProps,
 }: IntelligenceMapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const kernelRef = useRef<LiveMapKernel | null>(null);
@@ -296,6 +313,224 @@ export function IntelligenceMapView({
       setMapReadyKey(0);
     };
   }, [retryKey, mapBaseStyle]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Zoning boundary layers ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapReady || !kernelRef.current) return;
+    const map = kernelRef.current.getMap();
+    if (!map) return;
+
+    if (mode !== 'zoning') {
+      // Clean up boundary layers if present
+      ['boundary-lga-base', 'boundary-lga-assigned', 'boundary-lga-selected',
+        'boundary-lga-hover', 'boundary-lga-outline', 'boundary-state-outline'].forEach((id) => {
+        if (map.getLayer(id)) map.removeLayer(id);
+      });
+      ['zoning-lga-source', 'zoning-state-source'].forEach((id) => {
+        if (map.getSource(id)) map.removeSource(id);
+      });
+      return;
+    }
+
+    const zp = zoningProps;
+    if (!zp) return;
+
+    const lgaCollection = { type: 'FeatureCollection' as const, features: zp.lgaFeatures };
+    const stateCollection = { type: 'FeatureCollection' as const, features: zp.stateFeatures };
+
+    // Add or update LGA source
+    if (!map.getSource('zoning-lga-source')) {
+      map.addSource('zoning-lga-source', { type: 'geojson', data: lgaCollection });
+    } else {
+      (map.getSource('zoning-lga-source') as maplibregl.GeoJSONSource).setData(lgaCollection);
+    }
+
+    // Add or update state source
+    if (!map.getSource('zoning-state-source')) {
+      map.addSource('zoning-state-source', { type: 'geojson', data: stateCollection });
+    } else {
+      (map.getSource('zoning-state-source') as maplibregl.GeoJSONSource).setData(stateCollection);
+    }
+
+    // Layer 1: base LGA fill
+    if (!map.getLayer('boundary-lga-base')) {
+      map.addLayer({
+        id: 'boundary-lga-base',
+        type: 'fill',
+        source: 'zoning-lga-source',
+        paint: { 'fill-color': '#1e293b', 'fill-opacity': 0.04 },
+      });
+    }
+
+    // Build assigned color expression using zone colors
+    const assignedColorExpr: any[] = ['case'];
+    for (const zone of zp.zones) {
+      const boundaryIds = Object.entries(zp.assignedMap)
+        .filter(([, zid]) => zid === zone.id)
+        .map(([bid]) => bid);
+      if (boundaryIds.length > 0) {
+        assignedColorExpr.push(['in', ['get', 'id'], ['literal', boundaryIds]], zoneColor(zone));
+      }
+    }
+    assignedColorExpr.push('transparent');
+
+    // Layer 2: assigned zone fills
+    if (!map.getLayer('boundary-lga-assigned')) {
+      map.addLayer({
+        id: 'boundary-lga-assigned',
+        type: 'fill',
+        source: 'zoning-lga-source',
+        paint: {
+          'fill-color': assignedColorExpr as any,
+          'fill-opacity': 0.45,
+        },
+      });
+    } else {
+      map.setPaintProperty('boundary-lga-assigned', 'fill-color', assignedColorExpr);
+    }
+
+    // Layer 3: selected LGA highlight
+    const selectedIds = zp.selectedLgaIds;
+    if (!map.getLayer('boundary-lga-selected')) {
+      map.addLayer({
+        id: 'boundary-lga-selected',
+        type: 'fill',
+        source: 'zoning-lga-source',
+        filter: selectedIds.length > 0 ? ['in', ['get', 'id'], ['literal', selectedIds]] : ['==', 1, 0],
+        paint: { 'fill-color': '#2563eb', 'fill-opacity': 0.55 },
+      });
+    } else {
+      map.setFilter(
+        'boundary-lga-selected',
+        selectedIds.length > 0 ? ['in', ['get', 'id'], ['literal', selectedIds]] : ['==', 1, 0],
+      );
+    }
+
+    // Layer 4: hover — driven by featureState (set separately via mousemove)
+    if (!map.getLayer('boundary-lga-hover')) {
+      map.addLayer({
+        id: 'boundary-lga-hover',
+        type: 'fill',
+        source: 'zoning-lga-source',
+        paint: {
+          'fill-color': '#60a5fa',
+          'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.3, 0],
+        },
+      });
+    }
+
+    // Layer 5: LGA outlines
+    if (!map.getLayer('boundary-lga-outline')) {
+      map.addLayer({
+        id: 'boundary-lga-outline',
+        type: 'line',
+        source: 'zoning-lga-source',
+        paint: { 'line-color': '#334155', 'line-width': 0.5 },
+      });
+    }
+
+    // Layer 6: state outlines
+    if (!map.getLayer('boundary-state-outline')) {
+      map.addLayer({
+        id: 'boundary-state-outline',
+        type: 'line',
+        source: 'zoning-state-source',
+        paint: { 'line-color': '#94a3b8', 'line-width': 1.5 },
+      });
+    }
+  }, [mapReady, mode, zoningProps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update assigned fill colors when assignedMap/zones/selection changes (without re-adding layers)
+  useEffect(() => {
+    if (!mapReady || mode !== 'zoning' || !zoningProps) return;
+    const map = kernelRef.current?.getMap();
+    if (!map || !map.getLayer('boundary-lga-assigned')) return;
+
+    const assignedColorExpr: any[] = ['case'];
+    for (const zone of zoningProps.zones) {
+      const boundaryIds = Object.entries(zoningProps.assignedMap)
+        .filter(([, zid]) => zid === zone.id)
+        .map(([bid]) => bid);
+      if (boundaryIds.length > 0) {
+        assignedColorExpr.push(['in', ['get', 'id'], ['literal', boundaryIds]], zoneColor(zone));
+      }
+    }
+    assignedColorExpr.push('transparent');
+    map.setPaintProperty('boundary-lga-assigned', 'fill-color', assignedColorExpr);
+
+    const selectedIds = zoningProps.selectedLgaIds;
+    if (map.getLayer('boundary-lga-selected')) {
+      map.setFilter(
+        'boundary-lga-selected',
+        selectedIds.length > 0 ? ['in', ['get', 'id'], ['literal', selectedIds]] : ['==', 1, 0],
+      );
+    }
+  }, [mapReady, mode, zoningProps?.assignedMap, zoningProps?.zones, zoningProps?.selectedLgaIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Zoning click + hover handlers
+  useEffect(() => {
+    if (!mapReady || mode !== 'zoning' || !zoningProps) return;
+    const map = kernelRef.current?.getMap();
+    if (!map) return;
+
+    let hoveredLgaId: string | number | null = null;
+
+    const onLgaClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+      if (!e.features?.length) return;
+      const feat = e.features[0];
+      const id = feat.properties?.id as string;
+      if (!id) return;
+
+      if (e.originalEvent?.shiftKey) {
+        // Shift-click: find parent state and delegate
+        const parentId = feat.properties?.parent_id as string;
+        if (parentId) zoningProps.onToggleState(parentId);
+      } else {
+        zoningProps.onToggleLga(id);
+      }
+    };
+
+    const onStateClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+      if (!e.features?.length) return;
+      const id = e.features[0].properties?.id as string;
+      if (id) zoningProps.onToggleState(id);
+    };
+
+    const onLgaMousemove = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+      if (!e.features?.length) return;
+      map.getCanvas().style.cursor = 'pointer';
+      const feat = e.features[0];
+      const fid = feat.id;
+      if (hoveredLgaId !== null && hoveredLgaId !== fid) {
+        map.setFeatureState({ source: 'zoning-lga-source', id: hoveredLgaId }, { hover: false });
+      }
+      hoveredLgaId = fid ?? null;
+      if (fid != null) {
+        map.setFeatureState({ source: 'zoning-lga-source', id: fid }, { hover: true });
+      }
+    };
+
+    const onLgaMouseleave = () => {
+      map.getCanvas().style.cursor = '';
+      if (hoveredLgaId !== null) {
+        map.setFeatureState({ source: 'zoning-lga-source', id: hoveredLgaId }, { hover: false });
+        hoveredLgaId = null;
+      }
+    };
+
+    map.on('click', 'boundary-lga-base', onLgaClick);
+    map.on('click', 'boundary-state-outline', onStateClick);
+    map.on('mousemove', 'boundary-lga-base', onLgaMousemove);
+    map.on('mouseleave', 'boundary-lga-base', onLgaMouseleave);
+
+    return () => {
+      map.off('click', 'boundary-lga-base', onLgaClick);
+      map.off('click', 'boundary-state-outline', onStateClick);
+      map.off('mousemove', 'boundary-lga-base', onLgaMousemove);
+      map.off('mouseleave', 'boundary-lga-base', onLgaMouseleave);
+      map.getCanvas().style.cursor = '';
+    };
+  }, [mapReady, mode, zoningProps?.onToggleLga, zoningProps?.onToggleState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Permanent Resize Observer Fix ──────────────────────────────────────────
   useEffect(() => {
@@ -681,6 +916,14 @@ export function IntelligenceMapView({
           {mode === 'analytics' && (
             <span className="text-muted-foreground italic flex items-center gap-1">
               <Layers className="h-3 w-3" /> Planning view
+            </span>
+          )}
+          {mode === 'zoning' && (
+            <span className="text-muted-foreground italic flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {zoningProps?.selectedLgaIds.length
+                ? `${zoningProps.selectedLgaIds.length} LGA${zoningProps.selectedLgaIds.length !== 1 ? 's' : ''} selected`
+                : 'Zoning mode'}
             </span>
           )}
         </div>
