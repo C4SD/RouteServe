@@ -167,15 +167,13 @@ export function useDriverEvents(options: UseDriverEventsOptions = {}) {
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[useDriverEvents] Subscribed to real-time driver events');
-        }
         if (status === 'CHANNEL_ERROR') {
-          console.warn('[useDriverEvents] Channel error - falling back to polling only');
-          // Don't throw error, just continue with polling fallback
-        }
-        if (status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.warn('[useDriverEvents] Channel disconnected - will retry on next effect');
+          // Realtime not available for this table — remove channel to stop
+          // Supabase's internal rejoin loop and rely on polling only.
+          if (channelRef.current) {
+            supabase.removeChannel(channelRef.current);
+            channelRef.current = null;
+          }
         }
       });
 

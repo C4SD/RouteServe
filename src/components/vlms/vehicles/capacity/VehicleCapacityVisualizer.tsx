@@ -1,10 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { TruckSilhouette } from './vehicle-silhouettes/TruckSilhouette';
-import { VanSilhouette } from './vehicle-silhouettes/VanSilhouette';
-import { PickupSilhouette } from './vehicle-silhouettes/PickupSilhouette';
-import { CarSilhouette } from './vehicle-silhouettes/CarSilhouette';
 import { formatWeight, formatVolume } from '@/lib/vlms/capacityCalculations';
+import { getVehicleSilhouette } from '@/lib/vehicleUtils';
 
 interface VehicleCapacityVisualizerProps {
   // Capacity data
@@ -14,7 +11,9 @@ interface VehicleCapacityVisualizerProps {
   maxVolume?: number; // m³
 
   // Display options
-  vehicleType: 'truck' | 'van' | 'pickup' | 'car';
+  vehicleType?: string;
+  make?: string;
+  model?: string;
   displayMode?: 'weight' | 'volume' | 'auto'; // auto = use whichever is fuller
   size?: 'sm' | 'md' | 'lg'; // sm: dashboard, md: card, lg: detail page
 
@@ -25,7 +24,6 @@ interface VehicleCapacityVisualizerProps {
 
   // Color theming (optional, defaults to blue gradient)
   fillColor?: string;
-  emptyColor?: string;
 }
 
 /**
@@ -74,13 +72,14 @@ export const VehicleCapacityVisualizer: React.FC<VehicleCapacityVisualizerProps>
   currentVolume,
   maxVolume,
   vehicleType,
+  make,
+  model,
   displayMode = 'auto',
   size = 'md',
   showLabel = true,
   showMetrics = true,
   className,
   fillColor,
-  emptyColor,
 }) => {
   // Determine which metric to display
   const activeMode = determineDisplayMode(
@@ -134,13 +133,7 @@ export const VehicleCapacityVisualizer: React.FC<VehicleCapacityVisualizerProps>
   // Get color based on percentage if not provided
   const capacityColor = fillColor || getCapacityColor(percentage);
 
-  // Select appropriate silhouette component
-  const SilhouetteComponent = {
-    truck: TruckSilhouette,
-    van: VanSilhouette,
-    pickup: PickupSilhouette,
-    car: CarSilhouette,
-  }[vehicleType];
+  const silhouetteSrc = getVehicleSilhouette(vehicleType, make, model);
 
   return (
     <div className={cn('flex flex-col items-center gap-2', className)}>
@@ -150,27 +143,16 @@ export const VehicleCapacityVisualizer: React.FC<VehicleCapacityVisualizerProps>
         </div>
       )}
 
-      <div className="relative flex items-center justify-center">
-        {/* Vehicle Silhouette */}
-        <div className={containerSizeClasses[size]}>
-          <SilhouetteComponent
-            fillPercentage={percentage}
-            fillColor={capacityColor}
-            emptyColor={emptyColor}
-          />
-        </div>
-
-        {/* Percentage Overlay */}
+      <div className={cn('relative flex items-center justify-center', containerSizeClasses[size])}>
+        <img
+          src={silhouetteSrc}
+          alt={`${vehicleType} silhouette`}
+          className="h-full w-full object-contain opacity-80"
+        />
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div
-            className={cn(
-              'font-bold drop-shadow-lg',
-              textSizeClasses[size],
-              capacityColor
-            )}
-          >
+          <span className={cn('font-bold drop-shadow-lg', textSizeClasses[size], capacityColor)}>
             {percentage}%
-          </div>
+          </span>
         </div>
       </div>
 

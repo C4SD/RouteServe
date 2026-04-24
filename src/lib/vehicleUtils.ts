@@ -22,8 +22,6 @@ export function getVehicleSilhouette(vehicleType?: string | null, make?: string 
   const makeLower = make?.toLowerCase() || '';
   const modelLower = model?.toLowerCase() || '';
 
-  console.log('getVehicleSilhouette called:', { vehicleType, type, make, makeLower, model, modelLower });
-
   // Map vehicle types and category codes to silhouette files
   const typeMapping: Record<string, string> = {
     // EU Category codes (M/N/L classification)
@@ -122,14 +120,11 @@ export function getVehicleSilhouette(vehicleType?: string | null, make?: string 
 
   // Try matching on model name (e.g., "Hilux", "Hiace", "Patrol")
   if (modelLower) {
-    console.log('Checking model name matching for:', modelLower);
     for (const [key, path] of Object.entries(typeMapping)) {
       if (modelLower.includes(key) || key.includes(modelLower)) {
-        console.log(`Model match found! ${modelLower} matched with ${key} -> ${path}`);
         return path;
       }
     }
-    console.log('No model match found');
   }
 
   // Try matching on make (less reliable, but worth a shot)

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>You've been invited to BIKO</title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: #1a1a1a;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #f5f5f5;
+      padding: 48px 16px;
+    }
+    .container {
+      max-width: 520px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e8e8e8;
+    }
+    .header {
+      background-color: #0f0f0f;
+      padding: 32px 40px;
+      text-align: left;
+    }
+    .logo-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background-color: #3b82f6;
+      border-radius: 8px;
+      display: inline-block;
+    }
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+    }
+    .body {
+      padding: 40px 40px 32px;
+    }
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #3b82f6;
+      margin-bottom: 16px;
+    }
+    .headline {
+      font-size: 26px;
+      font-weight: 700;
+      color: #0f0f0f;
+      line-height: 1.25;
+      letter-spacing: -0.5px;
+      margin-bottom: 16px;
+    }
+    .body-text {
+      font-size: 15px;
+      line-height: 1.65;
+      color: #4a4a4a;
+      margin-bottom: 12px;
+    }
+    .divider {
+      height: 1px;
+      background-color: #f0f0f0;
+      margin: 28px 0;
+    }
+    .feature-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 14px;
+      align-items: flex-start;
+    }
+    .feature-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #3b82f6;
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+    .feature-text {
+      font-size: 14px;
+      color: #4a4a4a;
+      line-height: 1.5;
+    }
+    .cta-section {
+      margin: 32px 0;
+      text-align: center;
+    }
+    .cta-button {
+      display: inline-block;
+      background-color: #0f0f0f;
+      color: #ffffff !important;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 14px 36px;
+      border-radius: 8px;
+      letter-spacing: -0.2px;
+    }
+    .cta-note {
+      font-size: 12px;
+      color: #9a9a9a;
+      margin-top: 12px;
+    }
+    .footer {
+      background-color: #fafafa;
+      border-top: 1px solid #f0f0f0;
+      padding: 24px 40px;
+    }
+    .footer-text {
+      font-size: 12px;
+      color: #9a9a9a;
+      line-height: 1.6;
+    }
+    .footer-text a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+    @media only screen and (max-width: 600px) {
+      .header, .body, .footer { padding-left: 24px; padding-right: 24px; }
+      .headline { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+
+      <!-- Header -->
+      <div class="header">
+        <div class="logo-mark">
+          <span class="logo-icon"></span>
+          <span class="logo-text">BIKO</span>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="body">
+        <p class="eyebrow">Team Invitation</p>
+        <h1 class="headline">You've been invited to join BIKO</h1>
+        <p class="body-text">
+          Someone from your team has invited you to access BIKO — a fleet operations and logistics platform for last-mile delivery.
+        </p>
+
+        <div class="divider"></div>
+
+        <div class="feature-row">
+          <span class="feature-dot"></span>
+          <span class="feature-text"><strong>Live fleet tracking</strong> — monitor vehicles and deliveries in real time</span>
+        </div>
+        <div class="feature-row">
+          <span class="feature-dot"></span>
+          <span class="feature-text"><strong>Route optimization</strong> — plan and dispatch with intelligent routing</span>
+        </div>
+        <div class="feature-row">
+          <span class="feature-dot"></span>
+          <span class="feature-text"><strong>Operations dashboard</strong> — full visibility into KPIs and fleet health</span>
+        </div>
+
+        <div class="cta-section">
+          <a href="{{ .ConfirmationURL }}" class="cta-button">Accept Invitation</a>
+          <p class="cta-note">This link expires in 24 hours</p>
+        </div>
+
+        <p class="body-text" style="font-size: 13px; color: #9a9a9a;">
+          If you weren't expecting this invitation, you can safely ignore this email. No account will be created without your action.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p class="footer-text">
+          BIKO &mdash; Fleet Operations &amp; Logistics<br />
+          You're receiving this because someone invited you to <a href="https://appbiko.netlify.app">appbiko.netlify.app</a>.<br />
+          <a href="{{ .SiteURL }}">Visit app</a> &nbsp;&middot;&nbsp; <a href="mailto:support@cap4sd.com">Contact support</a>
+        </p>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
