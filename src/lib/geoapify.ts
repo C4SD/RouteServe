@@ -208,9 +208,8 @@ export interface RoadRouteResult {
 }
 
 /**
- * Get road route for an ordered list of waypoints (round trip).
- * Returns real road distance, time, and geometry for map rendering.
- * Falls back to null if API fails (caller should use Haversine fallback).
+ * Get road route for an ordered list of waypoints.
+ * Tries Geoapify (via Supabase edge function) first; falls back to OSRM on failure.
  */
 export async function getRoadRoute(
   waypoints: Array<{ lat: number; lng: number }>,
@@ -218,19 +217,43 @@ export async function getRoadRoute(
 ): Promise<RoadRouteResult | null> {
   if (waypoints.length < 2) return null;
 
+  // Try Geoapify via Supabase edge function
   try {
     const formatted = waypoints.map(w => [w.lat, w.lng] as [number, number]);
     const route = await getRoute(formatted, routeType);
-    if (!route) return null;
+    if (route) {
+      return {
+        roadDistanceKm: Math.round((route.distance / 1000) * 10) / 10,
+        roadTimeMinutes: Math.round(route.time / 60),
+        geometry: route.geometry,
+        snappedWaypoints: route.snappedWaypoints,
+      };
+    }
+  } catch {
+    // fall through to OSRM
+  }
+
+  // Fallback: OSRM (direct, no Supabase dependency)
+  try {
+    const coords = waypoints.map(w => `${w.lng},${w.lat}`).join(';');
+    const url = `${OSRM_BASE_URL}/${coords}?geometries=geojson&overview=full`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.code !== 'Ok' || !data.routes?.length) return null;
+
+    const route = data.routes[0];
+    const geom: Array<[number, number]> = (route.geometry?.coordinates || [])
+      .map((c: number[]) => [c[0], c[1]] as [number, number]);
 
     return {
       roadDistanceKm: Math.round((route.distance / 1000) * 10) / 10,
-      roadTimeMinutes: Math.round(route.time / 60),
-      geometry: route.geometry, // [lng, lat] pairs from Geoapify
-      snappedWaypoints: route.snappedWaypoints, // [lng, lat] road-snapped positions
+      roadTimeMinutes: Math.round(route.duration / 60),
+      geometry: geom,
+      snappedWaypoints: geom.length > 0 ? [geom[0], geom[geom.length - 1]] : [],
     };
   } catch (error) {
-    console.error('Road route fetch failed:', error);
+    console.error('Road route fetch failed (Geoapify + OSRM):', error);
     return null;
   }
 }

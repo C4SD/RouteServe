@@ -24,14 +24,15 @@ import { MaintenanceFormData } from '@/types/vlms';
 interface ScheduleMaintenanceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultVehicleId?: string;
 }
 
-export function ScheduleMaintenanceDialog({ open, onOpenChange }: ScheduleMaintenanceDialogProps) {
+export function ScheduleMaintenanceDialog({ open, onOpenChange, defaultVehicleId }: ScheduleMaintenanceDialogProps) {
   const { data: vehicles = [] } = useVehicles();
   const { createRecord, isLoading } = useMaintenanceStore();
 
   // Form state
-  const [vehicleId, setVehicleId] = useState('');
+  const [vehicleId, setVehicleId] = useState(defaultVehicleId || '');
   const [maintenanceType, setMaintenanceType] = useState<'scheduled' | 'repair' | 'inspection' | 'emergency'>('scheduled');
   const [priority, setPriority] = useState<'low' | 'normal' | 'high' | 'critical'>('normal');
   const [scheduledDate, setScheduledDate] = useState('');
@@ -66,7 +67,7 @@ export function ScheduleMaintenanceDialog({ open, onOpenChange }: ScheduleMainte
       onOpenChange(false);
 
       // Reset form
-      setVehicleId('');
+      setVehicleId(defaultVehicleId || '');
       setMaintenanceType('scheduled');
       setPriority('normal');
       setScheduledDate('');
@@ -92,21 +93,23 @@ export function ScheduleMaintenanceDialog({ open, onOpenChange }: ScheduleMainte
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="vehicle">Vehicle *</Label>
-              <Select value={vehicleId} onValueChange={setVehicleId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vehicle" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vehicles.map((vehicle) => (
-                    <SelectItem key={vehicle.id} value={vehicle.id}>
-                      {vehicle.make} {vehicle.model} - {vehicle.license_plate}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!defaultVehicleId && (
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="vehicle">Vehicle *</Label>
+                <Select value={vehicleId} onValueChange={setVehicleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vehicle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.make} {vehicle.model} - {vehicle.license_plate}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="maintenance-type">Maintenance Type *</Label>

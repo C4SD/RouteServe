@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { List, Upload, FlaskConical, ArrowLeft, X } from 'lucide-react';
+import { List, Upload, FlaskConical, X, Network, ArrowLeft } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,27 +9,42 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { FacilityListRouteForm } from './FacilityListRouteForm';
 import { UploadRouteForm } from './UploadRouteForm';
 import { SandboxRouteForm } from './SandboxRouteForm';
+import { ServicePolicyRouteForm } from './ServicePolicyRouteForm';
 import type { RouteCreationMode } from '@/types/routes';
 import { cn } from '@/lib/utils';
 
-const MODES = [
+const MODES: {
+  id: RouteCreationMode;
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  badge?: string;
+}[] = [
   {
-    id: 'facility_list' as RouteCreationMode,
+    id: 'service_policy',
+    title: 'From Service Policy',
+    description: 'Auto-load a cluster from a Service Policy and optimize the visit sequence.',
+    icon: Network,
+    badge: 'Recommended',
+  },
+  {
+    id: 'facility_list',
     title: 'From Facility List',
-    description: 'Select facilities from existing service areas for production route planning.',
+    description: 'Manually select facilities from a service area and build the route.',
     icon: List,
   },
   {
-    id: 'upload' as RouteCreationMode,
+    id: 'upload',
     title: 'Upload Facilities',
     description: 'Upload a CSV with facility coordinates for rapid route expansion.',
     icon: Upload,
   },
   {
-    id: 'sandbox' as RouteCreationMode,
+    id: 'sandbox',
     title: 'Sandbox',
     description: 'Simulate and analyze routes without writing to production.',
     icon: FlaskConical,
@@ -44,6 +59,19 @@ interface CreateRouteWizardProps {
 
 export function CreateRouteWizard({ open, onOpenChange, onSandboxSelect }: CreateRouteWizardProps) {
   const [selectedMode, setSelectedMode] = useState<RouteCreationMode | null>(null);
+
+  const modeTitle: Record<RouteCreationMode, string> = {
+    service_policy: 'From Service Policy',
+    facility_list: 'From Facility List',
+    upload: 'Upload Facilities',
+    sandbox: 'Sandbox',
+  };
+  const modeDescription: Record<RouteCreationMode, string> = {
+    service_policy: 'Auto-load cluster facilities and optimize the visit sequence.',
+    facility_list: 'Select facilities from existing service areas for production route planning.',
+    upload: 'Upload a CSV with facility coordinates for rapid route expansion.',
+    sandbox: 'Simulate and analyze routes without writing to production.',
+  };
 
   const handleClose = (open: boolean) => {
     if (!open) setSelectedMode(null);
@@ -71,13 +99,11 @@ export function CreateRouteWizard({ open, onOpenChange, onSandboxSelect }: Creat
               )}
               <div className="flex-1">
                 <DialogTitle className="text-xl font-semibold">
-                  {selectedMode
-                    ? MODES.find(m => m.id === selectedMode)?.title || 'New Route'
-                    : 'New Route'}
+                  {selectedMode ? modeTitle[selectedMode] : 'New Route'}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-muted-foreground mt-1">
                   {selectedMode
-                    ? MODES.find(m => m.id === selectedMode)?.description
+                    ? modeDescription[selectedMode]
                     : 'Choose how you want to create a route.'}
                 </DialogDescription>
               </div>
@@ -96,16 +122,17 @@ export function CreateRouteWizard({ open, onOpenChange, onSandboxSelect }: Creat
         {/* Content Section */}
         {!selectedMode ? (
           <div className="px-8 pb-8 mt-6">
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 gap-4">
               {MODES.map((mode) => {
                 const Icon = mode.icon;
                 return (
                   <button
                     key={mode.id}
                     className={cn(
-                      "p-6 rounded-lg border hover:border-primary transition min-h-[180px]",
-                      "flex flex-col items-center justify-center gap-4 text-center",
-                      "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      "p-6 rounded-lg border hover:border-primary transition min-h-[160px]",
+                      "flex flex-col items-start gap-3 text-left relative",
+                      "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                      mode.id === 'service_policy' && "border-primary/40 bg-primary/5"
                     )}
                     onClick={() => {
                       if (mode.id === 'sandbox' && onSandboxSelect) {
@@ -116,10 +143,15 @@ export function CreateRouteWizard({ open, onOpenChange, onSandboxSelect }: Creat
                       setSelectedMode(mode.id);
                     }}
                   >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                      <Icon className="h-6 w-6 text-primary" />
+                    {mode.badge && (
+                      <Badge className="absolute top-3 right-3 text-xs" variant="secondary">
+                        {mode.badge}
+                      </Badge>
+                    )}
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                      <Icon className="h-5 w-5 text-primary" />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <h3 className="font-semibold">{mode.title}</h3>
                       <p className="text-sm text-muted-foreground">
                         {mode.description}
@@ -132,6 +164,9 @@ export function CreateRouteWizard({ open, onOpenChange, onSandboxSelect }: Creat
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
+            {selectedMode === 'service_policy' && (
+              <ServicePolicyRouteForm onSuccess={handleSuccess} />
+            )}
             {selectedMode === 'facility_list' && (
               <FacilityListRouteForm onSuccess={handleSuccess} />
             )}

@@ -236,12 +236,20 @@ export function useOnboardingWizard() {
       goNext();
     },
     onError: (error: unknown) => {
-      const message =
+      const raw =
         error instanceof Error
           ? error.message
           : typeof error === 'object' && error !== null && 'message' in error
             ? String((error as { message: string }).message)
             : 'Failed to create organization';
+
+      let message = raw;
+      if (raw.includes('workspaces_slug_key') || raw.includes('slug')) {
+        message = 'An organization with this name already exists. Please choose a different name.';
+      } else if (raw.includes('workspace_name_unique_per_country') || raw.includes('duplicate key')) {
+        message = 'An organization with this name already exists in the selected region. Please choose a different name.';
+      }
+
       console.error('Organization creation failed:', error);
       toast.error('Creation Failed', { description: message });
     },

@@ -25,8 +25,16 @@ export function RegistrationForm() {
   const canGoNext = useVehicleOnboardState((state) => state.canGoNext());
 
   // File staging for documents and photos
-  const { stagedDocuments, stagedPhotos, addDocuments, addPhotos, removeDocument, removePhoto } =
-    useOnboardingFilesStore();
+  const {
+    stagedDocuments,
+    stagedPhotos,
+    addDocuments,
+    addPhotos,
+    updateDocumentType,
+    updatePhotoCaption,
+    removeDocument,
+    removePhoto,
+  } = useOnboardingFilesStore();
   const docInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -503,19 +511,19 @@ export function RegistrationForm() {
         <Separator />
 
         {/* Documents & Photos Upload */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           <h3 className="font-semibold flex items-center gap-2">
             <Upload className="h-4 w-4" />
             Documents & Photos
           </h3>
           <p className="text-sm text-muted-foreground">
-            Upload vehicle registration documents, insurance papers, and photos. Files will be uploaded when the vehicle is created.
+            Attach vehicle documents and photos now. They will be uploaded once the vehicle is created.
           </p>
 
           {/* Documents */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Documents</Label>
+              <Label className="text-base font-medium">Documents</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -530,43 +538,69 @@ export function RegistrationForm() {
                 type="file"
                 className="hidden"
                 multiple
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp"
                 onChange={handleDocumentSelect}
               />
             </div>
 
-            {stagedDocuments.length > 0 && (
+            {stagedDocuments.length > 0 ? (
               <div className="space-y-2">
-                {stagedDocuments.map((file, index) => (
+                {stagedDocuments.map((staged, index) => (
                   <div
-                    key={`${file.name}-${index}`}
-                    className="flex items-center justify-between p-2 bg-muted rounded-md text-sm"
+                    key={`${staged.file.name}-${index}`}
+                    className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="truncate">{file.name}</span>
-                      <Badge variant="outline" className="text-xs shrink-0">
-                        {formatFileSize(file.size)}
-                      </Badge>
+                    <FileText className="h-8 w-8 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">{staged.file.name}</span>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {formatFileSize(staged.file.size)}
+                        </Badge>
+                      </div>
+                      <Select
+                        value={staged.type}
+                        onValueChange={(val) => updateDocumentType(index, val)}
+                      >
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="registration">Registration</SelectItem>
+                          <SelectItem value="insurance">Insurance Certificate</SelectItem>
+                          <SelectItem value="roadworthiness">Road Worthiness</SelectItem>
+                          <SelectItem value="purchase">Purchase / Bill of Sale</SelectItem>
+                          <SelectItem value="service_record">Service Record</SelectItem>
+                          <SelectItem value="warranty">Warranty</SelectItem>
+                          <SelectItem value="inspection_report">Inspection Report</SelectItem>
+                          <SelectItem value="customs">Customs / Import</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <Button
+                      type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 shrink-0"
+                      className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
                       onClick={() => removeDocument(index)}
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-lg">
+                No documents added yet
+              </p>
             )}
           </div>
 
           {/* Photos */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Vehicle Photos</Label>
+              <Label className="text-base font-medium">Vehicle Photos</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -581,34 +615,45 @@ export function RegistrationForm() {
                 type="file"
                 className="hidden"
                 multiple
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 onChange={handlePhotoSelect}
               />
             </div>
 
-            {stagedPhotos.length > 0 && (
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                {stagedPhotos.map((file, index) => (
-                  <div key={`${file.name}-${index}`} className="relative group">
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="w-full h-24 object-cover rounded-md border"
+            {stagedPhotos.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {stagedPhotos.map((staged, index) => (
+                  <div key={`${staged.file.name}-${index}`} className="space-y-1.5">
+                    <div className="relative group">
+                      <img
+                        src={URL.createObjectURL(staged.file)}
+                        alt={staged.file.name}
+                        className="w-full h-28 object-cover rounded-md border"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removePhoto(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Caption (optional)"
+                      value={staged.caption}
+                      onChange={(e) => updatePhotoCaption(index, e.target.value)}
+                      className="w-full text-xs px-2 py-1 border rounded bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                     />
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => removePhoto(index)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                    <span className="text-[10px] text-muted-foreground truncate block mt-1">
-                      {file.name}
-                    </span>
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-lg">
+                No photos added yet
+              </p>
             )}
           </div>
         </div>

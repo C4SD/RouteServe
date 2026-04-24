@@ -9,6 +9,10 @@ import { supabase } from '@/integrations/supabase/client';
 import type { GPSEvent } from '@/types/live-map';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+// Generate a stable unique suffix per hook instance to avoid channel name
+// conflicts in React StrictMode (which double-mounts in development)
+let gpsChannelCounter = 0;
+
 interface UseDriverGPSOptions {
   driverIds?: string[];
   enabled?: boolean;
@@ -46,6 +50,7 @@ export function useDriverGPS(options: UseDriverGPSOptions = {}) {
   const { driverIds, enabled = true, refetchInterval = 5000 } = options;
   const queryClient = useQueryClient();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelNameRef = useRef<string>(`driver-gps-live-${++gpsChannelCounter}`);
 
   // Fetch latest GPS positions for all drivers
   const fetchLatestPositions = useCallback(async (): Promise<DriverGPSData> => {
@@ -104,7 +109,7 @@ export function useDriverGPS(options: UseDriverGPSOptions = {}) {
       : undefined;
 
     const channel = supabase
-      .channel('driver-gps-live')
+      .channel(channelNameRef.current)
       .on(
         'postgres_changes',
         {

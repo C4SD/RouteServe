@@ -150,10 +150,16 @@ export function useServiceAreaFacilities(serviceAreaId: string | null | undefine
       if (saFacilities.length === 0) return saFacilities;
 
       const facilityIds = [...new Set(saFacilities.map(f => f.facility_id))];
-      const { data: facilities } = await supabase
-        .from('facilities')
-        .select('id, name, lat, lng, type, level_of_care, lga')
-        .in('id', facilityIds);
+      const CHUNK_SIZE = 100;
+      const chunks = Array.from({ length: Math.ceil(facilityIds.length / CHUNK_SIZE) }, (_, i) =>
+        facilityIds.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+      );
+      const facilityResults = await Promise.all(
+        chunks.map(chunk =>
+          supabase.from('facilities').select('id, name, lat, lng, type, level_of_care, lga').in('id', chunk)
+        )
+      );
+      const facilities = facilityResults.flatMap(r => r.data || []);
 
       const facilityMap = new Map((facilities || []).map(f => [f.id, f]));
       saFacilities.forEach(saf => {

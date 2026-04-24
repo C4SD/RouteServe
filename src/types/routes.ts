@@ -1,5 +1,13 @@
-export type RouteCreationMode = 'facility_list' | 'upload' | 'sandbox';
+export type RouteCreationMode = 'facility_list' | 'upload' | 'sandbox' | 'service_policy';
 export type RouteStatus = 'draft' | 'active' | 'locked' | 'archived';
+export type OptimizationAlgorithm = 'NEAREST_NEIGHBOR' | 'TWO_OPT' | 'OSRM';
+
+export interface RoutePolicyMetadata {
+  service_policy_id: string;
+  service_policy_name: string;
+  cluster_id: string;
+  cluster_code: string;
+}
 
 export interface Route {
   id: string;
@@ -26,6 +34,8 @@ export interface Route {
   service_areas?: { id: string; name: string } | null;
   warehouses?: { id: string; name: string; lat: number | null; lng: number | null } | null;
   facility_count?: number;
+  // Computed from metadata for service_policy routes
+  policy_metadata?: RoutePolicyMetadata | null;
 }
 
 export interface RouteFacility {
@@ -76,4 +86,5 @@ export interface CreateRouteInput {
   total_distance_km?: number;
   estimated_duration_min?: number;
   optimized_geometry?: any;
+  metadata?: Record<string, any>;
 }

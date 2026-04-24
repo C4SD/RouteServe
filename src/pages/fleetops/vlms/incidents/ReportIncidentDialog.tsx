@@ -25,15 +25,16 @@ import { IncidentFormData, IncidentType, IncidentSeverity } from '@/types/vlms';
 interface ReportIncidentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultVehicleId?: string;
 }
 
-export function ReportIncidentDialog({ open, onOpenChange }: ReportIncidentDialogProps) {
+export function ReportIncidentDialog({ open, onOpenChange, defaultVehicleId }: ReportIncidentDialogProps) {
   const { data: vehicles = [] } = useVehicles();
   const { data: drivers = [] } = useDrivers();
   const { createIncident, isLoading } = useIncidentsStore();
 
   // Form state
-  const [vehicleId, setVehicleId] = useState('');
+  const [vehicleId, setVehicleId] = useState(defaultVehicleId || '');
   const [incidentDate, setIncidentDate] = useState(new Date().toISOString().split('T')[0]);
   const [incidentType, setIncidentType] = useState<IncidentType>('damage');
   const [severity, setSeverity] = useState<IncidentSeverity>('minor');
@@ -96,7 +97,7 @@ export function ReportIncidentDialog({ open, onOpenChange }: ReportIncidentDialo
       onOpenChange(false);
 
       // Reset form
-      setVehicleId('');
+      setVehicleId(defaultVehicleId || '');
       setIncidentDate(new Date().toISOString().split('T')[0]);
       setIncidentType('damage');
       setSeverity('minor');
@@ -129,21 +130,23 @@ export function ReportIncidentDialog({ open, onOpenChange }: ReportIncidentDialo
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="vehicle">Vehicle *</Label>
-              <Select value={vehicleId} onValueChange={setVehicleId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vehicle" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vehicles.map((vehicle) => (
-                    <SelectItem key={vehicle.id} value={vehicle.id}>
-                      {vehicle.make} {vehicle.model} - {vehicle.license_plate}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!defaultVehicleId && (
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="vehicle">Vehicle *</Label>
+                <Select value={vehicleId} onValueChange={setVehicleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vehicle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.make} {vehicle.model} - {vehicle.license_plate}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="incident-date">Incident Date *</Label>

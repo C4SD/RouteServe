@@ -19,7 +19,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useFacilities } from '@/hooks/useFacilities';
 import { Vehicle } from '@/types/vlms';
-import { Loader2 } from 'lucide-react';
+import { Loader2, FileText, Image as ImageIcon } from 'lucide-react';
+import { VehicleDocumentsTab } from './VehicleDocumentsTab';
+import { VehiclePhotosTab } from './VehiclePhotosTab';
 
 interface VehicleFormProps {
   vehicle?: Vehicle;
@@ -82,11 +84,23 @@ export function VehicleForm({ vehicle, onSubmit, onCancel, isSubmitting }: Vehic
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className={`grid w-full ${vehicle ? 'grid-cols-6' : 'grid-cols-4'}`}>
           <TabsTrigger value="basic">Basic Info</TabsTrigger>
           <TabsTrigger value="specs">Specifications</TabsTrigger>
           <TabsTrigger value="acquisition">Acquisition</TabsTrigger>
           <TabsTrigger value="insurance">Insurance & Reg</TabsTrigger>
+          {vehicle && (
+            <>
+              <TabsTrigger value="documents">
+                <FileText className="h-4 w-4 mr-1.5" />
+                Documents
+              </TabsTrigger>
+              <TabsTrigger value="photos">
+                <ImageIcon className="h-4 w-4 mr-1.5" />
+                Photos
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* Basic Info Tab */}
@@ -503,6 +517,25 @@ export function VehicleForm({ vehicle, onSubmit, onCancel, isSubmitting }: Vehic
             </CardContent>
           </Card>
         </TabsContent>
+        {/* Documents Tab — only for existing vehicles */}
+        {vehicle && (
+          <TabsContent value="documents">
+            <VehicleDocumentsTab
+              vehicleId={vehicle.id}
+              documents={Array.isArray(vehicle.documents) ? vehicle.documents : []}
+            />
+          </TabsContent>
+        )}
+
+        {/* Photos Tab — only for existing vehicles */}
+        {vehicle && (
+          <TabsContent value="photos">
+            <VehiclePhotosTab
+              vehicleId={vehicle.id}
+              photos={Array.isArray(vehicle.photos) ? vehicle.photos : []}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Form Actions */}

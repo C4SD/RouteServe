@@ -1,6 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface CoordinatePolicy {
+  /** ISO 3166-1 alpha-2 country code. Only 'NG' (Nigeria) supported for now. */
+  country: 'NG';
+  /** Nigerian state abbreviations to validate against, e.g. ['KD'] for Kaduna. */
+  state_codes: string[];
+  /** When true, out-of-state coordinates are treated as errors (block import). When false, warnings only. */
+  strict_mode: boolean;
+}
+
 export interface WorkspaceSettings {
   default_zone_id?: string;
   default_warehouse_id?: string;
@@ -11,6 +20,7 @@ export interface WorkspaceSettings {
   dispatch_cutoff?: string;
   sla_hours?: number;
   date_format?: string;
+  coordinate_policy?: CoordinatePolicy;
 }
 
 export interface WorkspaceSettingsResult {

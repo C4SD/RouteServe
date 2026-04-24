@@ -17,6 +17,7 @@ import {
   Brain,
   ChevronRight,
   Check,
+  Network,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -40,11 +41,17 @@ interface SourceOption {
 
 const sourceOptions: SourceOption[] = [
   {
+    id: 'service_policy',
+    title: 'Service Policy',
+    description: 'Schedule from a policy cluster — pre-defined facility groups for a service area',
+    icon: Network,
+    badge: 'Primary',
+  },
+  {
     id: 'ready',
     title: 'Ready Consignments',
     description: 'Select from confirmed facility orders ready for dispatch',
     icon: ListChecks,
-    badge: 'Recommended',
     hasSubOptions: true,
   },
   {
@@ -102,6 +109,7 @@ export function Step1Source({
 }: Step1SourceProps) {
   const selectedSource = sourceOptions.find((opt) => opt.id === sourceMethod);
   const showSubOptions = sourceMethod === 'ready';
+  const showPolicyNote = sourceMethod === 'service_policy';
 
   return (
     <div className="flex flex-col p-6">
@@ -142,6 +150,30 @@ export function Step1Source({
                 onClick={() => onSourceSubOptionChange(option.id)}
               />
             ))}
+          </div>
+        )}
+
+        {/* Policy note panel */}
+        {showPolicyNote && (
+          <div className="flex-1 space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">
+              How it works
+            </h3>
+            <div className="rounded-lg border bg-muted/40 p-4 space-y-3 text-sm text-muted-foreground">
+              {[
+                'Select a Service Area and its active Policy',
+                'Pick a Cluster (Z1, Z2…) to auto-load its facilities',
+                'Attach demand: ready consignments or manual override',
+                'Assign a route and schedule the delivery date',
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <span className="flex-shrink-0 h-5 w-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

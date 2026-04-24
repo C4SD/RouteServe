@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Building2, Mail, Phone, Globe, MapPin, Truck, X, Search, Check } from 'lucide-react';
+import { Loader2, Building2, Mail, Phone, Globe, MapPin, Truck, X, Search, Check, AlertCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useCountries } from '@/hooks/onboarding/useCountries';
 import { useAdminUnitsByCountry } from '@/hooks/onboarding/useAdminUnitsByCountry';
 import { useAdminUnitsByParent } from '@/hooks/onboarding/useAdminUnitsByParent';
@@ -128,6 +129,8 @@ interface OrganizationStepProps {
   wizard: ReturnType<typeof useOnboardingWizard>;
 }
 
+type NameStatus = 'idle' | 'checking' | 'available' | 'taken';
+
 export default function OrganizationStep({ wizard }: OrganizationStepProps) {
   const { state, setOrgName, updateField, createOrganization } = wizard;
   const { data: countries, isLoading: loadingCountries } = useCountries();
@@ -136,16 +139,50 @@ export default function OrganizationStep({ wizard }: OrganizationStepProps) {
     4
   );
 
+  const [nameStatus, setNameStatus] = useState<NameStatus>('idle');
+  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const checkNameAvailability = useCallback(async (name: string, slug: string) => {
+    setNameStatus('checking');
+    const { data } = await supabase.rpc('check_workspace_name_available', {
+      p_name: name,
+      p_slug: slug,
+    });
+    if (data) {
+      setNameStatus(data.available ? 'available' : 'taken');
+    } else {
+      setNameStatus('idle');
+    }
+  }, []);
+
+  const handleOrgNameChange = useCallback((name: string) => {
+    setOrgName(name);
+    if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+    if (name.trim().length < 2) {
+      setNameStatus('idle');
+      return;
+    }
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
+    checkTimerRef.current = setTimeout(() => checkNameAvailability(name.trim(), slug), 600);
+  }, [setOrgName, checkNameAvailability]);
+
   const handleSubmit = () => {
     if (!state.orgName.trim()) return;
     if (state.selectedCountryIds.length === 0) return;
+    if (nameStatus === 'taken') return;
     createOrganization.mutate();
   };
 
   const isValid =
     state.orgName.trim().length >= 2 &&
     state.selectedCountryIds.length > 0 &&
-    state.operatingModel !== null;
+    state.operatingModel !== null &&
+    nameStatus !== 'taken';
 
   const toggleCountry = (countryId: string) => {
     const current = state.selectedCountryIds;
@@ -259,9 +296,27 @@ export default function OrganizationStep({ wizard }: OrganizationStepProps) {
             id="orgName"
             placeholder="e.g., Kano State Primary Health Care"
             value={state.orgName}
-            onChange={(e) => setOrgName(e.target.value)}
-            className="h-12 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-emerald-500"
+            onChange={(e) => handleOrgNameChange(e.target.value)}
+            className={`h-12 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-emerald-500 ${nameStatus === 'taken' ? 'border-red-500' : nameStatus === 'available' ? 'border-emerald-500' : ''}`}
           />
+          {nameStatus === 'checking' && (
+            <p className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Checking availability…
+            </p>
+          )}
+          {nameStatus === 'available' && (
+            <p className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <Check className="w-3 h-3" />
+              Name available
+            </p>
+          )}
+          {nameStatus === 'taken' && (
+            <p className="flex items-center gap-1.5 text-xs text-red-400">
+              <AlertCircle className="w-3 h-3" />
+              This organization name is already registered
+            </p>
+          )}
           {state.orgSlug && (
             <p className="text-xs text-zinc-500">
               Workspace URL: <span className="text-zinc-400">{state.orgSlug}</span>

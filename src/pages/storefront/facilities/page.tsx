@@ -45,6 +45,7 @@ import { useStates } from '@/hooks/useAdminUnits';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { CoordinateAuditPanel } from './components/CoordinateAuditPanel';
 
 export default function StorefrontFacilities() {
   // Enable realtime updates
@@ -358,6 +359,15 @@ export default function StorefrontFacilities() {
           </TabsList>
         </Tabs>
       </div>
+
+      {/* Coordinate Audit Panel — shown when facilities have geo issues */}
+      <CoordinateAuditPanel
+        facilities={facilities}
+        onEditFacility={(f) => {
+          setEditingFacility(f);
+          setIsFormOpen(true);
+        }}
+      />
 
       {/* Content Area */}
       {viewMode === 'map' ? (

@@ -10854,6 +10854,7 @@ export type Database = {
           min_lat: number
           min_lon: number
           zoom_level: number
+          _workspace_id: string
         }
         Returns: Json
       }
@@ -10885,7 +10886,7 @@ export type Database = {
           total_slot_cost: number
         }[]
       }
-      get_program_metrics: { Args: { _program_code: string }; Returns: Json }
+      get_program_metrics: { Args: { _program_code: string; _workspace_id: string }; Returns: Json }
       get_program_performance: {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: {

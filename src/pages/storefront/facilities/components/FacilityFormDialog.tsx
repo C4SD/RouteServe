@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Facility } from '@/types';
@@ -34,6 +34,7 @@ import { useLevelsOfCare } from '@/hooks/useLevelsOfCare';
 import { useOperationalZones } from '@/hooks/useOperationalZones';
 import { useStates, useLGAsByState, useFindAdminUnitByPoint } from '@/hooks/useAdminUnits';
 import { facilityFormSchema, FacilityFormData } from '@/lib/facility-validation';
+import { detectCoordinateIssues, CoordinateIssue } from '@/lib/geo-bounds';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { DEFAULT_COUNTRY_ID } from '@/lib/constants';
 import { useFundingSources } from '@/hooks/useFundingSources';
@@ -85,6 +86,13 @@ export function FacilityFormDialog({
   // Get lat/lng from form for reverse geocoding
   const formLat = form.watch('lat');
   const formLng = form.watch('lng');
+
+  // Real-time coordinate geo-validation
+  const formState = form.watch('state');
+  const coordinateIssues = useMemo<CoordinateIssue[]>(() => {
+    if (!formLat || !formLng || isNaN(formLat) || isNaN(formLng)) return [];
+    return detectCoordinateIssues(formLat, formLng, formState);
+  }, [formLat, formLng, formState]);
 
   // Reverse geocoding: Auto-fill LGA based on lat/lng
   const { data: adminUnitByPoint } = useFindAdminUnitByPoint(
@@ -464,6 +472,44 @@ export function FacilityFormDialog({
                       )}
                     />
                   </div>
+
+                  {/* Coordinate geo-validation warnings */}
+                  {coordinateIssues.length > 0 && (
+                    <div className="space-y-2">
+                      {coordinateIssues.map((issue, i) => (
+                        <div
+                          key={i}
+                          className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
+                            issue.type === 'outside_nigeria' || issue.type === 'likely_swapped'
+                              ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                              : 'border-yellow-400/40 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+                          }`}
+                        >
+                          <span className="mt-0.5 shrink-0">
+                            {issue.type === 'outside_state' ? '⚠' : '✕'}
+                          </span>
+                          <div className="flex-1">
+                            <p>{issue.message}</p>
+                            {issue.suggestion && (
+                              <p className="mt-0.5 opacity-80">{issue.suggestion}</p>
+                            )}
+                            {issue.type === 'likely_swapped' && formLat && formLng && (
+                              <button
+                                type="button"
+                                className="mt-1 underline text-xs font-medium"
+                                onClick={() => {
+                                  form.setValue('lat', formLng);
+                                  form.setValue('lng', formLat);
+                                }}
+                              >
+                                Swap lat/lng
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </AccordionContent>
               </AccordionItem>
 

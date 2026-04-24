@@ -1,0 +1,19 @@
+{
+  "countries": [
+    {
+      "id": "ng",
+      "name": "Nigeria",
+      "center": [8.6753, 9.082],
+      "zoom": 5.5,
+      "levels": ["state", "lga"],
+      "sources": {
+        "state": "https://raw.githubusercontent.com/deldersveld/topojson/master/countries/nigeria/nigeria-states.json",
+        "lga": null
+      },
+      "stateProperty": "NAME_1",
+      "lgaProperty": "NAME_2",
+      "stateIdProperty": "HASC_1",
+      "lgaIdProperty": "HASC_2"
+    }
+  ]
+}

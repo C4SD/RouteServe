@@ -55,6 +55,7 @@ export function usePrograms(filters?: ProgramFilters) {
         (data || []).map(async (program) => {
           const { data: metrics, error: metricsError } = await supabase.rpc('get_program_metrics', {
             _program_code: program.code || program.name,
+            _workspace_id: workspaceId!,
           });
 
           if (metricsError) {
@@ -75,6 +76,8 @@ export function usePrograms(filters?: ProgramFilters) {
 
 // Get single program
 export function useProgram(id: string) {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
     queryKey: ['programs', id],
     queryFn: async () => {
@@ -89,6 +92,7 @@ export function useProgram(id: string) {
       // Fetch metrics from DB
       const { data: metrics, error: metricsError } = await supabase.rpc('get_program_metrics', {
         _program_code: data.code || data.name,
+        _workspace_id: data.workspace_id,
       });
 
       if (metricsError) {

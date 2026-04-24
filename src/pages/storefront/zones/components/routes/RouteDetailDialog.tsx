@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Lock, Trash2, Archive, Clock, MapPin, Activity } from 'lucide-react';
+import { Lock, Trash2, Archive, Clock, MapPin, Activity, TriangleAlert, RefreshCw, Loader2, Network } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useRouteFacilities, useDeleteRoute, useLockRoute, useUpdateRoute } from '@/hooks/useRoutes';
+import { useRouteFacilities, useDeleteRoute, useLockRoute, useUpdateRoute, useRoutePolicySync } from '@/hooks/useRoutes';
 import type { Route, RouteFacility } from '@/types/routes';
 import { calculateDistance } from '@/lib/routeOptimization';
 
@@ -42,6 +42,8 @@ export function RouteDetailDialog({ route, open, onOpenChange }: RouteDetailDial
   const deleteMutation = useDeleteRoute();
   const lockMutation = useLockRoute();
   const updateMutation = useUpdateRoute();
+  const { isServicePolicy, syncResult, isLoading: syncLoading, policyName, clusterCode } =
+    useRoutePolicySync(open ? route : null);
 
   const isLocked = route.status === 'locked';
   const isSandbox = route.is_sandbox;
@@ -142,6 +144,56 @@ export function RouteDetailDialog({ route, open, onOpenChange }: RouteDetailDial
           </div>
         </DialogHeader>
 
+        {/* Out-of-sync banner for policy routes */}
+        {isServicePolicy && (
+          <div className="mb-4">
+            {syncLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking policy sync…
+              </div>
+            ) : syncResult?.isOutOfSync ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-400 font-medium text-sm">
+                  <TriangleAlert className="h-4 w-4 shrink-0" />
+                  This route is out of sync with its Service Policy
+                </div>
+                <div className="text-xs text-amber-700 dark:text-amber-500 space-y-0.5">
+                  {syncResult.removed.length > 0 && (
+                    <p>• {syncResult.removed.length} facilit{syncResult.removed.length === 1 ? 'y' : 'ies'} removed from policy cluster</p>
+                  )}
+                  {syncResult.added.length > 0 && (
+                    <p>• {syncResult.added.length} new facilit{syncResult.added.length === 1 ? 'y' : 'ies'} added to policy cluster</p>
+                  )}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-amber-300 text-amber-800 hover:bg-amber-100 dark:text-amber-400"
+                    onClick={() => {
+                      // Close dialog — user will create a new route from the policy
+                      onOpenChange(false);
+                    }}
+                  >
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    Re-run Optimization
+                  </Button>
+                </div>
+                <p className="text-xs text-amber-600 dark:text-amber-500">
+                  Re-running creates a new route version — this route is preserved as-is.
+                </p>
+              </div>
+            ) : syncResult && !syncResult.isOutOfSync ? (
+              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/20 border border-green-200 rounded-lg px-3 py-2">
+                <Network className="h-4 w-4" />
+                In sync with policy <span className="font-medium">{policyName}</span> / cluster{' '}
+                <Badge variant="outline" className="text-xs ml-1">{clusterCode}</Badge>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         <Tabs defaultValue="overview" className="flex-1 overflow-hidden flex flex-col">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -189,17 +241,34 @@ export function RouteDetailDialog({ route, open, onOpenChange }: RouteDetailDial
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">Source</span>
+                  <Badge variant={route.creation_mode === 'service_policy' ? 'default' : 'outline'} className="text-xs">
+                    {route.creation_mode === 'service_policy' ? 'Service Policy'
+                      : route.creation_mode === 'facility_list' ? 'Manual'
+                      : route.creation_mode === 'upload' ? 'Upload'
+                      : 'Sandbox'}
+                  </Badge>
+                </div>
+                {route.policy_metadata && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Policy</span>
+                      <span className="font-medium">{route.policy_metadata.service_policy_name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Cluster</span>
+                      <Badge variant="secondary" className="text-xs">{route.policy_metadata.cluster_code}</Badge>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Warehouse</span>
                   <span>{route.warehouses?.name || '—'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Creation Mode</span>
-                  <Badge variant="outline">{route.creation_mode}</Badge>
                 </div>
                 {route.algorithm_used && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Algorithm</span>
-                    <span>{route.algorithm_used}</span>
+                    <Badge variant="outline" className="text-xs">{route.algorithm_used}</Badge>
                   </div>
                 )}
                 <div className="flex justify-between">

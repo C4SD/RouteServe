@@ -292,7 +292,15 @@ export default function Auth() {
       );
 
       if (error) {
-        toast.error('Signup Failed', { description: error.message });
+        const msg = error.message.toLowerCase();
+        if (msg.includes('already registered') || msg.includes('user already exists')) {
+          toast.error('Account already exists', {
+            description: 'An account with this email address already exists. Please sign in instead.',
+          });
+          setTimeout(switchToLogin, 1500);
+        } else {
+          toast.error('Signup Failed', { description: error.message });
+        }
       } else {
         // Check if user was auto-logged in (email confirmation not required)
         const { data: { session } } = await supabase.auth.getSession();

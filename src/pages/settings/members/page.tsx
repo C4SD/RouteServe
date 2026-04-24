@@ -13,6 +13,9 @@ import {
   ROLE_COLORS,
   type WorkspaceMemberV2,
 } from '@/hooks/settings/useWorkspaceMembers';
+import { useInviteUser, useWorkspaceInvitations, useRevokeInvitation } from '@/hooks/useInvitations';
+import { supabase } from '@/integrations/supabase/client';
+import type { UserInvitation } from '@/types/onboarding';
 import {
   Table,
   TableBody,
@@ -57,19 +60,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, ChevronDown, MoreHorizontal, Trash2, UserPlus, Search, ShieldOff, ShieldCheck, Crown } from 'lucide-react';
+import { Loader2, ChevronDown, MoreHorizontal, Trash2, UserPlus, Search, ShieldOff, ShieldCheck, Crown, Mail, CheckCircle2, Clock, XCircle, RotateCcw } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function SettingsMembersPage() {
-  const { workspaceId, role } = useWorkspace();
+  const { workspaceId, workspaceName, role } = useWorkspace();
   const ability = useAbility({ workspaceId });
   const { data: members = [], isLoading } = useWorkspaceMembersV2(workspaceId);
+  const { data: invitations = [], isLoading: invitationsLoading } = useWorkspaceInvitations(workspaceId);
   const updateRole = useUpdateMemberRoleV2();
   const removeMember = useRemoveWorkspaceMemberV2();
   const toggleStatus = useToggleMemberStatus();
+  const revokeInvitation = useRevokeInvitation();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<WorkspaceMemberV2 | null>(null);
   const [memberToToggle, setMemberToToggle] = useState<WorkspaceMemberV2 | null>(null);
+  const [invitationToRevoke, setInvitationToRevoke] = useState<UserInvitation | null>(null);
 
   const canManageMembers = ability.can('workspace.manage');
   const isOwnerOrAdmin = role === 'owner' || role === 'admin';
@@ -92,6 +100,12 @@ export default function SettingsMembersPage() {
     const newStatus = memberToToggle.status === 'active' ? 'inactive' : 'active';
     toggleStatus.mutate({ workspaceId, userId: memberToToggle.user_id, status: newStatus });
     setMemberToToggle(null);
+  };
+
+  const handleRevokeInvitation = () => {
+    if (!invitationToRevoke || !workspaceId) return;
+    revokeInvitation.mutate({ invitationId: invitationToRevoke.id, workspaceId });
+    setInvitationToRevoke(null);
   };
 
   return (
@@ -236,6 +250,73 @@ export default function SettingsMembersPage() {
         </div>
       )}
 
+      {/* Invitations Section */}
+      {canManageMembers && (
+        <div className="mt-10">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Invitations</h2>
+            <p className="text-sm text-muted-foreground">Track pending and past invitations sent to this workspace.</p>
+          </div>
+
+          {invitationsLoading ? (
+            <div className="flex items-center justify-center h-24 border rounded-lg">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : invitations.length === 0 ? (
+            <div className="text-center py-10 border rounded-lg">
+              <Mail className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No invitations sent yet</p>
+            </div>
+          ) : (
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Sent</TableHead>
+                    <TableHead>Expires</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invitations.map((inv) => (
+                    <InvitationRow
+                      key={inv.id}
+                      invitation={inv}
+                      onRevoke={() => setInvitationToRevoke(inv)}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Revoke Invitation Confirmation */}
+      <AlertDialog open={!!invitationToRevoke} onOpenChange={() => setInvitationToRevoke(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Invitation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Revoke the invitation sent to <strong>{invitationToRevoke?.email}</strong>?
+              The invite link will stop working immediately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevokeInvitation}
+              className="bg-destructive text-destructive-foreground"
+            >
+              Revoke
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Toggle Status Confirmation */}
       <AlertDialog open={!!memberToToggle} onOpenChange={() => setMemberToToggle(null)}>
         <AlertDialogContent>
@@ -296,7 +377,7 @@ export default function SettingsMembersPage() {
       {workspaceId && (
         <AddMemberDialogV2
           workspaceId={workspaceId}
-          existingMemberIds={members.map((m) => m.user_id)}
+          workspaceName={workspaceName}
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
         />
@@ -305,127 +386,334 @@ export default function SettingsMembersPage() {
   );
 }
 
+// ── Invitation Row ──────────────────────────────────────────────────────────
+
+const INVITATION_STATUS_CONFIG: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+  pending:  { label: 'Pending',  className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',   icon: <Clock className="h-3 w-3" /> },
+  accepted: { label: 'Accepted', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400', icon: <CheckCircle2 className="h-3 w-3" /> },
+  expired:  { label: 'Expired',  className: 'bg-gray-500/10 text-gray-500',                          icon: <XCircle className="h-3 w-3" /> },
+  revoked:  { label: 'Revoked',  className: 'bg-red-500/10 text-red-600 dark:text-red-400',          icon: <XCircle className="h-3 w-3" /> },
+};
+
+function InvitationRow({
+  invitation,
+  onRevoke,
+}: {
+  invitation: UserInvitation;
+  onRevoke: () => void;
+}) {
+  const cfg = INVITATION_STATUS_CONFIG[invitation.status] ?? INVITATION_STATUS_CONFIG.pending;
+  const isPending = invitation.status === 'pending';
+  const isExpired = isPending && new Date(invitation.expires_at) < new Date();
+
+  return (
+    <TableRow className={invitation.status !== 'pending' ? 'opacity-60' : ''}>
+      <TableCell className="font-medium">{invitation.email}</TableCell>
+      <TableCell>
+        <Badge variant="secondary" className={ROLE_COLORS[invitation.role_code] || ROLE_COLORS.viewer}>
+          {ROLE_LABELS[invitation.role_code] || invitation.role_code}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Badge variant="secondary" className={`flex w-fit items-center gap-1 ${isExpired ? INVITATION_STATUS_CONFIG.expired.className : cfg.className}`}>
+          {isExpired ? INVITATION_STATUS_CONFIG.expired.icon : cfg.icon}
+          {isExpired ? 'Expired' : cfg.label}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-muted-foreground text-sm">
+        {formatDistanceToNow(new Date(invitation.invited_at), { addSuffix: true })}
+      </TableCell>
+      <TableCell className="text-muted-foreground text-sm">
+        {isPending && !isExpired
+          ? formatDistanceToNow(new Date(invitation.expires_at), { addSuffix: true })
+          : '—'}
+      </TableCell>
+      <TableCell>
+        {isPending && !isExpired && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={onRevoke}
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Revoke
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
 // ── Add Member Dialog (RBAC v2 roles) ──────────────────────────────────────
 
 function AddMemberDialogV2({
   workspaceId,
-  existingMemberIds,
+  workspaceName,
   open,
   onOpenChange,
 }: {
   workspaceId: string;
-  existingMemberIds: string[];
+  workspaceName: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [tab, setTab] = useState<'find' | 'invite'>('find');
+
+  // Find User state
   const [search, setSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState('viewer');
   const { data: users = [], isLoading } = useSearchUsersForWorkspace(workspaceId, search);
   const addMember = useAddWorkspaceMemberV2();
 
+  // Invite state
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('viewer');
+  const [inviteSent, setInviteSent] = useState(false);
+  const inviteUser = useInviteUser();
+
   const selectedUser = users.find((u) => u.id === selectedUserId);
+
+  const resetAndClose = () => {
+    setSearch('');
+    setSelectedUserId(null);
+    setSelectedRole('viewer');
+    setInviteEmail('');
+    setInviteRole('viewer');
+    setInviteSent(false);
+    setTab('find');
+    onOpenChange(false);
+  };
 
   const handleAdd = async () => {
     if (!selectedUserId) return;
-
     try {
-      await addMember.mutateAsync({
-        workspaceId,
-        userId: selectedUserId,
-        roleCode: selectedRole,
+      await addMember.mutateAsync({ workspaceId, userId: selectedUserId, roleCode: selectedRole });
+      resetAndClose();
+    } catch {
+      // Error toast handled by mutation
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail) return;
+    try {
+      const invitationId = await inviteUser.mutateAsync({
+        email: inviteEmail,
+        workspace_id: workspaceId,
+        role_code: inviteRole,
+        workspace_role: 'member',
       });
 
-      setSelectedUserId(null);
-      setSearch('');
-      setSelectedRole('viewer');
-      onOpenChange(false);
+      // Fetch token and send email
+      const { data: invitation } = await supabase
+        .from('pending_invitations_view')
+        .select('invitation_token')
+        .eq('workspace_id', workspaceId)
+        .eq('email', inviteEmail.toLowerCase())
+        .order('invited_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (invitation?.invitation_token) {
+        await supabase.functions.invoke('invite-user', {
+          body: {
+            email: inviteEmail,
+            invitation_token: invitation.invitation_token,
+            workspace_name: workspaceName,
+          },
+        });
+      }
+
+      setInviteSent(true);
     } catch {
       // Error toast handled by mutation
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" aria-describedby="add-member-description">
+    <Dialog open={open} onOpenChange={resetAndClose}>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Member</DialogTitle>
-          <DialogDescription id="add-member-description">
-            Search for a user and add them to this workspace.
+          <DialogDescription>
+            Find an existing user or invite someone new by email.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Search Users</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'find' | 'invite')} className="mt-2">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="find">
+              <Search className="h-3.5 w-3.5 mr-1.5" />
+              Find User
+            </TabsTrigger>
+            <TabsTrigger value="invite">
+              <Mail className="h-3.5 w-3.5 mr-1.5" />
+              Invite by Email
+            </TabsTrigger>
+          </TabsList>
 
-          {search.length < 2 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Type at least 2 characters to search
-            </p>
-          ) : isLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : users.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No users found
-            </p>
-          ) : (
-            <div className="max-h-48 overflow-auto border rounded-lg divide-y">
-              {users.map((user) => (
-                <div
-                  key={user.id}
-                  className={`p-3 cursor-pointer hover:bg-muted/50 ${
-                    selectedUserId === user.id ? 'bg-muted' : ''
-                  }`}
-                  onClick={() => setSelectedUserId(user.id)}
-                >
-                  <p className="font-medium">{user.full_name}</p>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {selectedUser && (
+          {/* ── Tab: Find User ── */}
+          <TabsContent value="find" className="space-y-4 pt-3">
             <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {RBAC_ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {ROLE_LABELS[r]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Search by name or email</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="e.g. Amina Hassan"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setSelectedUserId(null); }}
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
             </div>
-          )}
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleAdd} disabled={!selectedUserId || addMember.isPending}>
-            {addMember.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Add Member
-          </Button>
-        </DialogFooter>
+            {search.length < 2 ? (
+              <p className="text-sm text-muted-foreground text-center py-3">
+                Type at least 2 characters to search
+              </p>
+            ) : isLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : users.length === 0 ? (
+              <div className="text-center py-4 space-y-2">
+                <p className="text-sm text-muted-foreground">No users found for &quot;{search}&quot;</p>
+                <p className="text-xs text-muted-foreground">
+                  Not registered yet?{' '}
+                  <button
+                    className="text-primary underline-offset-2 hover:underline"
+                    onClick={() => { setInviteEmail(search.includes('@') ? search : ''); setTab('invite'); }}
+                  >
+                    Send an invitation
+                  </button>
+                </p>
+              </div>
+            ) : (
+              <div className="max-h-48 overflow-auto border rounded-lg divide-y">
+                {users.map((user) => (
+                  <div
+                    key={user.id}
+                    className={`flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors ${
+                      selectedUserId === user.id ? 'bg-muted' : ''
+                    }`}
+                    onClick={() => setSelectedUserId(selectedUserId === user.id ? null : user.id)}
+                  >
+                    <div>
+                      <p className="font-medium text-sm">{user.full_name}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                    {selectedUserId === user.id && (
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedUser && (
+              <div className="space-y-2">
+                <Label>Assign Role</Label>
+                <Select value={selectedRole} onValueChange={setSelectedRole}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RBAC_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_LABELS[r]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={resetAndClose}>Cancel</Button>
+              <Button onClick={handleAdd} disabled={!selectedUserId || addMember.isPending}>
+                {addMember.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add Member
+              </Button>
+            </DialogFooter>
+          </TabsContent>
+
+          {/* ── Tab: Invite by Email ── */}
+          <TabsContent value="invite" className="space-y-4 pt-3">
+            {inviteSent ? (
+              <div className="text-center py-6 space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Mail className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Invitation sent!</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    An invitation email was sent to <strong>{inviteEmail}</strong>.
+                    They&apos;ll be added to this workspace after signing up.
+                  </p>
+                </div>
+                <Button onClick={resetAndClose} className="mt-2">Done</Button>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="invite-email">Email Address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="invite-email"
+                      type="email"
+                      placeholder="colleague@example.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="pl-9"
+                      autoFocus={tab === 'invite'}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RBAC_ROLES.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {ROLE_LABELS[r]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    The invitee will receive an email with a link to set up their account and join this workspace.
+                  </p>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={resetAndClose}>Cancel</Button>
+                  <Button
+                    onClick={handleInvite}
+                    disabled={!inviteEmail || inviteUser.isPending}
+                  >
+                    {inviteUser.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Send Invitation
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
