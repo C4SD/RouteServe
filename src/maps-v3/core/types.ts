@@ -11,14 +11,16 @@ export interface MapKernelEvents {
 
 export type EntityType = 'driver' | 'vehicle' | 'delivery';
 
+import type { StyleSpecification } from 'maplibre-gl';
+
 export interface MapOptions {
   container: HTMLElement;
   center?: [number, number];
   zoom?: number;
   minZoom?: number;
   maxZoom?: number;
-  /** CARTO GL style URL from workspace settings; falls back to getBasemapStyle() */
-  style?: string;
+  /** Inline StyleSpecification or URL; falls back to getBasemapStyle() */
+  style?: string | StyleSpecification;
 }
 
 export interface LayerOptions {

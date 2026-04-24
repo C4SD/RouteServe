@@ -58,6 +58,7 @@ interface Step4RouteProps {
   startLocation?: { id: string; name: string; lat?: number; lng?: number } | null;
   startLocationName: string | null;
   optimizedRoute: RoutePoint[];
+  routeGeometry?: Array<[number, number]> | null; // [lng, lat] road path from routing API
   totalDistanceKm: number | null;
   estimatedDurationMin: number | null;
   isOptimizing: boolean;
@@ -72,6 +73,7 @@ export function Step4Route({
   startLocation,
   startLocationName,
   optimizedRoute,
+  routeGeometry,
   totalDistanceKm,
   estimatedDurationMin,
   isOptimizing,
@@ -216,7 +218,12 @@ export function Step4Route({
       }
 
       // Add route line to map (only if style is loaded)
-      if (routeCoordinates.length >= 2 && map.isStyleLoaded()) {
+      // Use actual road geometry when available, otherwise fall back to straight lines
+      const lineCoordinates = routeGeometry && routeGeometry.length >= 2
+        ? routeGeometry
+        : routeCoordinates;
+
+      if (lineCoordinates.length >= 2 && map.isStyleLoaded()) {
         // Remove existing route layer and source if they exist
         if (map.getLayer('route-line')) {
           map.removeLayer('route-line');
@@ -233,7 +240,7 @@ export function Step4Route({
             properties: {},
             geometry: {
               type: 'LineString',
-              coordinates: routeCoordinates,
+              coordinates: lineCoordinates,
             },
           },
         });
@@ -350,7 +357,7 @@ export function Step4Route({
     } else {
       map.once('styledata', updateMarkersAndRoute);
     }
-  }, [startLocation, facilities, facilityMap, bounds, hasRoute, optimizedRoute]);
+  }, [startLocation, facilities, facilityMap, bounds, hasRoute, optimizedRoute, routeGeometry]);
 
   return (
     <div className="flex flex-col min-h-[65vh] p-6">

@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/table';
 import { useServiceAreaFacilities, useDeleteServiceArea } from '@/hooks/useServiceAreas';
 import { ServiceArea } from '@/types/service-areas';
+import { PolicySequenceTab } from './PolicySequenceTab';
 
 const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
@@ -92,9 +93,10 @@ export function ServiceAreaDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="facilities">Facilities ({facilities?.length || 0})</TabsTrigger>
+            <TabsTrigger value="policies">Policy Sequence</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4 mt-4 overflow-y-auto flex-1">
@@ -174,6 +176,10 @@ export function ServiceAreaDetailDialog({
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="policies" className="mt-4 overflow-y-auto flex-1">
+            <PolicySequenceTab serviceArea={serviceArea} />
           </TabsContent>
 
           <TabsContent value="facilities" className="mt-4 overflow-y-auto flex-1">

@@ -13,6 +13,7 @@ import type {
   EntityType,
 } from '@/types/live-map';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '@/lib/constants';
+import type { TetherMode } from '@/lib/algorithms/routeOptimizer';
 
 interface LiveMapState {
   // View filters
@@ -51,6 +52,16 @@ interface LiveMapState {
   setViewState: (viewState: Partial<MapViewState>) => void;
   setCenter: (center: [number, number]) => void;
   setZoom: (zoom: number) => void;
+
+  // Tether / batch route view state
+  tetherState: {
+    mode: TetherMode;
+    activeBatchId: string | null;
+    selectedComparisonId: string | null;
+  };
+  setTetherMode: (mode: TetherMode) => void;
+  setActiveBatch: (batchId: string | null) => void;
+  setSelectedComparisonId: (id: string | null) => void;
 
   // Actions - Playback
   setPlaybackActive: (active: boolean) => void;
@@ -91,6 +102,11 @@ export const useLiveMapStore = create<LiveMapState>()(
       filters: defaultFilters,
       selectedEntity: null,
       viewState: defaultViewState,
+      tetherState: {
+        mode: 'cardinal' as TetherMode,
+        activeBatchId: null,
+        selectedComparisonId: null,
+      },
       playback: {
         isActive: false,
         startTime: null,
@@ -124,6 +140,27 @@ export const useLiveMapStore = create<LiveMapState>()(
         })),
 
       resetFilters: () => set({ filters: defaultFilters }),
+
+      // Tether actions
+      setTetherMode: (mode) =>
+        set((state) => ({
+          tetherState: { ...state.tetherState, mode },
+        })),
+
+      setActiveBatch: (batchId) =>
+        set((state) => ({
+          tetherState: {
+            ...state.tetherState,
+            activeBatchId: batchId,
+            // Reset comparison when changing batch
+            selectedComparisonId: batchId ? state.tetherState.selectedComparisonId : null,
+          },
+        })),
+
+      setSelectedComparisonId: (id) =>
+        set((state) => ({
+          tetherState: { ...state.tetherState, selectedComparisonId: id },
+        })),
 
       // Selection actions
       selectEntity: (id, type) =>
@@ -225,6 +262,7 @@ export const useLiveMapStore = create<LiveMapState>()(
       partialize: (state) => ({
         filters: state.filters,
         viewState: state.viewState,
+        // tetherState intentionally excluded — per-session only
       }),
     }
   )

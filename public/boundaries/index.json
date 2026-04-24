@@ -1,0 +1,19 @@
+{
+  "countries": [
+    {
+      "id": "ng",
+      "name": "Nigeria",
+      "center": [8.6753, 9.082],
+      "zoom": 5.5,
+      "levels": ["state", "lga"],
+      "sources": {
+        "state": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/NGA/ADM1/geoBoundaries-NGA-ADM1_simplified.geojson",
+        "lga": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/NGA/ADM2/geoBoundaries-NGA-ADM2_simplified.geojson"
+      },
+      "stateProperty": "shapeName",
+      "lgaProperty": "shapeName",
+      "stateIdProperty": "shapeID",
+      "lgaIdProperty": "shapeID"
+    }
+  ]
+}

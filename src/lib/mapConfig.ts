@@ -39,6 +39,7 @@ export const MAP_CONFIG = {
   mapLibreStyles: {
     light: 'https://tiles.openfreemap.org/styles/positron',
     dark: 'https://tiles.openfreemap.org/styles/fiord',
+    streets: 'https://tiles.openfreemap.org/styles/liberty',
   },
 } as const;
 
@@ -53,25 +54,16 @@ export type TileProvider = keyof typeof MAP_CONFIG.tileProviders;
  * @param theme - Current theme ('light', 'dark', 'system', or undefined)
  * @returns MapLibre style URL for the effective theme
  */
-export function getMapLibreStyle(theme: 'light' | 'dark' | 'system' | undefined): string {
-  // Explicit light theme
-  if (theme === 'light') {
-    return MAP_CONFIG.mapLibreStyles.light;
-  }
+export function getMapLibreStyle(theme: 'light' | 'dark' | 'streets' | 'system' | undefined): string {
+  if (theme === 'light') return MAP_CONFIG.mapLibreStyles.light;
+  if (theme === 'dark') return MAP_CONFIG.mapLibreStyles.dark;
+  if (theme === 'streets') return MAP_CONFIG.mapLibreStyles.streets;
 
-  // Explicit dark theme
-  if (theme === 'dark') {
-    return MAP_CONFIG.mapLibreStyles.dark;
-  }
-
-  // System theme - detect from window
+  // System / auto — detect from window
   if (typeof window !== 'undefined') {
     const systemIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return systemIsDark
-      ? MAP_CONFIG.mapLibreStyles.dark
-      : MAP_CONFIG.mapLibreStyles.light;
+    return systemIsDark ? MAP_CONFIG.mapLibreStyles.dark : MAP_CONFIG.mapLibreStyles.light;
   }
 
-  // SSR fallback - default to light
   return MAP_CONFIG.mapLibreStyles.light;
 }

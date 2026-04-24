@@ -25,7 +25,7 @@ export type EventType =
   | 'SUPERVISOR_OVERRIDE';
 
 // Entity types for selection
-export type EntityType = 'driver' | 'vehicle' | 'delivery' | 'facility';
+export type EntityType = 'driver' | 'vehicle' | 'delivery' | 'facility' | 'warehouse';
 
 // Live driver data (hybrid: GPS position + state machine status)
 export interface LiveDriver {

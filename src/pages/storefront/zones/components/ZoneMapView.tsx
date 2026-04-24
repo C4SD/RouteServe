@@ -77,7 +77,7 @@ export function ZoneMapView({ zones, onZoneSelect }: ZoneMapViewProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('warehouses')
-        .select('id, name, lat, lng, type')
+        .select('id, name, lat, lng')
         .not('lat', 'is', null)
         .not('lng', 'is', null);
       if (error) throw error;
@@ -170,7 +170,7 @@ export function ZoneMapView({ zones, onZoneSelect }: ZoneMapViewProps) {
         .bindPopup(`
           <div style="min-width:150px">
             <strong>${wh.name}</strong><br/>
-            <span style="color:#0078A0;font-size:12px">${wh.type || 'Warehouse'}</span><br/>
+            <span style="color:#0078A0;font-size:12px">Warehouse</span><br/>
             <span style="font-size:11px;color:#999">${wh.lat.toFixed(6)}, ${wh.lng.toFixed(6)}</span>
           </div>
         `)

@@ -15,6 +15,7 @@ import { SourceOfTruthColumn, type FacilityCandidate } from '../schedule/SourceO
 import { FileUploadColumn } from '../schedule/FileUploadColumn';
 import { WorkingSetColumn } from '../schedule/WorkingSetColumn';
 import { DecisionSupportColumn } from '../schedule/DecisionSupportColumn';
+import { PolicyContextColumn } from '../schedule/PolicyContextColumn';
 import type {
   WorkingSetItem,
   ParsedFacility,
@@ -22,6 +23,7 @@ import type {
   SourceSubOption,
   SourceMethod,
   VehicleSuggestion,
+  PolicyContext,
 } from '@/types/unified-workflow';
 import type { TimeWindow } from '@/types/scheduler';
 
@@ -52,6 +54,7 @@ interface Step2ScheduleProps {
   onRemoveFromWorkingSet: (facilityId: string) => void;
   onReorderWorkingSet: (fromIndex: number, toIndex: number) => void;
   onClearWorkingSet: () => void;
+  onSetWorkingSet?: (items: WorkingSetItem[]) => void;
 
   // AI options
   sourceSubOption: SourceSubOption | null;
@@ -67,6 +70,10 @@ interface Step2ScheduleProps {
   parsedFacilities?: ParsedFacility[] | null;
   onFileParsed?: (facilities: ParsedFacility[]) => void;
   onUpdateParsedRow?: (rowIndex: number, updates: Partial<ParsedFacility>) => void;
+
+  // Policy context (only used when sourceMethod === 'service_policy')
+  policyContext?: PolicyContext | null;
+  onPolicyContextChange?: (context: PolicyContext | null) => void;
 }
 
 export function Step2Schedule({
@@ -89,6 +96,7 @@ export function Step2Schedule({
   onRemoveFromWorkingSet,
   onReorderWorkingSet,
   onClearWorkingSet,
+  onSetWorkingSet,
   sourceSubOption,
   aiOptions,
   onAiOptionsChange,
@@ -98,6 +106,8 @@ export function Step2Schedule({
   parsedFacilities,
   onFileParsed,
   onUpdateParsedRow,
+  policyContext,
+  onPolicyContextChange,
 }: Step2ScheduleProps) {
   // Get selected facility IDs for the left column
   const selectedFacilityIds = React.useMemo(
@@ -106,6 +116,7 @@ export function Step2Schedule({
   );
 
   const isUploadMode = sourceMethod === 'upload';
+  const isPolicyMode = sourceMethod === 'service_policy';
 
   // All facilities (for upload matching dropdown)
   const allFacilitiesForMatch = React.useMemo(
@@ -157,13 +168,34 @@ export function Step2Schedule({
         onTimeWindowChange={onTimeWindowChange}
         warehouses={warehouses}
         facilities={facilities}
+        startLocationAutoSet={isPolicyMode && !!startLocationId}
       />
 
       {/* 3-Column Layout */}
       <div className="flex-1 min-h-0 p-4">
         <ThreeColumnLayout className="h-full">
-          {/* Left Column: Source of Truth or File Upload */}
-          {isUploadMode ? (
+          {/* Left Column: Policy Context / File Upload / Source of Truth */}
+          {isPolicyMode ? (
+            <LeftColumn
+              title="Policy Context"
+              subtitle="Select service area, policy, and cluster"
+            >
+              <PolicyContextColumn
+                policyContext={policyContext ?? null}
+                workingSet={workingSet}
+                onPolicyContextChange={onPolicyContextChange ?? (() => {})}
+                onSetWorkingSet={onSetWorkingSet ?? ((items) => {
+                  onClearWorkingSet();
+                  items.forEach((item) => onAddToWorkingSet(item));
+                })}
+                onWarehouseAutoSet={(warehouseId) => {
+                  if (warehouseId) {
+                    onStartLocationChange(warehouseId, 'warehouse');
+                  }
+                }}
+              />
+            </LeftColumn>
+          ) : isUploadMode ? (
             <LeftColumn
               title="Upload Facility List"
               subtitle="Import from PDF, CSV, XLSX, or DOCX"

@@ -1,4 +1,4 @@
-import { Warehouse, Truck, Users as UsersIcon, LayoutDashboard, Smartphone, Map, Building2, ChevronDown, Settings } from 'lucide-react';
+import { Warehouse, Truck, Users as UsersIcon, LayoutDashboard, Smartphone, Map, Building2, ChevronDown, Settings, Brain } from 'lucide-react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -9,7 +9,7 @@ import { useEffect, useCallback } from 'react';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 
 type WorkspaceConfig = {
-  id: 'fleetops' | 'storefront' | 'admin' | 'dashboard' | 'mod4' | 'map';
+  id: 'fleetops' | 'storefront' | 'admin' | 'dashboard' | 'mod4' | 'map' | 'intelligence';
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   path: string;
@@ -46,6 +46,13 @@ const workspaces: WorkspaceConfig[] = [
     available: true,
   },
   {
+    id: 'intelligence',
+    label: 'Intelligence',
+    icon: Brain,
+    path: '/intelligence',
+    available: true,
+  },
+  {
     id: 'dashboard',
     label: 'Dashboard',
     icon: LayoutDashboard,
@@ -68,8 +75,8 @@ export function PrimarySidebar() {
 
   const handleWorkspaceClick = useCallback((ws: WorkspaceConfig) => {
     if (!ws.available) return;
-    if (ws.id === 'fleetops' || ws.id === 'storefront' || ws.id === 'admin' || ws.id === 'mod4' || ws.id === 'map') {
-      setWorkspace(ws.id);
+    if (ws.id === 'fleetops' || ws.id === 'storefront' || ws.id === 'admin' || ws.id === 'mod4' || ws.id === 'map' || ws.id === 'intelligence') {
+      setWorkspace(ws.id as any);
     }
     navigate(ws.path);
   }, [setWorkspace, navigate]);

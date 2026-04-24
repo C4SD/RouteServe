@@ -7,9 +7,10 @@
  */
 
 import { useWorkspaceSettings, useUpdateWorkspaceSettings, getMapCenter } from '@/hooks/useWorkspaceSettings';
-import { getMapLibreStyle } from '@/lib/mapConfig';
+import { getBasemapStyle, type BasemapTheme } from '@/maps-v3/styles/basemap';
+import type { StyleSpecification } from 'maplibre-gl';
 
-export type BasemapStyle = 'auto' | 'light' | 'dark';
+export type BasemapStyle = 'auto' | 'light' | 'dark' | 'streets';
 
 export interface MapLayerDefaults {
   showZones: boolean;
@@ -17,13 +18,15 @@ export interface MapLayerDefaults {
   showRoutes: boolean;
   enableClustering: boolean;
   realtimeRefreshInterval: number; // seconds
+  showTraffic: boolean;
+  showPlaces: boolean;
 }
 
 export interface ResolvedMapSettings {
-  center: [number, number];    // [lng, lat] — MapLibre format
+  center: [number, number];        // [lng, lat] — MapLibre format
   zoom: number;
   basemapStyle: BasemapStyle;
-  resolvedStyleUrl: string;    // ready-to-use CARTO GL style URL
+  resolvedStyle: string | StyleSpecification; // URL or inline spec
   layers: MapLayerDefaults;
 }
 
@@ -33,22 +36,19 @@ export function useMapSettings() {
   const meta = data?.metadata ?? {};
   const basemapStyle = (meta.basemap_style as BasemapStyle) ?? 'auto';
 
-  const resolvedStyleUrl =
-    basemapStyle === 'light' ? getMapLibreStyle('light')
-    : basemapStyle === 'dark' ? getMapLibreStyle('dark')
-    : getMapLibreStyle(undefined); // 'auto' — follows system prefers-color-scheme
-
   const settings: ResolvedMapSettings = {
     center: getMapCenter(data),
     zoom: data?.map_default_zoom ?? 11,
     basemapStyle,
-    resolvedStyleUrl,
+    resolvedStyle: getBasemapStyle(basemapStyle as BasemapTheme),
     layers: {
-      showZones:                meta.show_zones               ?? true,
-      showFacilities:           meta.show_facilities           ?? true,
-      showRoutes:               meta.show_routes               ?? true,
-      enableClustering:         meta.enable_clustering         ?? true,
-      realtimeRefreshInterval:  meta.realtime_refresh_interval ?? 30,
+      showZones:               meta.show_zones               ?? true,
+      showFacilities:          meta.show_facilities           ?? true,
+      showRoutes:              meta.show_routes               ?? true,
+      enableClustering:        meta.enable_clustering         ?? true,
+      realtimeRefreshInterval: meta.realtime_refresh_interval ?? 30,
+      showTraffic:             meta.show_traffic              ?? false,
+      showPlaces:              meta.show_places               ?? true,
     },
   };
 
@@ -73,6 +73,8 @@ export function useMapSettings() {
           ...(patch.showRoutes              !== undefined && { show_routes:               patch.showRoutes }),
           ...(patch.enableClustering        !== undefined && { enable_clustering:         patch.enableClustering }),
           ...(patch.realtimeRefreshInterval !== undefined && { realtime_refresh_interval: patch.realtimeRefreshInterval }),
+          ...(patch.showTraffic             !== undefined && { show_traffic:              patch.showTraffic }),
+          ...(patch.showPlaces              !== undefined && { show_places:               patch.showPlaces }),
         },
       });
     },

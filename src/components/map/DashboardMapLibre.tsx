@@ -62,6 +62,10 @@ export function DashboardMapLibre({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
     map.on('load', () => {
+      // Force a layout recalculation shortly after init.
+      // Fixes the bug where MapLibre locks to a 300px fallback height
+      // before the parent flex/grid layout has fully settled.
+      setTimeout(() => map.resize(), 150);
       setMapLoaded(true);
     });
 

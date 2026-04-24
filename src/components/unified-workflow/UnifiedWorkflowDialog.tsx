@@ -8,7 +8,6 @@
 
 import * as React from 'react';
 import {
-  X,
   ChevronLeft,
   ChevronRight,
   Save,
@@ -95,10 +94,12 @@ export function UnifiedWorkflowDialog({
   const driverId = useUnifiedWorkflowStore((state) => state.driver_id);
   const slotAssignments = useUnifiedWorkflowStore((state) => state.slot_assignments);
   const optimizedRoute = useUnifiedWorkflowStore((state) => state.optimized_route);
+  const routeGeometry = useUnifiedWorkflowStore((state) => state.route_geometry);
   const totalDistanceKm = useUnifiedWorkflowStore((state) => state.total_distance_km);
   const estimatedDurationMin = useUnifiedWorkflowStore((state) => state.estimated_duration_min);
   const storePreBatchId = useUnifiedWorkflowStore((state) => state.pre_batch_id);
   const parsedFacilities = useUnifiedWorkflowStore((state) => state.parsed_facilities);
+  const policyContext = useUnifiedWorkflowStore((state) => state.policy_context);
 
   // Get actions separately (memoized with shallow)
   const actions = useWorkflowActions();
@@ -128,9 +129,15 @@ export function UnifiedWorkflowDialog({
     }));
   }, [facilitiesData]);
 
-  // Use all facilities for manual mode, ready consignments for ready mode
-  const effectiveCandidates = sourceMethod === 'manual' ? allFacilityCandidates : facilityCandidates;
-  const effectiveCandidatesLoading = sourceMethod === 'manual' ? !facilitiesData : facilitiesLoading;
+  // Use all facilities for manual/service_policy mode, ready consignments for ready mode
+  const effectiveCandidates =
+    sourceMethod === 'manual' || sourceMethod === 'service_policy'
+      ? allFacilityCandidates
+      : facilityCandidates;
+  const effectiveCandidatesLoading =
+    sourceMethod === 'manual' || sourceMethod === 'service_policy'
+      ? !facilitiesData
+      : facilitiesLoading;
 
   // Mutations
   const createPreBatch = useCreatePreBatch();
@@ -222,20 +229,24 @@ export function UnifiedWorkflowDialog({
     [warehouses, startLocationId]
   );
 
-  // Initialize on open (only when dialog transitions from closed to open)
+  // Reset + initialize on open (only when dialog transitions from closed to open)
   const prevOpenRef = React.useRef(open);
   React.useEffect(() => {
-    // Only run when dialog opens (transitions from false to true)
-    if (open && !prevOpenRef.current && startStep > 1) {
-      useUnifiedWorkflowStore.getState().goToStep(startStep);
+    if (open && !prevOpenRef.current) {
+      // Always start fresh when the dialog opens
+      actions.resetWorkflow();
+      if (startStep > 1) {
+        useUnifiedWorkflowStore.getState().goToStep(startStep);
+      }
     }
     prevOpenRef.current = open;
-  }, [open, startStep]);
+  }, [open, startStep, actions]);
 
   // Handle close (memoized to prevent infinite loops)
   const handleClose = React.useCallback(() => {
+    actions.resetWorkflow();
     onOpenChange(false);
-  }, [onOpenChange]);
+  }, [actions, onOpenChange]);
 
   // Handle reset and close (memoized to prevent infinite loops)
   const handleReset = React.useCallback(() => {
@@ -243,11 +254,17 @@ export function UnifiedWorkflowDialog({
     onOpenChange(false);
   }, [actions, onOpenChange]);
 
+  // Map service_policy → manual at the DB boundary (policy context lives in facility_order)
+  const dbSourceMethod = React.useMemo(
+    () => (sourceMethod === 'service_policy' ? 'manual' : sourceMethod),
+    [sourceMethod]
+  );
+
   // Handle save draft (Step 2) (memoized to prevent infinite loops)
   const handleSaveDraft = React.useCallback(async () => {
     try {
       await createPreBatch.mutateAsync({
-        source_method: sourceMethod!,
+        source_method: dbSourceMethod!,
         source_sub_option: sourceSubOption,
         schedule_title: scheduleTitle!,
         start_location_id: startLocationId!,
@@ -269,7 +286,7 @@ export function UnifiedWorkflowDialog({
     }
   }, [
     createPreBatch,
-    sourceMethod,
+    dbSourceMethod,
     sourceSubOption,
     scheduleTitle,
     startLocationId,
@@ -291,7 +308,7 @@ export function UnifiedWorkflowDialog({
 
       if (!preBatchId) {
         const newPreBatch = await createPreBatch.mutateAsync({
-          source_method: sourceMethod!,
+          source_method: dbSourceMethod!,
           source_sub_option: sourceSubOption,
           schedule_title: scheduleTitle!,
           start_location_id: startLocationId!,
@@ -331,7 +348,7 @@ export function UnifiedWorkflowDialog({
     convertToBatch,
     createPreBatch,
     storePreBatchId,
-    sourceMethod,
+    dbSourceMethod,
     sourceSubOption,
     scheduleTitle,
     startLocationId,
@@ -357,8 +374,8 @@ export function UnifiedWorkflowDialog({
   // Handle route optimization (Step 4) (memoized to prevent infinite loops)
   const handleOptimizeRoute = React.useCallback(async () => {
     const startLocation = warehouses.find(w => w.id === startLocationId) || null;
-    await actions.optimizeRoute(facilityCandidates, startLocation);
-  }, [actions, facilityCandidates, warehouses, startLocationId]);
+    await actions.optimizeRoute(effectiveCandidates, startLocation);
+  }, [actions, effectiveCandidates, warehouses, startLocationId]);
 
   // Render step content (memoized to prevent infinite loops)
   const renderStepContent = React.useMemo(() => {
@@ -395,6 +412,7 @@ export function UnifiedWorkflowDialog({
             onRemoveFromWorkingSet={actions.removeFromWorkingSet}
             onReorderWorkingSet={actions.reorderWorkingSet}
             onClearWorkingSet={actions.clearWorkingSet}
+            onSetWorkingSet={actions.setWorkingSet}
             sourceSubOption={sourceSubOption}
             aiOptions={aiOptions}
             onAiOptionsChange={actions.setAiOptimizationOptions}
@@ -404,6 +422,8 @@ export function UnifiedWorkflowDialog({
             parsedFacilities={parsedFacilities}
             onFileParsed={actions.setParsedFacilities}
             onUpdateParsedRow={actions.updateParsedFacility}
+            policyContext={policyContext}
+            onPolicyContextChange={actions.setPolicyContext}
           />
         );
 
@@ -439,10 +459,11 @@ export function UnifiedWorkflowDialog({
         return (
           <Step4Route
             facilities={workingSet}
-            facilitiesWithCoords={facilityCandidates}
+            facilitiesWithCoords={effectiveCandidates}
             startLocation={startLocation}
             startLocationName={startLocationName}
             optimizedRoute={optimizedRoute}
+            routeGeometry={routeGeometry}
             totalDistanceKm={totalDistanceKm}
             estimatedDurationMin={estimatedDurationMin}
             isOptimizing={isLoading}
@@ -487,7 +508,7 @@ export function UnifiedWorkflowDialog({
     plannedDate,
     timeWindow,
     warehouses,
-    facilityCandidates,
+    effectiveCandidates,
     facilitiesLoading,
     workingSet,
     aiOptions,
@@ -503,11 +524,13 @@ export function UnifiedWorkflowDialog({
     totalDistanceKm,
     estimatedDurationMin,
     optimizedRoute,
+    routeGeometry,
     isLoading,
     selectedVehicle,
     selectedDriver,
     scheduleNotes,
     parsedFacilities,
+    policyContext,
     actions,
     handleOptimizeRoute,
   ]);
@@ -515,16 +538,21 @@ export function UnifiedWorkflowDialog({
   // Progress percentage
   const progressPct = (currentStep / 5) * 100;
 
+  const handleOpenChange = React.useCallback(
+    (isOpen: boolean) => {
+      if (!isOpen) actions.resetWorkflow();
+      onOpenChange(isOpen);
+    },
+    [actions, onOpenChange]
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0">
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pr-14">
             <DialogTitle>Create Dispatch Schedule</DialogTitle>
-            <Button variant="ghost" size="icon" onClick={handleClose}>
-              <X className="h-4 w-4" />
-            </Button>
           </div>
 
           {/* Step Indicator */}

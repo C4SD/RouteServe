@@ -9,16 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, MapPin, LocateFixed } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, MapPin, LocateFixed, X, ShieldAlert } from 'lucide-react';
 import { SettingsSection } from '@/components/admin/settings/SettingsSection';
 import { SettingsSwitchRow } from '@/components/admin/settings/SettingsRow';
 import { useWorkspaceSettings, useUpdateWorkspaceSettings } from '@/hooks/useWorkspaceSettings';
 import type { BasemapStyle } from '@/hooks/settings/useMapSettings';
+import { NIGERIA_STATE_BOUNDS } from '@/lib/geo-bounds';
 
 const BASEMAP_OPTIONS: { value: BasemapStyle; label: string; description: string }[] = [
-  { value: 'auto', label: 'Auto', description: 'Follows your system light/dark mode' },
-  { value: 'light', label: 'Light', description: 'CARTO Positron — clean light basemap' },
-  { value: 'dark', label: 'Dark', description: 'CARTO Dark Matter — dark basemap' },
+  { value: 'auto',    label: 'Auto',    description: 'Follows your system light/dark mode' },
+  { value: 'light',   label: 'Light',   description: 'Positron — clean minimal basemap' },
+  { value: 'dark',    label: 'Dark',    description: 'Fiord — dark basemap for night use' },
+  { value: 'streets', label: 'Streets', description: 'Liberty — detailed streets with labels & POIs' },
 ];
 
 const REFRESH_OPTIONS = [
@@ -43,7 +46,19 @@ export default function SettingsMapPage() {
   const [showRoutes, setShowRoutes] = useState(true);
   const [enableClustering, setEnableClustering] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState('30');
+  const [showTraffic, setShowTraffic] = useState(false);
+  const [showPlaces, setShowPlaces] = useState(true);
   const [locating, setLocating] = useState(false);
+
+  // Coordinate policy
+  const [coordStateCodes, setCoordStateCodes] = useState<string[]>([]);
+  const [coordStrictMode, setCoordStrictMode] = useState(false);
+  const [coordStateInput, setCoordStateInput] = useState('');
+
+  const nigeriaStateOptions = Object.entries(NIGERIA_STATE_BOUNDS).map(([code, b]) => ({
+    code,
+    name: b.name,
+  })).sort((a, b) => a.name.localeCompare(b.name));
 
   // Sync from server on load
   useEffect(() => {
@@ -58,6 +73,12 @@ export default function SettingsMapPage() {
     setShowRoutes(meta.show_routes ?? true);
     setEnableClustering(meta.enable_clustering ?? true);
     setRefreshInterval(String(meta.realtime_refresh_interval ?? 30));
+    setShowTraffic(meta.show_traffic ?? false);
+    setShowPlaces(meta.show_places ?? true);
+    // Coordinate policy
+    const policy = meta.coordinate_policy;
+    setCoordStateCodes(policy?.state_codes ?? []);
+    setCoordStrictMode(policy?.strict_mode ?? false);
   }, [ws]);
 
   const handleUseMyLocation = () => {
@@ -90,6 +111,11 @@ export default function SettingsMapPage() {
         show_routes: showRoutes,
         enable_clustering: enableClustering,
         realtime_refresh_interval: parseInt(refreshInterval, 10),
+        show_traffic: showTraffic,
+        show_places: showPlaces,
+        coordinate_policy: coordStateCodes.length > 0
+          ? { country: 'NG', state_codes: coordStateCodes, strict_mode: coordStrictMode }
+          : null,
       },
     });
     setHasChanges(false);
@@ -107,6 +133,11 @@ export default function SettingsMapPage() {
     setShowRoutes(meta.show_routes ?? true);
     setEnableClustering(meta.enable_clustering ?? true);
     setRefreshInterval(String(meta.realtime_refresh_interval ?? 30));
+    setShowTraffic(meta.show_traffic ?? false);
+    setShowPlaces(meta.show_places ?? true);
+    const policy = meta.coordinate_policy;
+    setCoordStateCodes(policy?.state_codes ?? []);
+    setCoordStrictMode(policy?.strict_mode ?? false);
     setHasChanges(false);
   };
 
@@ -132,10 +163,10 @@ export default function SettingsMapPage() {
         </p>
       </div>
 
-      {/* Basemap Style */}
+      {/* Map Type */}
       <SettingsSection
-        title="Basemap style"
-        description="The background map tiles shown on all maps."
+        title="Map type"
+        description="The basemap style shown across all maps in the platform."
       >
         <Select
           value={basemapStyle}
@@ -247,6 +278,32 @@ export default function SettingsMapPage() {
         </div>
       </SettingsSection>
 
+      {/* Live Data */}
+      <SettingsSection
+        title="Live data layers"
+        description="Real-world data overlaid on the map during live tracking."
+      >
+        <div className="space-y-1 divide-y">
+          <SettingsSwitchRow
+            label="Show places & points of interest"
+            description="Display local landmarks, businesses, and named locations from the Streets basemap"
+            checked={showPlaces}
+            onCheckedChange={markChanged(setShowPlaces)}
+          />
+          <SettingsSwitchRow
+            label="Traffic overlay"
+            description="Show live traffic conditions on routes (requires traffic data source)"
+            checked={showTraffic}
+            onCheckedChange={markChanged(setShowTraffic)}
+          />
+        </div>
+        {showTraffic && (
+          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+            Traffic data requires a configured traffic provider. Contact your workspace admin to enable it.
+          </p>
+        )}
+      </SettingsSection>
+
       {/* Performance */}
       <SettingsSection
         title="Performance"
@@ -280,6 +337,82 @@ export default function SettingsMapPage() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </SettingsSection>
+
+      {/* Coordinate Validation Policy */}
+      <SettingsSection
+        title="Coordinate validation"
+        description="Validate that facility coordinates fall within expected geographic bounds during import and manual entry."
+      >
+        <div className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium">Expected state(s)</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Facilities outside these states will be flagged. Leave empty to skip state-level checks.
+            </p>
+
+            {/* Selected states */}
+            {coordStateCodes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {coordStateCodes.map((code) => {
+                  const state = NIGERIA_STATE_BOUNDS[code];
+                  return (
+                    <Badge key={code} variant="secondary" className="gap-1 pr-1">
+                      <ShieldAlert className="h-3 w-3" />
+                      {state?.name ?? code}
+                      <button
+                        type="button"
+                        className="ml-0.5 rounded hover:bg-muted p-0.5"
+                        onClick={() => {
+                          setCoordStateCodes((prev) => prev.filter((c) => c !== code));
+                          setHasChanges(true);
+                        }}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Add state dropdown */}
+            <Select
+              value={coordStateInput}
+              onValueChange={(code) => {
+                if (code && !coordStateCodes.includes(code)) {
+                  setCoordStateCodes((prev) => [...prev, code]);
+                  setHasChanges(true);
+                }
+                setCoordStateInput('');
+              }}
+            >
+              <SelectTrigger className="w-full max-w-xs">
+                <SelectValue placeholder="Add a state…" />
+              </SelectTrigger>
+              <SelectContent>
+                {nigeriaStateOptions
+                  .filter((s) => !coordStateCodes.includes(s.code))
+                  .map((s) => (
+                    <SelectItem key={s.code} value={s.code}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {coordStateCodes.length > 0 && (
+            <div className="space-y-1 divide-y">
+              <SettingsSwitchRow
+                label="Strict mode"
+                description="Block import when coordinates are outside the expected state (instead of warning only)"
+                checked={coordStrictMode}
+                onCheckedChange={markChanged(setCoordStrictMode)}
+              />
+            </div>
+          )}
         </div>
       </SettingsSection>
 

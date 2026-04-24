@@ -33,6 +33,15 @@ interface UseRoadRouteFetcherOptions {
   enabled: boolean;
 }
 
+/** Build waypoints for routing: depot → facilities → depot (round trip) or just facilities when depot is missing */
+function buildWaypoints(depot: Depot | null, ordered: FacilityPoint[]): Array<{ lat: number; lng: number }> {
+  if (depot) {
+    return [depot, ...ordered, depot];
+  }
+  // No depot — route through facilities only (open path, no round trip)
+  return ordered;
+}
+
 interface UseRoadRouteFetcherResult {
   /** Main road route (waypoint mode: depot → facilities → depot) */
   roadRoute: RoadRouteResult | null;
@@ -72,22 +81,21 @@ export function useRoadRouteFetcher({
 
   // Fetch main road route (waypoint mode)
   useEffect(() => {
-    if (!enabled || !depot || facilities.length === 0) return;
+    if (!enabled || facilities.length === 0) return;
     if (tetherMode !== 'route') return;
 
     const ordered = getOrderedFacilities();
     if (ordered.length === 0) return;
+    // Need at least 2 points to form a route (2 facilities, or depot + 1 facility)
+    if (!depot && ordered.length < 2) return;
 
-    const key = `${depot.lat},${depot.lng}|${ordered.map(f => f.id).join(',')}`;
+    const depotKey = depot ? `${depot.lat},${depot.lng}` : 'nodepot';
+    const key = `${depotKey}|${ordered.map(f => f.id).join(',')}`;
     if (key === lastRouteKeyRef.current) return;
     lastRouteKeyRef.current = key;
 
     setIsFetching(true);
-    const waypoints = [
-      depot,
-      ...ordered,
-      depot, // round trip
-    ];
+    const waypoints = buildWaypoints(depot, ordered);
 
     getRoadRoute(waypoints)
       .then(route => {
@@ -99,7 +107,7 @@ export function useRoadRouteFetcher({
 
   // Fetch cardinal paths (depot → each facility individually)
   useEffect(() => {
-    if (!enabled || !depot || facilities.length === 0) return;
+    if (!enabled || !depot || facilities.length === 0) return; // cardinal mode requires a depot
     if (tetherMode !== 'cardinal') return;
 
     const ordered = getOrderedFacilities();
@@ -145,16 +153,13 @@ export function useRoadRouteFetcher({
 
   // Fetch alternative routes
   const fetchAlternatives = useCallback(async () => {
-    if (!depot || facilities.length < 2) return;
+    const minPoints = depot ? 1 : 2;
+    if (facilities.length < minPoints) return;
 
     setIsFetching(true);
     try {
       const ordered = getOrderedFacilities();
-      const waypoints = [
-        depot,
-        ...ordered,
-        depot,
-      ];
+      const waypoints = buildWaypoints(depot, ordered);
 
       const alternatives = await getAlternativeRoadRoutes(waypoints);
       const routes: ComparisonRoute[] = alternatives.map((alt, idx) => ({

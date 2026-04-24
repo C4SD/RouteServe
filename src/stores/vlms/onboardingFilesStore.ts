@@ -6,11 +6,23 @@
 
 import { create } from 'zustand';
 
+export interface StagedDocument {
+  file: File;
+  type: string;
+}
+
+export interface StagedPhoto {
+  file: File;
+  caption: string;
+}
+
 interface OnboardingFilesState {
-  stagedDocuments: File[];
-  stagedPhotos: File[];
-  addDocuments: (files: File[]) => void;
-  addPhotos: (files: File[]) => void;
+  stagedDocuments: StagedDocument[];
+  stagedPhotos: StagedPhoto[];
+  addDocuments: (files: File[], type?: string) => void;
+  addPhotos: (files: File[], caption?: string) => void;
+  updateDocumentType: (index: number, type: string) => void;
+  updatePhotoCaption: (index: number, caption: string) => void;
   removeDocument: (index: number) => void;
   removePhoto: (index: number) => void;
   reset: () => void;
@@ -20,14 +32,24 @@ export const useOnboardingFilesStore = create<OnboardingFilesState>((set) => ({
   stagedDocuments: [],
   stagedPhotos: [],
 
-  addDocuments: (files) =>
+  addDocuments: (files, type = 'registration') =>
     set((state) => ({
-      stagedDocuments: [...state.stagedDocuments, ...files],
+      stagedDocuments: [...state.stagedDocuments, ...files.map((file) => ({ file, type }))],
     })),
 
-  addPhotos: (files) =>
+  addPhotos: (files, caption = '') =>
     set((state) => ({
-      stagedPhotos: [...state.stagedPhotos, ...files],
+      stagedPhotos: [...state.stagedPhotos, ...files.map((file) => ({ file, caption }))],
+    })),
+
+  updateDocumentType: (index, type) =>
+    set((state) => ({
+      stagedDocuments: state.stagedDocuments.map((d, i) => (i === index ? { ...d, type } : d)),
+    })),
+
+  updatePhotoCaption: (index, caption) =>
+    set((state) => ({
+      stagedPhotos: state.stagedPhotos.map((p, i) => (i === index ? { ...p, caption } : p)),
     })),
 
   removeDocument: (index) =>

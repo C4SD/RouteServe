@@ -98,24 +98,6 @@ export class RouteLineLayer extends BaseLayer<MapFeatureCollection<RouteLineProp
       },
     });
 
-    // Add animated dots along route (for active routes)
-    this.map.addLayer({
-      id: `${LAYER_ID}-dots`,
-      type: 'symbol',
-      source: SOURCE_ID,
-      filter: ['all', ['==', ['get', 'status'], 'EN_ROUTE']],
-      layout: {
-        'symbol-placement': 'line',
-        'symbol-spacing': 100,
-        'icon-image': 'circle-dot',
-        'icon-size': 0.5,
-        'icon-allow-overlap': true,
-      },
-      paint: {
-        'icon-opacity': 0.6,
-      },
-    });
-
     // Add click handler
     this.map.on('click', LAYER_ID, this.handleClick.bind(this));
 
@@ -143,7 +125,7 @@ export class RouteLineLayer extends BaseLayer<MapFeatureCollection<RouteLineProp
 
     this.map.off('click', LAYER_ID, this.handleClick.bind(this));
 
-    const layers = [`${LAYER_ID}-dots`, LAYER_ID, `${LAYER_ID}-casing`];
+    const layers = [LAYER_ID, `${LAYER_ID}-casing`];
     for (const layerId of layers) {
       if (this.map.getLayer(layerId)) {
         this.map.removeLayer(layerId);
@@ -159,7 +141,7 @@ export class RouteLineLayer extends BaseLayer<MapFeatureCollection<RouteLineProp
     if (!this.map) return;
 
     const visibility = visible ? 'visible' : 'none';
-    const layers = [`${LAYER_ID}-casing`, LAYER_ID, `${LAYER_ID}-dots`];
+    const layers = [`${LAYER_ID}-casing`, LAYER_ID];
 
     for (const layerId of layers) {
       if (this.map.getLayer(layerId)) {

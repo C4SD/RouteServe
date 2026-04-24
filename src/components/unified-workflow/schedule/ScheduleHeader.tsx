@@ -42,6 +42,8 @@ interface ScheduleHeaderProps {
   warehouses: Array<{ id: string; name: string }>;
   facilities?: Array<{ id: string; name: string }>;
   className?: string;
+  /** When true, the start location is auto-set from the service policy and shown as read-only */
+  startLocationAutoSet?: boolean;
 }
 
 export function ScheduleHeader({
@@ -57,6 +59,7 @@ export function ScheduleHeader({
   warehouses,
   facilities = [],
   className,
+  startLocationAutoSet = false,
 }: ScheduleHeaderProps) {
   const [locationTab, setLocationTab] = React.useState<StartLocationType>(startLocationType);
 
@@ -94,42 +97,56 @@ export function ScheduleHeader({
 
         {/* Start Location */}
         <div className="md:col-span-1">
-          <Label className="text-xs font-medium">Start Location</Label>
-          <div className="flex gap-2 mt-1">
-            <div className="flex rounded-md border overflow-hidden">
-              <Button
-                type="button"
-                variant={locationTab === 'warehouse' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="rounded-none h-9 px-2"
-                onClick={() => setLocationTab('warehouse')}
-              >
-                <Building2 className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant={locationTab === 'facility' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="rounded-none h-9 px-2"
-                onClick={() => setLocationTab('facility')}
-                disabled={facilities.length === 0}
-              >
-                <MapPin className="h-3.5 w-3.5" />
-              </Button>
+          <Label className="text-xs font-medium flex items-center gap-1.5">
+            Start Location
+            {startLocationAutoSet && (
+              <span className="text-xs font-normal text-muted-foreground">(from policy)</span>
+            )}
+          </Label>
+          {startLocationAutoSet ? (
+            <div className="flex items-center gap-2 mt-1 h-9 px-3 rounded-md border bg-muted/50 text-sm">
+              <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="truncate">
+                {warehouses.find((w) => w.id === startLocationId)?.name ?? 'Warehouse from policy'}
+              </span>
             </div>
-            <Select value={startLocationId || ''} onValueChange={handleLocationChange}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder={`Select ${locationTab}...`} />
-              </SelectTrigger>
-              <SelectContent>
-                {locationOptions.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          ) : (
+            <div className="flex gap-2 mt-1">
+              <div className="flex rounded-md border overflow-hidden">
+                <Button
+                  type="button"
+                  variant={locationTab === 'warehouse' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="rounded-none h-9 px-2"
+                  onClick={() => setLocationTab('warehouse')}
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant={locationTab === 'facility' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="rounded-none h-9 px-2"
+                  onClick={() => setLocationTab('facility')}
+                  disabled={facilities.length === 0}
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <Select value={startLocationId || ''} onValueChange={handleLocationChange}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder={`Select ${locationTab}...`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {locationOptions.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Planned Date */}

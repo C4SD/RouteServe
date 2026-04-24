@@ -82,13 +82,11 @@ export default function ProfileCompletionPage() {
         }
       }
 
-      // Update profile
+      // Update profile fields
       const profileUpdate: Record<string, unknown> = {
         full_name: fullName.trim(),
         phone: phone.trim() || null,
         onboarding_completed: true,
-        user_status: 'active',
-        activated_at: new Date().toISOString(),
       };
       if (avatarUrl) {
         profileUpdate.avatar_url = avatarUrl;
@@ -100,6 +98,22 @@ export default function ProfileCompletionPage() {
         .eq('id', user.id);
 
       if (profileError) throw profileError;
+
+      // Advance status through the state machine: registered → role_assigned → active.
+      // Users who accepted an invitation before the migration fix may still be at
+      // 'registered'; the conditional UPDATE is a no-op for anyone already past it.
+      await supabase
+        .from('profiles')
+        .update({ user_status: 'role_assigned' })
+        .eq('id', user.id)
+        .eq('user_status', 'registered');
+
+      const { error: activateError } = await supabase
+        .from('profiles')
+        .update({ user_status: 'active', activated_at: new Date().toISOString() })
+        .eq('id', user.id);
+
+      if (activateError) throw activateError;
 
       // Update auth user metadata
       await supabase.auth.updateUser({

@@ -23,9 +23,11 @@ import type {
   SlotAssignment,
   SlotAssignmentMap,
   ParsedFacility,
+  PolicyContext,
 } from '@/types/unified-workflow';
 import type { TimeWindow, Priority, RoutePoint } from '@/types/scheduler';
 import { calculateDistance, calculateRouteDistance } from '@/lib/routeOptimization';
+import { getRoadRoute } from '@/lib/geoapify';
 
 // =====================================================
 // HELPER FUNCTIONS
@@ -136,6 +138,7 @@ const initialState: UnifiedWorkflowState = {
 
   // Step 4: Route
   optimized_route: [],
+  route_geometry: null,
   total_distance_km: null,
   estimated_duration_min: null,
 
@@ -146,6 +149,9 @@ const initialState: UnifiedWorkflowState = {
   // File Upload
   uploaded_file: null,
   parsed_facilities: null,
+
+  // Policy Context
+  policy_context: null,
 };
 
 // =====================================================
@@ -376,6 +382,14 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         },
 
         // =====================================================
+        // STEP 2: POLICY CONTEXT
+        // =====================================================
+
+        setPolicyContext: (context: PolicyContext | null) => {
+          set({ policy_context: context }, false, 'unified/setPolicyContext');
+        },
+
+        // =====================================================
         // STEP 2 -> PRE-BATCH OPERATIONS
         // =====================================================
 
@@ -594,34 +608,42 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             sequence: idx + 1,
           }));
 
-          // Calculate total distance
-          let totalDistance = 0;
-          const routeCoordinates: [number, number][] = [];
-
-          // Start from warehouse if available
+          // Build ordered waypoints for road routing
+          const waypoints: Array<{ lat: number; lng: number }> = [];
           if (startLocation?.lat && startLocation?.lng) {
-            routeCoordinates.push([startLocation.lat, startLocation.lng]);
+            waypoints.push({ lat: startLocation.lat, lng: startLocation.lng });
           }
+          optimizedFacilities.forEach((f) => waypoints.push({ lat: f.lat, lng: f.lng }));
 
-          // Add all facility coordinates
-          optimizedFacilities.forEach((f) => {
-            routeCoordinates.push([f.lat, f.lng]);
-          });
+          // Fetch actual road route
+          let roadGeometry: Array<[number, number]> | null = null;
+          let totalDistance = 0;
+          let estimatedDuration = 0;
 
-          // Calculate distance between consecutive points
-          if (routeCoordinates.length >= 2) {
-            totalDistance = calculateRouteDistance(routeCoordinates);
+          const roadResult = waypoints.length >= 2
+            ? await getRoadRoute(waypoints, ai_optimization_options.fastest_route ? 'balanced' : 'short')
+            : null;
+
+          if (roadResult) {
+            roadGeometry = roadResult.geometry;
+            totalDistance = roadResult.roadDistanceKm;
+            // Use road travel time + 20 min per stop + 15 min loading
+            const serviceTimeMin = optimizedFacilities.length * 20;
+            estimatedDuration = Math.round(roadResult.roadTimeMinutes + serviceTimeMin + 15);
+          } else {
+            // Fallback to straight-line calculation
+            const straightCoords: [number, number][] = waypoints.map(w => [w.lat, w.lng]);
+            if (straightCoords.length >= 2) {
+              totalDistance = calculateRouteDistance(straightCoords);
+            }
+            const travelTimeMin = (totalDistance / 40) * 60;
+            estimatedDuration = Math.round(travelTimeMin + optimizedFacilities.length * 20 + 15);
           }
-
-          // Estimate duration (40 km/h average + 20 min per stop)
-          const travelTimeMin = (totalDistance / 40) * 60;
-          const serviceTimeMin = optimizedFacilities.length * 20;
-          const loadingTimeMin = 15;
-          const estimatedDuration = Math.round(travelTimeMin + serviceTimeMin + loadingTimeMin);
 
           set(
             {
               optimized_route: route,
+              route_geometry: roadGeometry,
               total_distance_km: Math.round(totalDistance * 100) / 100,
               estimated_duration_min: estimatedDuration,
               is_loading: false,
@@ -685,15 +707,25 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               if (state.source_method === 'ready' && !state.source_sub_option) {
                 return false;
               }
+              // service_policy needs no sub-option — proceed directly
               return true;
 
-            case 2:
+            case 2: {
               // Step 2: Must have schedule details and working set
               const hasScheduleDetails =
                 state.schedule_title !== null &&
                 state.schedule_title.trim() !== '' &&
                 state.start_location_id !== null &&
                 state.planned_date !== null;
+
+              // For service_policy: also require cluster selection
+              if (state.source_method === 'service_policy') {
+                return (
+                  hasScheduleDetails &&
+                  state.policy_context !== null &&
+                  state.working_set.length > 0
+                );
+              }
 
               // For upload method, check parsed facilities AND working set
               if (state.source_method === 'upload') {
@@ -705,6 +737,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
 
               // For ready/manual, check working set
               return hasScheduleDetails && state.working_set.length > 0;
+            }
 
             case 3:
               // Step 3: Must have batch name and vehicle committed
@@ -750,6 +783,9 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               }
               if (!state.planned_date) {
                 errors.push('Planned date is required');
+              }
+              if (state.source_method === 'service_policy' && !state.policy_context) {
+                errors.push('Please select a service policy cluster');
               }
               if (state.working_set.length === 0) {
                 if (state.source_method === 'upload') {
@@ -900,21 +936,23 @@ export const useCanProceed = () =>
         }
         return true;
 
-      case 2:
+      case 2: {
         const hasScheduleDetails =
           state.schedule_title !== null &&
           state.schedule_title.trim() !== '' &&
           state.start_location_id !== null &&
           state.planned_date !== null;
 
-        if (state.source_method === 'upload') {
+        if (state.source_method === 'service_policy') {
           return (
             hasScheduleDetails &&
+            state.policy_context !== null &&
             state.working_set.length > 0
           );
         }
 
         return hasScheduleDetails && state.working_set.length > 0;
+      }
 
       case 3:
         return (
@@ -1023,6 +1061,7 @@ export const useWorkflowActions = () => {
       setUploadedFile: state.setUploadedFile,
       setParsedFacilities: state.setParsedFacilities,
       updateParsedFacility: state.updateParsedFacility,
+      setPolicyContext: state.setPolicyContext,
       savePreBatch: state.savePreBatch,
       loadPreBatch: state.loadPreBatch,
       // Step 3
