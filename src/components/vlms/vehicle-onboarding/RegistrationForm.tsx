@@ -3,7 +3,7 @@
  * Step 4: Enter vehicle registration and identification details
  */
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { ArrowRight, ArrowLeft, Satellite, Upload, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Satellite, Upload, X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useVehicleOnboardState } from '@/hooks/useVehicleOnboardState';
 import { useOnboardingFilesStore } from '@/stores/vlms/onboardingFilesStore';
+import { useNHTSAMakes, useNHTSAModels, useVINDecoder } from '@/hooks/useVehicleApiLookup';
 
 export function RegistrationForm() {
   const registrationData = useVehicleOnboardState((state) => state.registrationData);
@@ -23,6 +24,41 @@ export function RegistrationForm() {
   const goToNextStep = useVehicleOnboardState((state) => state.goToNextStep);
   const goToPreviousStep = useVehicleOnboardState((state) => state.goToPreviousStep);
   const canGoNext = useVehicleOnboardState((state) => state.canGoNext());
+
+  // Make / model autocomplete state
+  const [makeQuery, setMakeQuery] = useState(registrationData.make || '');
+  const [makeOpen, setMakeOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+
+  const { makes, isLoading: makesLoading } = useNHTSAMakes(makeQuery);
+  const { models, isLoading: modelsLoading } = useNHTSAModels(
+    registrationData.make,
+    registrationData.year,
+  );
+
+  // Keep makeQuery in sync when external state changes (e.g. VIN decode fills make)
+  useEffect(() => {
+    setMakeQuery(registrationData.make || '');
+  }, [registrationData.make]);
+
+  // VIN decode
+  const { decodeVin, isDecoding } = useVINDecoder();
+
+  const handleVinChange = async (vin: string) => {
+    handleChange('vin', vin.toUpperCase());
+    if (vin.length === 17) {
+      const info = await decodeVin(vin);
+      if (info) {
+        const updates: Record<string, any> = {};
+        if (info.make) updates.make = info.make;
+        if (info.model) updates.model = info.model;
+        if (info.year) updates.year = info.year;
+        if (info.fuel_type) updates.fuel_type = info.fuel_type;
+        if (info.engine_capacity) updates.engine_capacity = info.engine_capacity;
+        if (Object.keys(updates).length > 0) updateRegistrationData(updates);
+      }
+    }
+  };
 
   // File staging for documents and photos
   const {
@@ -81,30 +117,99 @@ export function RegistrationForm() {
           <h3 className="font-semibold">Basic Information</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Make — autocomplete from NHTSA */}
             <div className="space-y-2">
               <Label htmlFor="make">
                 Make <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="make"
-                placeholder="e.g., Toyota"
-                value={registrationData.make}
-                onChange={(e) => handleChange('make', e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="make"
+                  placeholder="e.g., Toyota"
+                  value={makeQuery}
+                  autoComplete="off"
+                  onChange={(e) => {
+                    setMakeQuery(e.target.value);
+                    handleChange('make', e.target.value);
+                    if (registrationData.model) handleChange('model', '');
+                    setMakeOpen(true);
+                  }}
+                  onFocus={() => setMakeOpen(true)}
+                  onBlur={() => setTimeout(() => setMakeOpen(false), 150)}
+                  required
+                />
+                {makesLoading && (
+                  <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                {makeOpen && makes.length > 0 && (
+                  <ul className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-md border bg-popover shadow-md text-sm">
+                    {makes.map((make) => (
+                      <li
+                        key={make}
+                        className="cursor-pointer px-3 py-2 hover:bg-accent hover:text-accent-foreground"
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // keep input focused so onBlur doesn't fire first
+                          handleChange('make', make);
+                          setMakeQuery(make);
+                          if (registrationData.model) handleChange('model', '');
+                          setMakeOpen(false);
+                        }}
+                      >
+                        {make}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
 
+            {/* Model — loaded from NHTSA once make is set */}
             <div className="space-y-2">
               <Label htmlFor="model">
                 Model <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="model"
-                placeholder="e.g., Hiace"
-                value={registrationData.model}
-                onChange={(e) => handleChange('model', e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="model"
+                  placeholder={registrationData.make ? 'e.g., Hiace' : 'Enter make first'}
+                  value={registrationData.model}
+                  autoComplete="off"
+                  onChange={(e) => {
+                    handleChange('model', e.target.value);
+                    setModelOpen(true);
+                  }}
+                  onFocus={() => setModelOpen(true)}
+                  onBlur={() => setTimeout(() => setModelOpen(false), 150)}
+                  required
+                />
+                {modelsLoading && (
+                  <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                {modelOpen && models.length > 0 && (
+                  <ul className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto rounded-md border bg-popover shadow-md text-sm">
+                    {models
+                      .filter(
+                        (m) =>
+                          !registrationData.model ||
+                          m.toLowerCase().includes(registrationData.model.toLowerCase()),
+                      )
+                      .slice(0, 20)
+                      .map((model) => (
+                        <li
+                          key={model}
+                          className="cursor-pointer px-3 py-2 hover:bg-accent hover:text-accent-foreground"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleChange('model', model);
+                            setModelOpen(false);
+                          }}
+                        >
+                          {model}
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -156,12 +261,18 @@ export function RegistrationForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="vin">VIN (Vehicle Identification Number)</Label>
+              <Label htmlFor="vin" className="flex items-center gap-1.5">
+                VIN (Vehicle Identification Number)
+                {isDecoding && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                {!isDecoding && registrationData.vin?.length === 17 && (
+                  <span className="text-xs text-muted-foreground font-normal">— auto-filled</span>
+                )}
+              </Label>
               <Input
                 id="vin"
                 placeholder="17-character VIN"
                 value={registrationData.vin || ''}
-                onChange={(e) => handleChange('vin', e.target.value.toUpperCase())}
+                onChange={(e) => handleVinChange(e.target.value)}
                 maxLength={17}
               />
             </div>
