@@ -2,7 +2,7 @@ project_id = "cenugzabuzglswikoewy"
 
 [auth.email.template.invite]
 subject = "You've been invited to BIKO"
-content_path = "./templates/invite.html"
+content_path = "./supabase/templates/invite.html"
 
 [functions.send-email-login-otp]
 verify_jwt = false
