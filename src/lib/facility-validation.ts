@@ -48,9 +48,12 @@ export const facilityFormSchema = z.object({
   // New 19 Data Points
   warehouse_code: warehouseCodeSchema,
   state: z.string().min(1, 'State is required').default('kano'),
-  ip_name: ipNameSchema.optional(),
-  funding_source: fundingSourceSchema.optional(),
-  programme: programmeSchema.optional(),
+  ip_name: ipNameSchema.optional(), // legacy — kept for compat
+  funding_source: fundingSourceSchema.optional(), // legacy
+  programme: programmeSchema.optional(), // legacy
+  ip_names: z.array(z.string()).optional().default([]),
+  funding_sources: z.array(z.string()).optional().default([]),
+  programmes: z.array(z.string()).optional().default([]),
   pcr_service: z.boolean().default(false),
   cd4_service: z.boolean().default(false),
   type_of_service: z.string().optional(),
@@ -155,9 +158,9 @@ export type CSVFacilityData = z.infer<typeof csvFacilitySchema>;
 export const facilityFilterSchema = z.object({
   search: z.string().optional(),
   state: z.string().optional(),
-  ip_name: z.string().optional(),
-  funding_source: z.string().optional(),
-  programme: z.string().optional(),
+  ip_name: z.string().optional(), // filters on ip_names array (contains)
+  funding_source: z.string().optional(), // filters on funding_sources array
+  programme: z.string().optional(), // filters on programmes array
   zone_id: z.string().optional(),
   service_zone: z.string().optional(),
   level_of_care: z.string().optional(),

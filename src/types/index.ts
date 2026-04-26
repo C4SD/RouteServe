@@ -25,9 +25,12 @@ export interface Facility {
   // New Data Points (19 total)
   warehouse_code: string; // Format: PSM/KAN/##/### (1)
   state: string; // Default: 'kano' (2)
-  ip_name?: IPName; // (3)
-  funding_source?: FundingSource; // (4)
-  programme?: Programme; // (5)
+  ip_name?: IPName; // (3) legacy single value — kept for backward compat
+  funding_source?: FundingSource; // (4) legacy single value
+  programme?: Programme; // (5) legacy single value
+  ip_names?: string[]; // (3) multiple implementing partners
+  funding_sources?: string[]; // (4) multiple funding sources
+  programmes?: string[]; // (5) multiple programme categories
   pcr_service: boolean; // (6)
   cd4_service: boolean; // (7)
   type_of_service?: string; // (8) - can be multiple, comma-separated

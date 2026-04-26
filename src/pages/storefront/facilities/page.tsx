@@ -82,7 +82,9 @@ export default function StorefrontFacilities() {
     lga: true,
     ward: true,
     level_of_care: true,
+    ip_name: true,
     programme: true,
+    funding_source: true,
     coordinates: true,
   });
 
@@ -697,6 +699,7 @@ export default function StorefrontFacilities() {
                   lga: 'LGA',
                   ward: 'Ward',
                   level_of_care: 'Level of Care',
+                  ip_name: 'IP Name',
                   programme: 'Programme',
                   funding_source: 'Funding Source',
                   service_zone: 'Service Zone',

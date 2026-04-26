@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, AlertCircle, AlertTriangle, Plus, Archive, Globe, Download, ChevronDown, X, Check, MapPin, RefreshCw } from 'lucide-react';
+import { Loader2, AlertCircle, AlertTriangle, Plus, Archive, Globe, Download, ChevronDown, X, Check, MapPin, RefreshCw, Lock, LockOpen } from 'lucide-react';
 import { COUNTRY_ADMIN_LEVELS, fetchStatesFromOverpass, saveBoundariesToDB } from '@/lib/overpass-boundaries';
 import { cn } from '@/lib/utils';
 import {
@@ -93,7 +93,7 @@ export default function SettingsGeneralPage() {
 
       const { data, error } = await supabase
         .from('workspaces')
-        .select('id, name, slug, description, settings, org_type')
+        .select('id, name, slug, description, settings, org_type, org_name')
         .eq('id', workspaceId)
         .single();
 
@@ -105,6 +105,7 @@ export default function SettingsGeneralPage() {
         description: string | null;
         settings: WorkspaceSettings | null;
         org_type: string | null;
+        org_name: string | null;
       };
     },
     enabled: !!workspaceId,
@@ -309,6 +310,8 @@ export default function SettingsGeneralPage() {
 
   // Form state
   const [name, setName] = useState('');
+  const [orgName, setOrgName] = useState('');
+  const [orgNameLocked, setOrgNameLocked] = useState(true);
   const [orgType, setOrgType] = useState<string | null>(null);
   const [settings, setSettings] = useState<WorkspaceSettings>({});
   const [hasChanges, setHasChanges] = useState(false);
@@ -316,8 +319,10 @@ export default function SettingsGeneralPage() {
   useEffect(() => {
     if (workspace) {
       setName(workspace.name || '');
+      setOrgName(workspace.org_name || workspace.name || '');
       setOrgType(workspace.org_type || null);
       setSettings(workspace.settings || {});
+      setOrgNameLocked(true);
     }
   }, [workspace]);
 
@@ -335,7 +340,8 @@ export default function SettingsGeneralPage() {
         p_name: name.trim(),
         p_org_type: orgType || null,
         p_settings: settingsToSave as Record<string, unknown>,
-      });
+        p_org_name: orgName.trim() || null,
+      } as any);
 
       if (error) {
         // Fallback to direct update if RPC not found or permission issue
@@ -344,6 +350,7 @@ export default function SettingsGeneralPage() {
           .from('workspaces')
           .update({
             name: name.trim(),
+            org_name: orgName.trim() || null,
             org_type: orgType || null,
             settings: settingsToSave as Record<string, unknown>,
             updated_at: new Date().toISOString(),
@@ -507,6 +514,8 @@ export default function SettingsGeneralPage() {
             variant="outline"
             onClick={() => {
               setName(workspace.name || '');
+              setOrgName(workspace.org_name || workspace.name || '');
+              setOrgNameLocked(true);
               setOrgType(workspace.org_type || null);
               setSettings(workspace.settings || {});
               setHasChanges(false);
@@ -537,7 +546,48 @@ export default function SettingsGeneralPage() {
       )}
 
       <div className="space-y-6">
-        {/* Section 1: Workspace Identity */}
+        {/* Section 1a: Organization Identity */}
+        <div className="border rounded-lg bg-card">
+          <div className="px-6 pt-1 pb-1">
+            <h2 className="text-base font-semibold pt-4 pb-2">Organization</h2>
+          </div>
+          <div className="px-6">
+            <SettingsSection
+              title="Organization name"
+              description="The legal or brand name of your organization. Only admins can change this."
+              showSeparator={false}
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  value={orgName}
+                  onChange={(e) => {
+                    setOrgName(e.target.value);
+                    setHasChanges(true);
+                  }}
+                  placeholder="Organization name"
+                  disabled={orgNameLocked || !isOwnerOrAdmin}
+                  className={cn('w-64', orgNameLocked && 'opacity-60')}
+                />
+                {isOwnerOrAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                    title={orgNameLocked ? 'Unlock to edit organization name' : 'Lock organization name'}
+                    onClick={() => setOrgNameLocked((v) => !v)}
+                  >
+                    {orgNameLocked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                  </Button>
+                )}
+                {!isOwnerOrAdmin && (
+                  <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
+              </div>
+            </SettingsSection>
+          </div>
+        </div>
+
+        {/* Section 1b: Workspace Identity */}
         <div className="border rounded-lg bg-card">
           <div className="px-6 pt-1 pb-1">
             <h2 className="text-base font-semibold pt-4 pb-2">Workspace Identity</h2>
@@ -570,7 +620,7 @@ export default function SettingsGeneralPage() {
             )}
             <SettingsSection
               title="Workspace name"
-              description="The display name for this workspace."
+              description="The name of this team workspace (e.g. Lisbon Team, Munich Team)."
             >
               <Input
                 value={name}
@@ -578,13 +628,14 @@ export default function SettingsGeneralPage() {
                   setName(e.target.value);
                   setHasChanges(true);
                 }}
-                placeholder="Workspace Name"
+                placeholder="e.g. Lisbon Team"
+                className="w-64"
               />
             </SettingsSection>
 
             <SettingsSection
-              title="State code"
-              description="URL-friendly identifier for this workspace."
+              title="Workspace ID"
+              description="Auto-generated URL-friendly identifier for this workspace."
             >
               <Badge variant="secondary" className="text-sm font-mono px-3 py-1">
                 {workspace.slug || '—'}
@@ -592,8 +643,8 @@ export default function SettingsGeneralPage() {
             </SettingsSection>
 
             <SettingsSection
-              title="Workspace type"
-              description="The organizational type of this workspace."
+              title="Organization type"
+              description="The organizational type."
             >
               <Select
                 value={orgType || ''}
