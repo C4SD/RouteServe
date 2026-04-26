@@ -2,6 +2,7 @@ import { Facility } from '@/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -69,6 +70,7 @@ export function FacilitiesTable({
             {visibleColumns.level_of_care && (
               <TableHead>Level of Care</TableHead>
             )}
+            {visibleColumns.ip_name && <TableHead>IP Name</TableHead>}
             {visibleColumns.programme && <TableHead>Programme</TableHead>}
             {visibleColumns.funding_source && (
               <TableHead>Funding Source</TableHead>
@@ -121,17 +123,20 @@ export function FacilitiesTable({
                   )}
                 </TableCell>
               )}
+              {visibleColumns.ip_name && (
+                <TableCell>
+                  <BadgeList values={facility.ip_names?.length ? facility.ip_names : facility.ip_name ? [facility.ip_name] : []} variant="outline" />
+                </TableCell>
+              )}
               {visibleColumns.programme && (
                 <TableCell>
-                  {facility.programme ? (
-                    <Badge variant="secondary">{facility.programme}</Badge>
-                  ) : (
-                    '-'
-                  )}
+                  <BadgeList values={facility.programmes?.length ? facility.programmes : facility.programme ? [facility.programme] : []} variant="secondary" />
                 </TableCell>
               )}
               {visibleColumns.funding_source && (
-                <TableCell>{facility.funding_source || '-'}</TableCell>
+                <TableCell>
+                  <BadgeList values={facility.funding_sources?.length ? facility.funding_sources : facility.funding_source ? [facility.funding_source] : []} />
+                </TableCell>
               )}
               {visibleColumns.service_zone && (
                 <TableCell>{facility.service_zone || '-'}</TableCell>
@@ -180,6 +185,25 @@ export function FacilitiesTable({
           ))}
         </TableBody>
       </Table>
+    </div>
+  );
+}
+
+function BadgeList({
+  values,
+  variant = 'secondary',
+}: {
+  values: string[];
+  variant?: React.ComponentProps<typeof Badge>['variant'];
+}) {
+  if (!values.length) return <span className="text-muted-foreground">-</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {values.map((v) => (
+        <Badge key={v} variant={variant} className="text-xs">
+          {v}
+        </Badge>
+      ))}
     </div>
   );
 }

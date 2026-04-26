@@ -36,6 +36,9 @@ function mapDbToFacility(dbFacility: any): Facility {
     ip_name: dbFacility.ip_name || undefined,
     funding_source: dbFacility.funding_source || undefined,
     programme: dbFacility.programme || undefined,
+    ip_names: dbFacility.ip_names || [],
+    funding_sources: dbFacility.funding_sources || [],
+    programmes: dbFacility.programmes || [],
     pcr_service: dbFacility.pcr_service || false,
     cd4_service: dbFacility.cd4_service || false,
     type_of_service: dbFacility.type_of_service || undefined,
@@ -78,6 +81,11 @@ function mapFacilityToDb(facility: Partial<Facility>, workspaceId?: string) {
     ip_name: facility.ip_name || null,
     funding_source: facility.funding_source || null,
     programme: facility.programme || null,
+    // Array fields — only included when explicitly provided so partial updates
+    // don't wipe existing values (undefined is ignored by the Supabase client)
+    ...(facility.ip_names !== undefined && { ip_names: facility.ip_names }),
+    ...(facility.funding_sources !== undefined && { funding_sources: facility.funding_sources }),
+    ...(facility.programmes !== undefined && { programmes: facility.programmes }),
     pcr_service: facility.pcr_service || false,
     cd4_service: facility.cd4_service || false,
     type_of_service: facility.type_of_service || null,
@@ -135,13 +143,13 @@ export function useFacilities(filters?: FacilityFilters, page?: number, pageSize
         query = query.eq('state', filters.state);
       }
       if (filters?.ip_name) {
-        query = query.eq('ip_name', filters.ip_name);
+        query = query.contains('ip_names', [filters.ip_name]);
       }
       if (filters?.funding_source) {
-        query = query.eq('funding_source', filters.funding_source);
+        query = query.contains('funding_sources', [filters.funding_source]);
       }
       if (filters?.programme) {
-        query = query.eq('programme', filters.programme);
+        query = query.contains('programmes', [filters.programme]);
       }
       if (filters?.zone_id) {
         query = query.eq('zone_id', filters.zone_id);

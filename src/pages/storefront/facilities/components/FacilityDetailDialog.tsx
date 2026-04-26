@@ -14,6 +14,7 @@ import { useFacilityServices, useFacilityDeliveries, useFacilityStock, useFacili
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { useAllFacilityRealtime } from '@/hooks/useFacilitiesRealtime';
+import { FacilityProgramsSection } from './FacilityProgramsSection';
 
 interface FacilityDetailDialogProps {
   facility: Facility;
@@ -58,9 +59,9 @@ export function FacilityDetailDialog({
                   {facility.level_of_care && (
                     <Badge variant="outline">{facility.level_of_care}</Badge>
                   )}
-                  {facility.programme && (
-                    <Badge variant="secondary">{facility.programme}</Badge>
-                  )}
+                  {(facility.programmes?.length ? facility.programmes : facility.programme ? [facility.programme] : []).map((p) => (
+                    <Badge key={p} variant="secondary">{p}</Badge>
+                  ))}
                   {facility.service_zone && (
                     <Badge>{facility.service_zone}</Badge>
                   )}
@@ -97,8 +98,9 @@ export function FacilityDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="programs">Programs</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="deliveries">Deliveries</TabsTrigger>
             <TabsTrigger value="stock">Stock</TabsTrigger>
@@ -140,9 +142,21 @@ export function FacilityDetailDialog({
               <div>
                 <h3 className="font-semibold mb-3">Program Information</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <InfoItem label="IP Name" value={facility.ip_name} />
-                  <InfoItem label="Funding Source" value={facility.funding_source} />
-                  <InfoItem label="Programme" value={facility.programme} />
+                  <BadgeInfoItem
+                    label="IP Name"
+                    values={facility.ip_names?.length ? facility.ip_names : facility.ip_name ? [facility.ip_name] : []}
+                    variant="outline"
+                  />
+                  <BadgeInfoItem
+                    label="Funding Source"
+                    values={facility.funding_sources?.length ? facility.funding_sources : facility.funding_source ? [facility.funding_source] : []}
+                    variant="secondary"
+                  />
+                  <BadgeInfoItem
+                    label="Programme"
+                    values={facility.programmes?.length ? facility.programmes : facility.programme ? [facility.programme] : []}
+                    variant="secondary"
+                  />
                   <InfoItem label="Service Zone" value={facility.service_zone} />
                   <InfoItem label="Level of Care" value={facility.level_of_care} />
                   <InfoItem label="Type of Service" value={facility.type_of_service} />
@@ -185,6 +199,10 @@ export function FacilityDetailDialog({
                   <InfoItem label="General Capacity" value={facility.capacity} />
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="programs" className="m-0">
+              <FacilityProgramsSection facility={facility} />
             </TabsContent>
 
             <TabsContent value="services" className="m-0">
@@ -323,6 +341,33 @@ function InfoItem({
       <div className={`${mono ? 'font-mono' : ''} ${valueClassName}`}>
         {value || '-'}
       </div>
+    </div>
+  );
+}
+
+function BadgeInfoItem({
+  label,
+  values,
+  variant = 'secondary',
+}: {
+  label: string;
+  values: string[];
+  variant?: React.ComponentProps<typeof Badge>['variant'];
+}) {
+  return (
+    <div>
+      <div className="text-sm text-muted-foreground mb-1">{label}</div>
+      {values.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {values.map((v) => (
+            <Badge key={v} variant={variant} className="text-xs">
+              {v}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <span className="text-muted-foreground">-</span>
+      )}
     </div>
   );
 }

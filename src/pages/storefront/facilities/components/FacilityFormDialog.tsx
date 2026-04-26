@@ -27,7 +27,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ChevronDown, X } from 'lucide-react';
 import { useCreateFacility, useUpdateFacility } from '@/hooks/useFacilities';
 import { useFacilityTypes } from '@/hooks/useFacilityTypes';
 import { useLevelsOfCare } from '@/hooks/useLevelsOfCare';
@@ -80,6 +87,9 @@ export function FacilityFormDialog({
       state: 'kano',
       pcr_service: false,
       cd4_service: false,
+      ip_names: [],
+      funding_sources: [],
+      programmes: [],
     },
   });
 
@@ -139,6 +149,9 @@ export function FacilityFormDialog({
         ip_name: facility.ip_name,
         funding_source: facility.funding_source,
         programme: facility.programme,
+        ip_names: facility.ip_names ?? [],
+        funding_sources: facility.funding_sources ?? [],
+        programmes: facility.programmes ?? [],
         pcr_service: facility.pcr_service,
         cd4_service: facility.cd4_service,
         type_of_service: facility.type_of_service,
@@ -518,70 +531,55 @@ export function FacilityFormDialog({
                 <AccordionTrigger>Program Information</AccordionTrigger>
                 <AccordionContent className="space-y-4 pt-4">
                   <div className="grid grid-cols-2 gap-4">
+                    {/* IP Name — multi-select */}
                     <FormField
                       control={form.control}
-                      name="ip_name"
+                      name="ip_names"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>IP Name</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select IP" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {implementingPartners.filter((ip) => ip.code).map((ip) => (
-                                <SelectItem key={ip.id} value={ip.code}>{ip.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <MultiSelect
+                            options={implementingPartners.filter((ip) => ip.code).map((ip) => ({ value: ip.code, label: ip.name }))}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                            placeholder="Select IPs"
+                          />
                           <FormMessage />
                         </FormItem>
                       )}
                     />
 
+                    {/* Funding Source — multi-select */}
                     <FormField
                       control={form.control}
-                      name="funding_source"
+                      name="funding_sources"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Funding Source</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select funding" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {fundingSources.filter((fs) => fs.code).map((fs) => (
-                                <SelectItem key={fs.id} value={fs.code}>{fs.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <MultiSelect
+                            options={fundingSources.filter((fs) => fs.code).map((fs) => ({ value: fs.code, label: fs.name }))}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                            placeholder="Select funding sources"
+                          />
                           <FormMessage />
                         </FormItem>
                       )}
                     />
 
+                    {/* Programme — multi-select */}
                     <FormField
                       control={form.control}
-                      name="programme"
+                      name="programmes"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Programme</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select programme" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {programmeCategories.filter((pc) => pc.name).map((pc) => (
-                                <SelectItem key={pc.id} value={pc.name}>{pc.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <MultiSelect
+                            options={programmeCategories.filter((pc) => pc.name).map((pc) => ({ value: pc.name, label: pc.name }))}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                            placeholder="Select programmes"
+                          />
                           <FormMessage />
                         </FormItem>
                       )}
@@ -800,5 +798,84 @@ export function FacilityFormDialog({
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MultiSelect — popover with checkboxes for selecting multiple values
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MultiSelectOption {
+  value: string;
+  label: string;
+}
+
+interface MultiSelectProps {
+  options: MultiSelectOption[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+}
+
+function MultiSelect({ options, selected, onChange, placeholder = 'Select...' }: MultiSelectProps) {
+  const [open, setOpen] = useState(false);
+
+  const toggle = (value: string) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter((v) => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  const remove = (value: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange(selected.filter((v) => v !== value));
+  };
+
+  const labelFor = (value: string) =>
+    options.find((o) => o.value === value)?.label ?? value;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex min-h-9 w-full flex-wrap items-center gap-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {selected.length === 0 ? (
+            <span className="text-muted-foreground">{placeholder}</span>
+          ) : (
+            selected.map((v) => (
+              <Badge key={v} variant="secondary" className="gap-1 pr-1">
+                {labelFor(v)}
+                <X className="h-3 w-3 cursor-pointer" onClick={(e) => remove(v, e)} />
+              </Badge>
+            ))
+          )}
+          <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2" align="start">
+        {options.length === 0 ? (
+          <p className="text-xs text-muted-foreground px-2 py-1">No options available</p>
+        ) : (
+          options.map((opt) => (
+            <div
+              key={opt.value}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer"
+              onClick={() => toggle(opt.value)}
+            >
+              <Checkbox
+                checked={selected.includes(opt.value)}
+                onCheckedChange={() => toggle(opt.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span className="text-sm">{opt.label}</span>
+            </div>
+          ))
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

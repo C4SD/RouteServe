@@ -32,15 +32,16 @@ interface ProgramFacilitiesSectionProps {
 export function ProgramFacilitiesSection({ program }: ProgramFacilitiesSectionProps) {
   const [isAddOpen, setIsAddOpen] = useState(false);
 
-  // Fetch facilities linked to this program (match on programme field)
-  const { data, isLoading } = useFacilities({ programme: program.code });
+  // Fetch facilities linked to this program (array containment on programmes[])
+  const { data, isLoading } = useFacilities({ programme: program.name });
   const facilities = data?.facilities || [];
 
   const updateFacility = useUpdateFacility();
 
   const handleRemove = (facility: Facility) => {
+    const updated = (facility.programmes ?? []).filter((p) => p !== program.name);
     updateFacility.mutate(
-      { id: facility.id, updates: { programme: undefined } },
+      { id: facility.id, updates: { programmes: updated } },
       {
         onSuccess: () => toast.success(`Removed ${facility.name} from ${program.name}`),
       }
@@ -166,13 +167,14 @@ function AddFacilitiesToProgramDialog({
     if (ids.length === 0) return;
 
     try {
+      const allFacilities = data?.facilities || [];
       await Promise.all(
-        ids.map((id) =>
-          updateFacility.mutateAsync({
-            id,
-            updates: { programme: program.code },
-          })
-        )
+        ids.map((id) => {
+          const facility = allFacilities.find((f) => f.id === id);
+          const current = facility?.programmes ?? [];
+          const updated = current.includes(program.name) ? current : [...current, program.name];
+          return updateFacility.mutateAsync({ id, updates: { programmes: updated } });
+        })
       );
       toast.success(`Added ${ids.length} facility(ies) to ${program.name}`);
       setSelected(new Set());
