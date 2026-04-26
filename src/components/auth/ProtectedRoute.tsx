@@ -40,13 +40,14 @@ export function ProtectedRoute({
       };
     },
     enabled: !!user && !isOnboardingRoute && !isProfileCompletionRoute && !isInviteRoute,
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000, // Onboarding status rarely changes — 5 min is safe
   });
 
   // Combined loading state
   const isLoading =
     loading ||
-    isLoadingWorkspaces ||
+    // Only block on workspace loading if we need permission checks (avoids waterfall for regular routes)
+    (!!permission && isLoadingWorkspaces) ||
     (!isOnboardingRoute && !isProfileCompletionRoute && !isInviteRoute && onboardingLoading) ||
     (!!permission && abilityLoading);
 

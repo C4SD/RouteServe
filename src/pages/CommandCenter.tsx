@@ -1,9 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, lazy, Suspense } from 'react';
 import { Facility, Warehouse, DeliveryBatch } from '@/types';
 import KPIMetrics from '@/components/dashboard/KPIMetrics';
 import FleetStatus from '@/components/dashboard/FleetStatus';
-import { DashboardMapLibre } from '@/components/map/DashboardMapLibre';
 import ActiveDeliveriesPanel from '@/components/delivery/ActiveDeliveriesPanel';
+
+const DashboardMapLibre = lazy(() =>
+  import('@/components/map/DashboardMapLibre').then(m => ({ default: m.DashboardMapLibre }))
+);
 import ActivityTimeline from '@/components/dashboard/ActivityTimeline';
 import BatchDetailsPanel from '@/components/delivery/BatchDetailsPanel';
 import { RefreshCw, Plus, Users } from 'lucide-react';
@@ -140,14 +143,16 @@ const CommandCenter = ({ facilities, warehouses, batches }: CommandCenterProps) 
 
           {/* RIGHT: Map + Details */}
           <div className="lg:col-span-2 space-y-4">
-            <DashboardMapLibre
-              facilities={facilities}
-              warehouses={warehouses}
-              batches={batches}
-              selectedBatchId={selectedBatchId}
-              onBatchClick={handleBatchClick}
-              className="rounded-lg overflow-hidden shadow-sm border border-border h-[500px]"
-            />
+            <Suspense fallback={<div className="rounded-lg border border-border h-[500px] bg-muted animate-pulse" />}>
+              <DashboardMapLibre
+                facilities={facilities}
+                warehouses={warehouses}
+                batches={batches}
+                selectedBatchId={selectedBatchId}
+                onBatchClick={handleBatchClick}
+                className="rounded-lg overflow-hidden shadow-sm border border-border h-[500px]"
+              />
+            </Suspense>
 
             {/* Batch Details Panel */}
             {selectedBatch && (
