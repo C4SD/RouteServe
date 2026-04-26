@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { MapFeatureCollection, RouteLineProperties, DriverStatus } from '@/types/live-map';
 
 /**
@@ -21,12 +22,16 @@ function mapBatchStatus(dbStatus: string): DriverStatus {
  * for the RouteLineLayer.
  */
 export function useMapRoutes(enabled = true) {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['map-routes'],
+    queryKey: ['map-routes', workspaceId],
+    enabled: enabled && !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('delivery_batches')
         .select('id, name, status, optimized_route, facility_ids, warehouse_id, driver_id')
+        .eq('workspace_id', workspaceId!)
         .in('status', ['assigned', 'in-progress'])
         .not('optimized_route', 'is', null);
 

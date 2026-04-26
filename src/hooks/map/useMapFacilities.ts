@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { MapFeatureCollection } from '@/types/live-map';
 import type { FacilityMarkerProperties } from '@/maps-v3/layers/FacilityMarkerLayer';
 
@@ -8,12 +9,16 @@ import type { FacilityMarkerProperties } from '@/maps-v3/layers/FacilityMarkerLa
  * for the FacilityMarkerLayer.
  */
 export function useMapFacilities() {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['map-facilities'],
+    queryKey: ['map-facilities', workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('facilities')
         .select('id, name, type, lat, lng, lga')
+        .eq('workspace_id', workspaceId!)
         .not('lat', 'is', null)
         .not('lng', 'is', null);
 

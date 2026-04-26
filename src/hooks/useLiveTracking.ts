@@ -11,6 +11,7 @@ import { useDriverGPS } from './useDriverGPS';
 import { useDriverEvents } from './useDriverEvents';
 import { useLiveMapStore } from '@/stores/liveMapStore';
 import { useRealtimeBatches } from './useRealtimeBatches';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type {
   LiveDriver,
   LiveVehicle,
@@ -32,7 +33,7 @@ interface UseLiveTrackingOptions {
 }
 
 // Fetch active delivery batches with driver status
-async function fetchActiveBatches() {
+async function fetchActiveBatches(workspaceId: string) {
   const { data, error } = await supabase
     .from('delivery_batches')
     .select(`
@@ -41,6 +42,7 @@ async function fetchActiveBatches() {
       vehicle:vehicles(id, plate_number, type, make, model, capacity),
       warehouse:warehouses(id, name, address, lat, lng)
     `)
+    .eq('workspace_id', workspaceId)
     .in('status', ['assigned', 'in-progress'])
     .order('created_at', { ascending: false });
 
@@ -49,10 +51,11 @@ async function fetchActiveBatches() {
 }
 
 // Fetch active drivers (available or busy, not offline)
-async function fetchActiveDrivers() {
+async function fetchActiveDrivers(workspaceId: string) {
   const { data, error } = await supabase
     .from('drivers')
     .select('*')
+    .eq('workspace_id', workspaceId)
     .in('status', ['available', 'busy']);
 
   if (error) throw error;
@@ -87,10 +90,11 @@ async function fetchActiveDriverPositions(): Promise<ActiveDriverPosition[]> {
 }
 
 // Fetch active vehicles (available or in-use, not in maintenance)
-async function fetchActiveVehicles() {
+async function fetchActiveVehicles(workspaceId: string) {
   const { data, error } = await supabase
     .from('vehicles')
     .select('*')
+    .eq('workspace_id', workspaceId)
     .in('status', ['available', 'in-use']);
 
   if (error) throw error;
@@ -98,10 +102,11 @@ async function fetchActiveVehicles() {
 }
 
 // Fetch all facilities with coordinates
-async function fetchFacilitiesForMap() {
+async function fetchFacilitiesForMap(workspaceId: string) {
   const { data, error } = await supabase
     .from('facilities')
     .select('id, name, lat, lng, type, lga')
+    .eq('workspace_id', workspaceId)
     .is('deleted_at', null)
     .not('lat', 'is', null)
     .not('lng', 'is', null);
@@ -111,10 +116,11 @@ async function fetchFacilitiesForMap() {
 }
 
 // Fetch all warehouses with coordinates
-async function fetchWarehousesForMap() {
+async function fetchWarehousesForMap(workspaceId: string) {
   const { data, error } = await supabase
     .from('warehouses')
     .select('id, name, code, lat, lng, is_active')
+    .eq('workspace_id', workspaceId)
     .not('lat', 'is', null)
     .not('lng', 'is', null);
 
@@ -123,10 +129,11 @@ async function fetchWarehousesForMap() {
 }
 
 // Fetch operational zones with region centers
-async function fetchZonesForMap() {
+async function fetchZonesForMap(workspaceId: string) {
   const { data, error } = await supabase
     .from('zones' as any)
     .select('id, name, code, region_center, is_active')
+    .eq('workspace_id', workspaceId)
     .not('region_center', 'is', null);
 
   if (error) throw error;
@@ -136,23 +143,26 @@ async function fetchZonesForMap() {
 export function useLiveTracking(options: UseLiveTrackingOptions = {}) {
   const { enabled = true } = options;
   const filters = useLiveMapStore((s) => s.filters);
+  const { workspaceId } = useWorkspace();
+
+  const isEnabled = enabled && !!workspaceId;
 
   // Real-time subscriptions
   useRealtimeBatches();
 
   // Fetch base data
   const batchesQuery = useQuery({
-    queryKey: ['delivery-batches', 'active'],
-    queryFn: fetchActiveBatches,
-    enabled,
+    queryKey: ['delivery-batches', 'active', workspaceId],
+    queryFn: () => fetchActiveBatches(workspaceId!),
+    enabled: isEnabled,
     refetchInterval: 30000,
     staleTime: 10000,
   });
 
   const driversQuery = useQuery({
-    queryKey: ['active-drivers'],
-    queryFn: fetchActiveDrivers,
-    enabled,
+    queryKey: ['active-drivers', workspaceId],
+    queryFn: () => fetchActiveDrivers(workspaceId!),
+    enabled: isEnabled,
     refetchInterval: 30000,
     staleTime: 10000,
   });
@@ -161,39 +171,39 @@ export function useLiveTracking(options: UseLiveTrackingOptions = {}) {
   const activeDriverPositionsQuery = useQuery({
     queryKey: ['active-driver-positions'],
     queryFn: fetchActiveDriverPositions,
-    enabled,
+    enabled: isEnabled,
     refetchInterval: 15000,
     staleTime: 5000,
   });
 
   const vehiclesQuery = useQuery({
-    queryKey: ['active-vehicles'],
-    queryFn: fetchActiveVehicles,
-    enabled,
+    queryKey: ['active-vehicles', workspaceId],
+    queryFn: () => fetchActiveVehicles(workspaceId!),
+    enabled: isEnabled,
     refetchInterval: 30000,
     staleTime: 10000,
   });
 
   const facilitiesQuery = useQuery({
-    queryKey: ['map-facilities'],
-    queryFn: fetchFacilitiesForMap,
-    enabled,
+    queryKey: ['map-facilities', workspaceId],
+    queryFn: () => fetchFacilitiesForMap(workspaceId!),
+    enabled: isEnabled,
     staleTime: 60000,
     gcTime: 300000,
   });
 
   const warehousesQuery = useQuery({
-    queryKey: ['map-warehouses'],
-    queryFn: fetchWarehousesForMap,
-    enabled,
+    queryKey: ['map-warehouses', workspaceId],
+    queryFn: () => fetchWarehousesForMap(workspaceId!),
+    enabled: isEnabled,
     staleTime: 60000,
     gcTime: 300000,
   });
 
   const zonesQuery = useQuery({
-    queryKey: ['map-zones'],
-    queryFn: fetchZonesForMap,
-    enabled,
+    queryKey: ['map-zones', workspaceId],
+    queryFn: () => fetchZonesForMap(workspaceId!),
+    enabled: isEnabled,
     staleTime: 60000,
     gcTime: 300000,
   });

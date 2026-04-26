@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { OperationalZone, LGA } from '@/types/zones';
 import type { ConflictInfo, ConflictMode, AssignedLgaMap } from '@/services/zoningService';
 import {
@@ -146,6 +147,7 @@ function normalizeToBoundaryFeatures(
 }
 
 export function useGeospatialZoning() {
+  const { workspaceId } = useWorkspace();
   const [state, setState] = useState<ZoningState>({
     selectedLgaIds: [],
     assignedMap: {},
@@ -217,7 +219,7 @@ export function useGeospatialZoning() {
       );
 
       // Load DB state
-      const { zones, assignedMap, lgas } = await loadZonesWithAssignments();
+      const { zones, assignedMap, lgas } = await loadZonesWithAssignments(workspaceId!);
 
       setState((s) => ({
         ...s,
@@ -241,7 +243,7 @@ export function useGeospatialZoning() {
 
   const refreshFromDb = useCallback(async () => {
     try {
-      const { zones, assignedMap, lgas } = await loadZonesWithAssignments();
+      const { zones, assignedMap, lgas } = await loadZonesWithAssignments(workspaceId!);
       setState((s) => ({ ...s, zones, assignedMap, lgas }));
     } catch (err) {
       setState((s) => ({

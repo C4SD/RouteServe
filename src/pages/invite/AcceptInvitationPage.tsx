@@ -51,7 +51,7 @@ export default function AcceptInvitationPage() {
           state: {
             fromInvitation: true,
             workspaceName: result.workspace_name,
-            roleCode: result.role_code,
+            appRole: result.role_code,
             workspaceRole: result.workspace_role,
           },
         });

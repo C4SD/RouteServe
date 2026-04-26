@@ -11,11 +11,15 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { FacilityCandidate } from '@/components/unified-workflow/schedule/SourceOfTruthColumn';
 
 export function useReadyConsignments() {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['ready-consignments'],
+    queryKey: ['ready-consignments', workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       // Fetch requisitions ready for dispatch with their packaging and facility data
       const { data: requisitions, error } = await supabase
@@ -38,6 +42,7 @@ export function useReadyConsignments() {
             total_volume_m3
           )
         `)
+        .eq('workspace_id', workspaceId!)
         .eq('status', 'ready_for_dispatch')
         .order('created_at', { ascending: false });
 

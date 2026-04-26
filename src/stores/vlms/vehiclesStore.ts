@@ -98,6 +98,8 @@ export const useVehiclesStore = create<VehiclesState>()(
         try {
           const { filters } = get();
           const tableName = getVehiclesTableName();
+          const workspaceId = localStorage.getItem('biko_active_workspace_id');
+          if (!workspaceId) throw new Error('No active workspace selected');
 
           // Type assertion for the table name
           // Cast to any to bypass Supabase's strict table name types
@@ -109,6 +111,7 @@ export const useVehiclesStore = create<VehiclesState>()(
           let query = supabase
             .from(table)
             .select('*', { count: 'exact' })
+            .eq('workspace_id', workspaceId)
             .order('created_at', { ascending: false }) as any;
 
           // Apply filters

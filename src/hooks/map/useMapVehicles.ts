@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { MapFeatureCollection, VehicleMarkerProperties } from '@/types/live-map';
 
 /**
@@ -9,8 +10,11 @@ import type { MapFeatureCollection, VehicleMarkerProperties } from '@/types/live
  * Vehicles get location from their currently assigned driver.
  */
 export function useMapVehicles(enabled = true) {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['map-vehicles'],
+    queryKey: ['map-vehicles', workspaceId],
+    enabled: enabled && !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vehicles')
@@ -21,6 +25,7 @@ export function useMapVehicles(enabled = true) {
             current_lat, current_lng, status
           )
         `)
+        .eq('workspace_id', workspaceId!)
         .not('current_driver_id', 'is', null);
 
       if (error) throw error;

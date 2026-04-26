@@ -276,12 +276,16 @@ export function useDeleteInvoice() {
 // ========================================
 
 export function useInvoicesStats() {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['invoices', 'stats'],
+    queryKey: ['invoices', 'stats', workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error, count } = await supabase
         .from('invoices')
-        .select('status, total_price', { count: 'exact' });
+        .select('status, total_price', { count: 'exact' })
+        .eq('workspace_id', workspaceId!);
 
       if (error) throw error;
 
@@ -332,12 +336,16 @@ export function useInvoiceByRequisitionId(requisitionId: string | undefined) {
 // ========================================
 
 export function useReadyRequisitions() {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['requisitions', 'ready'],
+    queryKey: ['requisitions', 'ready', workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data: requisitions, error } = await supabase
         .from('requisitions')
         .select('*')
+        .eq('workspace_id', workspaceId!)
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
 

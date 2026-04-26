@@ -29,9 +29,9 @@ export function zoneColor(zone: OperationalZone): string {
   return extractColor(zone);
 }
 
-export async function loadZonesWithAssignments(): Promise<ZonesWithAssignments> {
+export async function loadZonesWithAssignments(workspaceId: string): Promise<ZonesWithAssignments> {
   const [zonesRes, lgasRes] = await Promise.all([
-    supabase.from('zones').select('*').eq('is_active', true).order('name'),
+    supabase.from('zones').select('*').eq('workspace_id', workspaceId).eq('is_active', true).order('name'),
     supabase.from('lgas').select('*, zones(id, name, code)').order('name'),
   ]);
 

@@ -35,7 +35,8 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useItems, useItemsStats } from '@/hooks/useItems';
 import type { Item, ItemCategory, ItemFilters, ItemProgram } from '@/types/items';
-import { ITEM_CATEGORIES, ITEM_PROGRAMS } from '@/types/items';
+import { ITEM_CATEGORIES } from '@/types/items';
+import { useProgrammeCategories } from '@/hooks/useProgrammeCategories';
 import { ItemsTable } from './components/ItemsTable';
 import { ItemsCardView } from './components/ItemsCardView';
 import { ItemsListView } from './components/ItemsListView';
@@ -76,6 +77,7 @@ export default function ItemsPage() {
   // Data fetching
   const { data, isLoading } = useItems(activeFilters, page, pageSize);
   const { data: stats } = useItemsStats();
+  const { data: programmeCategories = [] } = useProgrammeCategories();
 
   const items = data?.items || [];
   const totalItems = data?.total || 0;
@@ -299,9 +301,9 @@ export default function ItemsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Programs</SelectItem>
-                {ITEM_PROGRAMS.map((program) => (
-                  <SelectItem key={program} value={program}>
-                    {program}
+                {programmeCategories.map((p) => (
+                  <SelectItem key={p.id} value={p.code}>
+                    {p.name}
                   </SelectItem>
                 ))}
               </SelectContent>

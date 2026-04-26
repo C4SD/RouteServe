@@ -12,7 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Loader2, Link2 } from 'lucide-react';
-import { useInviteUser } from '@/hooks/useInvitations';
+import { useInviteUser, buildMod4InvitationUrl } from '@/hooks/useInvitations';
+import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { toast } from 'sonner';
 
 interface LinkByEmailDialogProps {
   workspaceId: string;
@@ -23,6 +26,7 @@ interface LinkByEmailDialogProps {
 export function LinkByEmailDialog({ workspaceId, trigger, onSuccess }: LinkByEmailDialogProps) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
+  const { workspaceName } = useWorkspace();
 
   const inviteUser = useInviteUser();
 
@@ -37,6 +41,42 @@ export function LinkByEmailDialog({ workspaceId, trigger, onSuccess }: LinkByEma
         app_role: 'driver',
         workspace_role: 'member',
       });
+
+      // Fetch the invitation token to send the email
+      const { data: invitation } = await supabase
+        .from('pending_invitations_view')
+        .select('invitation_token')
+        .eq('workspace_id', workspaceId)
+        .eq('email', email.toLowerCase())
+        .order('invited_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (invitation?.invitation_token) {
+        const { error: emailError } = await supabase.functions.invoke('invite-user', {
+          body: {
+            email,
+            invitation_token: invitation.invitation_token,
+            workspace_name: workspaceName,
+            target_app: 'mod4',
+          },
+        });
+
+        if (emailError) {
+          const inviteUrl = buildMod4InvitationUrl(invitation.invitation_token);
+          toast.warning('Invitation created but email could not be sent', {
+            description: 'Copy the invitation link to share manually.',
+            action: {
+              label: 'Copy Link',
+              onClick: () => {
+                navigator.clipboard.writeText(inviteUrl);
+                toast.success('Link copied to clipboard');
+              },
+            },
+            duration: 10000,
+          });
+        }
+      }
 
       setEmail('');
       setOpen(false);

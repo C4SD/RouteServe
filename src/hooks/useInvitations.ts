@@ -369,9 +369,16 @@ export function getTimeUntilExpiry(expiresAt: string): string {
 }
 
 /**
- * Build invitation URL
+ * Build invitation URL (main Biko app)
  */
 export function buildInvitationUrl(token: string): string {
   const baseUrl = window.location.origin;
   return `${baseUrl}/invite/${token}`;
+}
+
+/**
+ * Build invitation URL for the MOD4 driver app
+ */
+export function buildMod4InvitationUrl(token: string): string {
+  return `https://driverbiko.netlify.app/invite/${token}`;
 }
