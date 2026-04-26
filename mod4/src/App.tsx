@@ -10,6 +10,7 @@ import { useAuthStore, initAuthListener } from "@/stores/authStore";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import ActivateAccount from "./pages/ActivateAccount";
+import AcceptInvite from "./pages/AcceptInvite";
 import RequestAccess from "./pages/RequestAccess";
 import Dashboard from "./pages/Dashboard";
 import RoutePage from "./pages/Route";
@@ -105,6 +106,7 @@ function AppContent() {
           isAuthenticated ? <Navigate to="/" replace /> : <Login />
         } />
         <Route path="/activate" element={<ActivateAccount />} />
+        <Route path="/invite/:token" element={<AcceptInvite />} />
         <Route path="/request-access" element={<RequestAccess />} />
         <Route path="/logout" element={<Logout />} />
         <Route path="/" element={

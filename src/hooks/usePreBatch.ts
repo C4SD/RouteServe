@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type {
   PreBatch,
   PreBatchWithRelations,
@@ -43,9 +44,10 @@ interface UsePreBatchesOptions {
 
 export function usePreBatches(options: UsePreBatchesOptions = {}) {
   const { filters, enabled = true } = options;
+  const { workspaceId } = useWorkspace();
 
   return useQuery({
-    queryKey: preBatchKeys.list(filters),
+    queryKey: [...preBatchKeys.list(filters), workspaceId],
     queryFn: async () => {
       // Note: start_location_id has no FK to warehouses (polymorphic column),
       // so we cannot use PostgREST embedded selects for it.
@@ -57,6 +59,7 @@ export function usePreBatches(options: UsePreBatchesOptions = {}) {
           suggested_vehicle:vehicles!suggested_vehicle_id(id, model, plate_number, capacity, max_weight),
           converted_batch:delivery_batches!converted_batch_id(id, name, status)
         `)
+        .eq('workspace_id', workspaceId!)
         .order('created_at', { ascending: false });
 
       // Apply filters
@@ -91,7 +94,7 @@ export function usePreBatches(options: UsePreBatchesOptions = {}) {
       if (error) throw error;
       return (data || []) as PreBatchWithRelations[];
     },
-    enabled,
+    enabled: enabled && !!workspaceId,
     staleTime: 1000 * 60, // 1 minute
   });
 }
@@ -137,24 +140,13 @@ export function usePreBatch(id: string | null, options: UsePreBatchOptions = {})
 export function useCreatePreBatch() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (payload: Omit<CreatePreBatchPayload, 'workspace_id' | 'created_by'>) => {
-      // Get the user's workspace (from workspace_members)
-      // The RLS policy requires the user to be a member of the workspace
-      const { data: membership, error: membershipError } = await supabase
-        .from('workspace_members')
-        .select('workspace_id')
-        .eq('user_id', user?.id)
-        .limit(1)
-        .single();
-
-      if (membershipError || !membership) {
-        console.error('Failed to fetch workspace membership:', membershipError);
-        throw new Error('You are not a member of any workspace. Please contact your administrator.');
+      if (!workspaceId) {
+        throw new Error('No active workspace. Please select a workspace and try again.');
       }
-
-      const workspaceId = membership.workspace_id;
 
       // Normalize UUIDs to ensure we send SQL NULL, not the string "null"
       const normalizeUUID = (value: string | null | undefined): string | null => {
@@ -472,12 +464,15 @@ export function useConvertPreBatchToBatch() {
 // =====================================================
 
 export function usePreBatchStats() {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: preBatchKeys.stats(),
+    queryKey: [...preBatchKeys.stats(), workspaceId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('scheduler_pre_batches')
-        .select('status');
+        .select('status')
+        .eq('workspace_id', workspaceId!);
 
       if (error) throw error;
 
@@ -497,6 +492,7 @@ export function usePreBatchStats() {
 
       return stats;
     },
+    enabled: !!workspaceId,
     staleTime: 1000 * 30, // 30 seconds
   });
 }

@@ -143,19 +143,11 @@ export default defineConfig(({ mode }) => ({
             return 'vendor';
           }
 
-          // Application code chunks by module
-          if (id.includes('src/pages/fleetops/vlms')) {
-            return 'pages-vlms';
-          }
-          if (id.includes('src/pages/storefront')) {
-            return 'pages-storefront';
-          }
-          if (id.includes('src/pages/admin')) {
-            return 'pages-admin';
-          }
-          if (id.includes('src/pages/mod4')) {
-            return 'pages-mod4';
-          }
+          // Map components — keep isolated to contain leaflet/maplibre side-effects
+          // NOTE: Do NOT add page chunks here. Page chunks create circular dependencies
+          // because Rollup places shared modules (UI components) in page chunks, causing
+          // AcceptInvitationPage and other routes to import from those chunks transitively
+          // loading components-map, which breaks with a TDZ error.
           if (id.includes('src/components/map') || id.includes('src/maps-v3')) {
             return 'components-map';
           }

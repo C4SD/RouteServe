@@ -38,6 +38,7 @@ import { useFacilities } from '@/hooks/useFacilities';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useCreateRequisition } from '@/hooks/useRequisitions';
 import { useItems } from '@/hooks/useItems';
+import { useProgrammeCategories } from '@/hooks/useProgrammeCategories';
 import { REQUISITION_PURPOSES, type RequisitionPurpose } from '@/types/requisitions';
 import type { Item } from '@/types/items';
 
@@ -189,6 +190,7 @@ export function ManualEntryForm({ onClose, onSuccess }: ManualEntryFormProps) {
   const { data: facilitiesData, isLoading: facilitiesLoading, error: facilitiesError } = useFacilities();
   const { data: warehousesData, isLoading: warehousesLoading, error: warehousesError } = useWarehouses();
   const { data: itemsData } = useItems();
+  const { data: programmeCategories = [] } = useProgrammeCategories();
   const createRequisition = useCreateRequisition();
 
   const dbItems = itemsData?.items || [];
@@ -412,10 +414,21 @@ export function ManualEntryForm({ onClose, onSuccess }: ManualEntryFormProps) {
               {/* Program */}
               <div className="space-y-2">
                 <Label>Program</Label>
-                <Input
-                  {...form.register('program')}
-                  placeholder="e.g., Family Planning, HIV/AIDS"
-                />
+                <Select
+                  value={form.watch('program') || ''}
+                  onValueChange={(value) => form.setValue('program', value || undefined)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select program" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {programmeCategories.map((p) => (
+                      <SelectItem key={p.id} value={p.code}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Received From / Issued To - conditional */}

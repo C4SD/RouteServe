@@ -62,6 +62,7 @@ const profileSchema = z.object({
 type AuthMode = 'login' | 'signup' | 'otp-login';
 type SignupStep = 'credentials' | 'profile' | 'complete';
 type OtpStep = 'email' | 'verify';
+type DriverLoginTab = 'otp' | 'password';
 
 interface FormData {
   email: string;
@@ -144,6 +145,10 @@ export default function Auth() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [otpValue, setOtpValue] = useState('');
   const [otpEmail, setOtpEmail] = useState('');
+  const [driverTab, setDriverTab] = useState<DriverLoginTab>('otp');
+  const [driverIdentifier, setDriverIdentifier] = useState('');
+  const [driverPassword, setDriverPassword] = useState('');
+  const [showDriverPassword, setShowDriverPassword] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     email: '',
@@ -986,92 +991,233 @@ export default function Auth() {
   // Detect whether input looks like a phone number
   const isPhoneInput = (value: string) => /^\+?\d[\d\s-]{6,}$/.test(value.trim());
 
-  // Render driver onboarding form (single email/phone + OTP form for /login route)
+  const handleDriverPasswordLogin = async () => {
+    const loginErrors: Record<string, string> = {};
+    if (!driverIdentifier) loginErrors.identifier = 'Please enter your phone number or email';
+    if (!driverPassword) loginErrors.driverPassword = 'Please enter your password';
+    if (Object.keys(loginErrors).length > 0) {
+      setErrors(loginErrors);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let loginEmail = driverIdentifier.trim();
+
+      // If identifier looks like a phone, resolve it to an email via the DB
+      if (isPhoneInput(loginEmail)) {
+        const { data: resolvedEmail, error: lookupError } = await supabase.rpc(
+          'lookup_driver_email',
+          { p_identifier: loginEmail }
+        );
+        if (lookupError || !resolvedEmail) {
+          setErrors({ identifier: 'No active driver account found for this phone number.' });
+          setLoading(false);
+          return;
+        }
+        loginEmail = resolvedEmail as string;
+      }
+
+      const { error } = await signIn(loginEmail, driverPassword);
+      if (error) {
+        if (error.message.toLowerCase().includes('invalid login')) {
+          toast.error('Login Failed', { description: 'Incorrect password. Use "Forgot password?" to reset.' });
+        } else {
+          toast.error('Login Failed', { description: error.message });
+        }
+      } else {
+        navigate('/mod4/driver', { replace: true });
+      }
+    } catch {
+      toast.error('An error occurred during login');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Render driver onboarding form (tabbed: OTP code | Password)
   const renderDriverOnboarding = () => (
     <div className="space-y-6">
+      {/* Header */}
       <div className="space-y-2">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center mb-4">
           <Shield className="w-6 h-6 text-white" />
         </div>
-        <h1 className="text-3xl font-semibold text-white">Driver Onboarding</h1>
-        <p className="text-zinc-400">Enter your email or phone number and the code from your dispatcher.</p>
+        <h1 className="text-3xl font-semibold text-white">Driver Login</h1>
+        <p className="text-zinc-400">Sign in to access your deliveries.</p>
       </div>
 
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="driver-identifier" className="text-zinc-300">
-            Email or Phone Number
-          </Label>
-          <div className="relative">
-            {isPhoneInput(otpEmail) ? (
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-            ) : (
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-            )}
-            <Input
-              id="driver-identifier"
-              type="text"
-              placeholder="email@example.com or +234 800 000 0000"
-              value={otpEmail}
-              onChange={(e) => {
-                setOtpEmail(e.target.value);
-                if (errors.email) {
-                  setErrors({});
-                }
-              }}
-              className={cn(
-                'h-12 pl-11 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-cyan-500 focus:ring-cyan-500/20',
-                errors.email && 'border-red-500'
+      {/* Tab switcher */}
+      <div className="flex rounded-lg bg-zinc-900 border border-zinc-800 p-1">
+        <button
+          onClick={() => { setDriverTab('otp'); setErrors({}); }}
+          className={cn(
+            'flex-1 py-2 text-sm font-medium rounded-md transition-colors',
+            driverTab === 'otp'
+              ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
+              : 'text-zinc-400 hover:text-zinc-200'
+          )}
+        >
+          Enter Code
+        </button>
+        <button
+          onClick={() => { setDriverTab('password'); setErrors({}); }}
+          className={cn(
+            'flex-1 py-2 text-sm font-medium rounded-md transition-colors',
+            driverTab === 'password'
+              ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
+              : 'text-zinc-400 hover:text-zinc-200'
+          )}
+        >
+          Password
+        </button>
+      </div>
+
+      {/* OTP tab */}
+      {driverTab === 'otp' && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="driver-otp-identifier" className="text-zinc-300">
+              Email or Phone Number
+            </Label>
+            <div className="relative">
+              {isPhoneInput(otpEmail) ? (
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              ) : (
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
               )}
-            />
+              <Input
+                id="driver-otp-identifier"
+                type="text"
+                placeholder="email@example.com or +234 800 000 0000"
+                value={otpEmail}
+                onChange={(e) => { setOtpEmail(e.target.value); if (errors.email) setErrors({}); }}
+                className={cn(
+                  'h-12 pl-11 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-cyan-500 focus:ring-cyan-500/20',
+                  errors.email && 'border-red-500'
+                )}
+              />
+            </div>
+            {errors.email && <p className="text-sm text-red-400">{errors.email}</p>}
           </div>
-          {errors.email && <p className="text-sm text-red-400">{errors.email}</p>}
-        </div>
 
-        <div className="space-y-2">
-          <Label className="text-zinc-300">Onboarding Code</Label>
-          <div className="flex justify-center">
-            <InputOTP
-              maxLength={6}
-              value={otpValue}
-              onChange={(value) => setOtpValue(value)}
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Onboarding Code</Label>
+            <div className="flex justify-center">
+              <InputOTP maxLength={6} value={otpValue} onChange={(value) => setOtpValue(value)}>
+                <InputOTPGroup>
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <InputOTPSlot key={i} index={i} className="w-12 h-12 text-lg bg-zinc-900 border-zinc-800 text-white" />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleOtpVerify}
+            disabled={loading || otpValue.length !== 6 || !otpEmail}
+            className="w-full h-12 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium disabled:opacity-50"
+          >
+            {loading ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Registering...</> : <>Register Device<ArrowRight className="w-5 h-5 ml-2" /></>}
+          </Button>
+
+          <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <p className="text-sm text-blue-300">
+              <strong>First time?</strong> Enter the 6-digit onboarding code provided by your dispatcher.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Password tab */}
+      {driverTab === 'password' && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="driver-pw-identifier" className="text-zinc-300">
+              Phone Number or Email
+            </Label>
+            <div className="relative">
+              {isPhoneInput(driverIdentifier) ? (
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              ) : (
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              )}
+              <Input
+                id="driver-pw-identifier"
+                type="text"
+                placeholder="+234 800 000 0000 or email@example.com"
+                value={driverIdentifier}
+                onChange={(e) => { setDriverIdentifier(e.target.value); if (errors.identifier) setErrors({}); }}
+                className={cn(
+                  'h-12 pl-11 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-cyan-500 focus:ring-cyan-500/20',
+                  errors.identifier && 'border-red-500'
+                )}
+              />
+            </div>
+            {errors.identifier && <p className="text-sm text-red-400">{errors.identifier}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="driver-pw-password" className="text-zinc-300">Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              <Input
+                id="driver-pw-password"
+                type={showDriverPassword ? 'text' : 'password'}
+                placeholder="Your password"
+                value={driverPassword}
+                onChange={(e) => { setDriverPassword(e.target.value); if (errors.driverPassword) setErrors({}); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleDriverPasswordLogin(); }}
+                className={cn(
+                  'h-12 pl-11 pr-11 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-cyan-500 focus:ring-cyan-500/20',
+                  errors.driverPassword && 'border-red-500'
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowDriverPassword(!showDriverPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              >
+                {showDriverPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            {errors.driverPassword && <p className="text-sm text-red-400">{errors.driverPassword}</p>}
+          </div>
+
+          <Button
+            onClick={handleDriverPasswordLogin}
+            disabled={loading || !driverIdentifier || !driverPassword}
+            className="w-full h-12 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium disabled:opacity-50"
+          >
+            {loading ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Signing in...</> : <>Sign In<ArrowRight className="w-5 h-5 ml-2" /></>}
+          </Button>
+
+          <p className="text-center text-sm text-zinc-500">
+            No password yet?{' '}
+            <button
+              type="button"
+              onClick={async () => {
+                if (!driverIdentifier) {
+                  setErrors({ identifier: 'Enter your email or phone number first' });
+                  return;
+                }
+                let email = driverIdentifier.trim();
+                if (isPhoneInput(email)) {
+                  const { data } = await supabase.rpc('lookup_driver_email', { p_identifier: email });
+                  if (!data) { setErrors({ identifier: 'No account found for this phone number.' }); return; }
+                  email = data as string;
+                }
+                await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth?reset=true` });
+                toast.success('Password reset email sent', { description: `Check ${email} for a reset link.` });
+              }}
+              className="text-cyan-400 hover:text-cyan-300 font-medium"
             >
-              <InputOTPGroup>
-                <InputOTPSlot index={0} className="w-12 h-12 text-lg bg-zinc-900 border-zinc-800 text-white" />
-                <InputOTPSlot index={1} className="w-12 h-12 text-lg bg-zinc-900 border-zinc-800 text-white" />
-                <InputOTPSlot index={2} className="w-12 h-12 text-lg bg-zinc-900 border-zinc-800 text-white" />
-                <InputOTPSlot index={3} className="w-12 h-12 text-lg bg-zinc-900 border-zinc-800 text-white" />
-                <InputOTPSlot index={4} className="w-12 h-12 text-lg bg-zinc-900 border-zinc-800 text-white" />
-                <InputOTPSlot index={5} className="w-12 h-12 text-lg bg-zinc-900 border-zinc-800 text-white" />
-              </InputOTPGroup>
-            </InputOTP>
-          </div>
+              Set a password
+            </button>
+          </p>
         </div>
-      </div>
-
-      <Button
-        onClick={handleOtpVerify}
-        disabled={loading || otpValue.length !== 6 || !otpEmail}
-        className="w-full h-12 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium disabled:opacity-50"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            Registering device...
-          </>
-        ) : (
-          <>
-            Register Device
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </>
-        )}
-      </Button>
-
-      <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-        <p className="text-sm text-blue-300">
-          <strong>Driver Access Only:</strong> Enter the 6-digit onboarding code provided by your dispatcher or admin.
-        </p>
-      </div>
+      )}
     </div>
   );
 

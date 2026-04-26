@@ -64,7 +64,7 @@ const DAYS_OF_WEEK = [
 export default function SettingsGeneralPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { workspaceId, workspaceName, role, archiveWorkspace } = useWorkspace();
+  const { workspaceId, workspaceName, role, archiveWorkspace, workspaces, switchWorkspace } = useWorkspace();
   const { can } = useAbilityContext();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -543,6 +543,31 @@ export default function SettingsGeneralPage() {
             <h2 className="text-base font-semibold pt-4 pb-2">Workspace Identity</h2>
           </div>
           <div className="px-6">
+            {workspaces.length >= 2 && (
+              <SettingsSection
+                title="Active workspace"
+                description="You are editing settings for this workspace."
+              >
+                <Select
+                  value={workspaceId ?? ''}
+                  onValueChange={(id) => { if (id !== workspaceId) switchWorkspace(id); }}
+                >
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Select workspace..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workspaces.map((ws) => (
+                      <SelectItem key={ws.workspace_id} value={ws.workspace_id}>
+                        <span className="flex items-center gap-2">
+                          {ws.name}
+                          <span className="text-xs text-muted-foreground capitalize">({ws.role_code.replace(/_/g, ' ')})</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingsSection>
+            )}
             <SettingsSection
               title="Workspace name"
               description="The display name for this workspace."

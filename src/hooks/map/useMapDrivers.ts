@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { MapFeatureCollection, DriverMarkerProperties, DriverStatus } from '@/types/live-map';
 
 /**
@@ -21,12 +22,16 @@ function mapDriverStatus(dbStatus: string): DriverStatus {
  * Polls every 30 seconds for near-real-time updates.
  */
 export function useMapDrivers(enabled = true) {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['map-drivers'],
+    queryKey: ['map-drivers', workspaceId],
+    enabled: enabled && !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('drivers')
         .select('id, name, phone, status, current_lat, current_lng')
+        .eq('workspace_id', workspaceId!)
         .not('current_lat', 'is', null)
         .not('current_lng', 'is', null);
 

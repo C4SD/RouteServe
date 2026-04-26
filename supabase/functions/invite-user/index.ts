@@ -37,7 +37,7 @@ serve(async (req) => {
       );
     }
 
-    const { email, invitation_token, workspace_name } = await req.json();
+    const { email, invitation_token, workspace_name, target_app } = await req.json();
 
     if (!email || !invitation_token) {
       return new Response(
@@ -46,9 +46,10 @@ serve(async (req) => {
       );
     }
 
-    // Determine the redirect URL based on the request origin
-    const origin = req.headers.get('origin') || 'https://appbiko.netlify.app';
-    const redirectTo = `${origin}/invite/${invitation_token}`;
+    const appUrl = target_app === 'mod4'
+      ? (Deno.env.get('MOD4_URL') ?? 'https://driverbiko.netlify.app')
+      : (Deno.env.get('APP_URL') ?? 'https://appbiko.netlify.app');
+    const redirectTo = `${appUrl}/invite/${invitation_token}`;
 
     // Use Supabase's built-in invite which creates the user and sends a magic link email
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {

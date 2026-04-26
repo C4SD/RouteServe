@@ -8,12 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Search,
-  Link2,
   Clock,
-  Users,
   UserPlus,
   Activity,
   CheckCircle2,
+  Mail,
+  Send,
+  RotateCcw,
 } from 'lucide-react';
 import {
   IntegrationCard,
@@ -26,6 +27,8 @@ import {
 } from '@/components/admin/integration';
 import { useLinkedUsers, usePendingOTPs } from '@/hooks/admin/useIntegration';
 import { useOnboardingRequests } from '@/hooks/admin/useOnboardingRequests';
+import { useWorkspaceInvitations, useResendInvitation, buildMod4InvitationUrl } from '@/hooks/useInvitations';
+import type { UserInvitation } from '@/types/onboarding';
 import { AVAILABLE_INTEGRATIONS, INTEGRATION_CATEGORIES } from '@/data/integrations';
 import { Integration, IntegrationType, IntegrationConfig } from '@/types/integration';
 import { toast } from 'sonner';
@@ -60,6 +63,8 @@ export default function AdminIntegrationPage() {
   const { data: links = [] } = useLinkedUsers(workspaceId);
   const { data: pendingOTPs = [] } = usePendingOTPs(workspaceId);
   const { data: requests = [] } = useOnboardingRequests();
+  const { data: invitations = [], refetch: refetchInvitations } = useWorkspaceInvitations(workspaceId);
+  const resendInvitation = useResendInvitation();
 
   // Mock active integrations (in real app, fetch from database)
   const activeIntegrations: Integration[] = [
@@ -78,6 +83,7 @@ export default function AdminIntegrationPage() {
 
   const activeLinks = links.filter((l) => l.status === 'active').length;
   const pendingRequests = requests.filter((r) => r.status === 'pending').length;
+  const pendingInvitations = invitations.filter((i) => i.status === 'pending').length;
 
   // Filter integrations
   const filteredIntegrations = AVAILABLE_INTEGRATIONS.filter((integration) => {
@@ -186,11 +192,11 @@ export default function AdminIntegrationPage() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-lg bg-purple-500/10">
-                <UserPlus className="h-5 w-5 text-purple-600" />
+                <Send className="h-5 w-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Pending Requests</p>
-                <p className="text-2xl font-bold">{pendingRequests}</p>
+                <p className="text-sm text-muted-foreground">Pending Invites</p>
+                <p className="text-2xl font-bold">{pendingInvitations}</p>
               </div>
             </div>
           </CardContent>
@@ -211,9 +217,9 @@ export default function AdminIntegrationPage() {
           </TabsTrigger>
           <TabsTrigger value="mod4">
             Mod4 Setup
-            {(pendingRequests > 0 || pendingOTPs.length > 0) && (
+            {(pendingRequests > 0 || pendingOTPs.length > 0 || pendingInvitations > 0) && (
               <Badge variant="secondary" className="ml-2 bg-amber-500/10 text-amber-600">
-                {pendingRequests + pendingOTPs.length}
+                {pendingRequests + pendingOTPs.length + pendingInvitations}
               </Badge>
             )}
           </TabsTrigger>
@@ -316,6 +322,104 @@ export default function AdminIntegrationPage() {
               </>
             )}
           </div>
+
+          {/* Pending Invitations */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium">Sent Invitations</h3>
+                {pendingInvitations > 0 && (
+                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-600">
+                    {pendingInvitations} pending
+                  </Badge>
+                )}
+              </div>
+              {invitations.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Mail className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No invitations sent yet. Use "Link by Email" above to invite drivers.</p>
+                </div>
+              ) : (
+                <div className="border rounded-lg bg-card divide-y">
+                  {invitations.map((inv: UserInvitation) => {
+                    const isExpired = inv.status === 'pending' && new Date(inv.expires_at) < new Date();
+                    const effectiveStatus = isExpired ? 'expired' : inv.status;
+
+                    return (
+                      <div key={inv.id} className="flex items-center justify-between p-4 gap-4">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{inv.email}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Invited {new Date(inv.invited_at).toLocaleDateString()}
+                            {inv.accepted_at && ` · Accepted ${new Date(inv.accepted_at).toLocaleDateString()}`}
+                            {effectiveStatus === 'expired' && ` · Expired ${new Date(inv.expires_at).toLocaleDateString()}`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {effectiveStatus === 'pending' && (
+                            <Badge variant="secondary" className="bg-amber-500/10 text-amber-600">
+                              Pending
+                            </Badge>
+                          )}
+                          {effectiveStatus === 'accepted' && (
+                            <Badge variant="secondary" className="bg-green-500/10 text-green-600">
+                              Accepted
+                            </Badge>
+                          )}
+                          {effectiveStatus === 'expired' && (
+                            <Badge variant="secondary" className="bg-red-500/10 text-red-600">
+                              Expired
+                            </Badge>
+                          )}
+                          {effectiveStatus === 'revoked' && (
+                            <Badge variant="secondary" className="bg-gray-500/10 text-gray-500">
+                              Revoked
+                            </Badge>
+                          )}
+                          {(effectiveStatus === 'expired' || effectiveStatus === 'revoked') && workspaceId && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              disabled={resendInvitation.isPending}
+                              onClick={() =>
+                                resendInvitation.mutate(
+                                  {
+                                    invitationId: inv.id,
+                                    workspaceId,
+                                    email: inv.email,
+                                    appRole: inv.role_code,
+                                    workspaceRole: inv.workspace_role as any,
+                                  },
+                                  { onSuccess: () => refetchInvitations() }
+                                )
+                              }
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Resend
+                            </Button>
+                          )}
+                          {effectiveStatus === 'pending' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                navigator.clipboard.writeText(buildMod4InvitationUrl(inv.invitation_token));
+                                toast.success('Link copied');
+                              }}
+                            >
+                              Copy Link
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Linked Users Table */}
           <Card>
