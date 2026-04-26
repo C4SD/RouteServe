@@ -31,7 +31,7 @@ export function HandoffsLayer({
       if (error) throw error;
       return data;
     },
-    refetchInterval: 10000,
+    refetchInterval: 60000,
   });
 
   return (

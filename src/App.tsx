@@ -1,5 +1,4 @@
 import React, { useEffect, lazy, Suspense, ReactNode } from "react";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { Toaster } from "@/components/ui/sonner";
 import { Toaster as RadixToaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";

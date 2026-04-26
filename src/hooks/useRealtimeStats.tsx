@@ -12,40 +12,25 @@ export function useRealtimeStats() {
   return useQuery({
     queryKey: ['realtime-stats'],
     queryFn: async (): Promise<RealtimeStats> => {
-      // Count active vehicles (with current driver or in active batches)
-      const { count: activeVehicles } = await supabase
-        .from('vehicles')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'in-use');
-
-      // Count in-progress deliveries
-      const { count: inProgressDeliveries } = await supabase
-        .from('route_history')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'in-progress');
-
-      // Count completed deliveries today
+      // Run all 4 counts in parallel — one round trip instead of four sequential
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const { count: completedDeliveries } = await supabase
-        .from('route_history')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'delivered')
-        .gte('actual_arrival', today.toISOString());
 
-      // Count active alerts
-      const { count: activeAlerts } = await supabase
-        .from('zone_alerts')
-        .select('*', { count: 'exact', head: true })
-        .eq('acknowledged', false);
+      const [vehicles, inProgress, completed, alerts] = await Promise.all([
+        supabase.from('vehicles').select('*', { count: 'exact', head: true }).eq('status', 'in-use'),
+        supabase.from('route_history').select('*', { count: 'exact', head: true }).eq('status', 'in-progress'),
+        supabase.from('route_history').select('*', { count: 'exact', head: true }).eq('status', 'delivered').gte('actual_arrival', today.toISOString()),
+        supabase.from('zone_alerts').select('*', { count: 'exact', head: true }).eq('acknowledged', false),
+      ]);
 
       return {
-        activeVehicles: activeVehicles || 0,
-        inProgressDeliveries: inProgressDeliveries || 0,
-        completedDeliveries: completedDeliveries || 0,
-        activeAlerts: activeAlerts || 0,
+        activeVehicles: vehicles.count ?? 0,
+        inProgressDeliveries: inProgress.count ?? 0,
+        completedDeliveries: completed.count ?? 0,
+        activeAlerts: alerts.count ?? 0,
       };
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: 60000, // Reduced from 10s to 60s — stats don't need second-by-second precision
+    staleTime: 30000,
   });
 }
