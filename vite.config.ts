@@ -106,7 +106,13 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom"],
   },
+  esbuild: {
+    // Strip console.log and debugger in production for smaller bundles and security
+    drop: mode === 'production' ? ['console', 'debugger'] : [],
+  },
   build: {
+    // Target modern browsers (ES2020) to avoid transpiling to older, bulkier ES5 code
+    target: 'es2020',
     rollupOptions: {
       output: {
         manualChunks: (id) => {
@@ -165,18 +171,6 @@ export default defineConfig(({ mode }) => ({
             if (id.includes('zustand') || id.includes('@tanstack') || id.includes('@dnd-kit')) {
               return 'vendor-state';
             }
-
-            // Everything else
-            return 'vendor';
-          }
-
-          // Map components — keep isolated to contain leaflet/maplibre side-effects
-          // NOTE: Do NOT add page chunks here. Page chunks create circular dependencies
-          // because Rollup places shared modules (UI components) in page chunks, causing
-          // AcceptInvitationPage and other routes to import from those chunks transitively
-          // loading components-map, which breaks with a TDZ error.
-          if (id.includes('src/components/map') || id.includes('src/maps-v3')) {
-            return 'components-map';
           }
         },
       },
