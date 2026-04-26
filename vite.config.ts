@@ -118,10 +118,11 @@ export default defineConfig(({ mode }) => ({
         manualChunks: (id) => {
           // Vendor chunks for large dependencies
           if (id.includes('node_modules')) {
-            // PDF/Export libraries — only loaded when user opens export dialogs
+            // PDF/Export libraries — only safe to defer when not statically imported by lib files
+            // papaparse and json2csv are excluded: they're imported in shared lib/*.ts files
+            // that get hoisted to eager chunks, causing TDZ circular deps if placed here
             if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('xlsx') ||
-                id.includes('pdfjs-dist') || id.includes('mammoth') || id.includes('exceljs') ||
-                id.includes('json2csv') || id.includes('papaparse')) {
+                id.includes('pdfjs-dist') || id.includes('mammoth') || id.includes('exceljs')) {
               return 'vendor-export';
             }
 
