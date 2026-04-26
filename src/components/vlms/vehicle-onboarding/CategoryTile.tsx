@@ -6,7 +6,16 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import * as LucideIcons from 'lucide-react';
+import { Truck, Car, Bus, Bike, Forklift, Container, Package, CircleHelp, type LucideIcon } from 'lucide-react';
+
+const VEHICLE_ICONS: Record<string, LucideIcon> = {
+  Truck, Car, Bus, Bike, Forklift, Container, Package,
+};
+
+function resolveVehicleIcon(name: string | undefined | null): LucideIcon {
+  if (!name) return Truck;
+  return VEHICLE_ICONS[name] ?? CircleHelp;
+}
 import type { VehicleCategory } from '@/types/vlms-onboarding';
 
 interface CategoryTileProps {
@@ -17,9 +26,7 @@ interface CategoryTileProps {
 
 export function CategoryTile({ category, isSelected, onSelect }: CategoryTileProps) {
   // Get the icon component dynamically
-  const IconComponent = category.icon_name
-    ? (LucideIcons[category.icon_name as keyof typeof LucideIcons] as any)
-    : LucideIcons.Truck;
+  const IconComponent = resolveVehicleIcon(category.icon_name);
 
   const isEU = category.source === 'eu';
   const isBIKO = category.source === 'biko';

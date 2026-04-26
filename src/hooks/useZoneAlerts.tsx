@@ -41,7 +41,7 @@ export function useZoneAlerts() {
         drivers: { name: string } | null;
       })[];
     },
-    refetchInterval: 15000, // Refetch every 15 seconds
+    refetchInterval: 60000, // Realtime subscription handles new alerts; this is a safety net only
   });
 
   // Real-time subscription for new alerts

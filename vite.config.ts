@@ -106,14 +106,22 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom"],
   },
+  esbuild: {
+    // Strip console.log and debugger in production for smaller bundles and security
+    drop: mode === 'production' ? ['console', 'debugger'] : [],
+  },
   build: {
+    // Target modern browsers (ES2020) to avoid transpiling to older, bulkier ES5 code
+    target: 'es2020',
     rollupOptions: {
       output: {
         manualChunks: (id) => {
           // Vendor chunks for large dependencies
           if (id.includes('node_modules')) {
-            // PDF/Export libraries (isolate these completely)
-            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('xlsx')) {
+            // PDF/Export libraries — only loaded when user opens export dialogs
+            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('xlsx') ||
+                id.includes('pdfjs-dist') || id.includes('mammoth') || id.includes('exceljs') ||
+                id.includes('json2csv') || id.includes('papaparse')) {
               return 'vendor-export';
             }
 
@@ -139,17 +147,30 @@ export default defineConfig(({ mode }) => ({
               return 'vendor-date';
             }
 
-            // Everything else stays together to avoid circular deps
-            return 'vendor';
-          }
+            // UI primitives — large but stable, cache independently
+            if (id.includes('@radix-ui') || id.includes('lucide-react') ||
+                id.includes('class-variance-authority') || id.includes('clsx') ||
+                id.includes('tailwind-merge') || id.includes('cmdk') ||
+                id.includes('vaul') || id.includes('sonner') || id.includes('next-themes') ||
+                id.includes('embla-carousel')) {
+              return 'vendor-ui';
+            }
 
-          // Map components — keep isolated to contain leaflet/maplibre side-effects
-          // NOTE: Do NOT add page chunks here. Page chunks create circular dependencies
-          // because Rollup places shared modules (UI components) in page chunks, causing
-          // AcceptInvitationPage and other routes to import from those chunks transitively
-          // loading components-map, which breaks with a TDZ error.
-          if (id.includes('src/components/map') || id.includes('src/maps-v3')) {
-            return 'components-map';
+            // React core + routing — tiny but must load first
+            if (id.includes('/react/') || id.includes('/react-dom/') ||
+                id.includes('react-router') || id.includes('scheduler')) {
+              return 'vendor-react';
+            }
+
+            // Form / validation
+            if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('/zod/')) {
+              return 'vendor-forms';
+            }
+
+            // State management + DnD
+            if (id.includes('zustand') || id.includes('@tanstack') || id.includes('@dnd-kit')) {
+              return 'vendor-state';
+            }
           }
         },
       },

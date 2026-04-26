@@ -6,8 +6,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Package, Weight } from 'lucide-react';
-import * as LucideIcons from 'lucide-react';
+import { Package, Weight, Truck, Car, Bus, Bike, Forklift, Container, CircleHelp, type LucideIcon } from 'lucide-react';
+
+// Fixed icon map — avoids `import * as LucideIcons` which defeats tree-shaking
+const VEHICLE_ICONS: Record<string, LucideIcon> = {
+  Truck, Car, Bus, Bike, Forklift, Container, Package,
+};
+
+function resolveVehicleIcon(name: string | undefined | null): LucideIcon {
+  if (!name) return Truck;
+  return VEHICLE_ICONS[name] ?? CircleHelp;
+}
 import type { VehicleType } from '@/types/vlms-onboarding';
 import { formatVolume, formatWeight } from '@/lib/vlms/capacityCalculations';
 
@@ -19,9 +28,7 @@ interface TypeCardProps {
 
 export function TypeCard({ type, isSelected, onSelect }: TypeCardProps) {
   // Get the icon component dynamically
-  const IconComponent = type.icon_name
-    ? (LucideIcons[type.icon_name as keyof typeof LucideIcons] as any)
-    : LucideIcons.Truck;
+  const IconComponent = resolveVehicleIcon(type.icon_name);
 
   const hasCapacityInfo = type.default_capacity_kg || type.default_capacity_m3;
 

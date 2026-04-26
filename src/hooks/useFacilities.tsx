@@ -123,9 +123,9 @@ export function useFacilities(filters?: FacilityFilters, page?: number, pageSize
   return useQuery({
     queryKey: ['facilities', workspaceId, filters, page],
     enabled: !!workspaceId,
-    staleTime: 30000, // Data is fresh for 30 seconds
-    gcTime: 300000, // Cache for 5 minutes
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000, // Facilities rarely change — 5 min is safe
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     queryFn: async () => {
       let query = supabase
