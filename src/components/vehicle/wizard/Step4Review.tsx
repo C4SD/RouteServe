@@ -33,12 +33,6 @@ export function Step4Review({ onComplete }: Step4ReviewProps) {
         fuel_efficiency: draft.fuel_efficiency!,
         avg_speed: draft.avg_speed!,
         category_id: draft.category_id,
-        subcategory: draft.subcategory,
-        has_tiers: true,
-        zone_id: draft.zone_id,
-        warehouse_id: draft.warehouse_id,
-        max_daily_distance: draft.max_daily_distance,
-        maintenance_frequency_km: draft.maintenance_frequency_km,
       };
 
       // Create vehicle and get the ID

@@ -10,7 +10,6 @@ import { useZoneSummary } from '@/hooks/useOperationalZones';
 import { useAllLGAsWithZones } from '@/hooks/useAdminUnits';
 import { useFacilities } from '@/hooks/useFacilities';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EditZoneDialog } from './EditZoneDialog.tsx';
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useDeleteZone } from '@/hooks/useOperationalZones';
 
@@ -18,10 +17,10 @@ interface ZoneDetailDialogProps {
   zone: OperationalZone;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onEditRequest?: () => void;
 }
 
-export function ZoneDetailDialog({ zone, open, onOpenChange }: ZoneDetailDialogProps) {
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+export function ZoneDetailDialog({ zone, open, onOpenChange, onEditRequest }: ZoneDetailDialogProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
   const { data: summary, isLoading: summaryLoading } = useZoneSummary(zone.id);
@@ -69,7 +68,10 @@ export function ZoneDetailDialog({ zone, open, onOpenChange }: ZoneDetailDialogP
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsEditDialogOpen(true)}
+              onClick={() => {
+                onOpenChange(false);
+                onEditRequest?.();
+              }}
             >
               <Edit className="h-4 w-4 mr-2" />
               Edit
@@ -274,13 +276,6 @@ export function ZoneDetailDialog({ zone, open, onOpenChange }: ZoneDetailDialogP
           </Tabs>
         </DialogContent>
       </Dialog>
-
-      {/* Edit Dialog */}
-      <EditZoneDialog
-        zone={zone}
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-      />
 
       {/* Delete Confirmation — rendered outside the Dialog portal to avoid focus-trap conflicts */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

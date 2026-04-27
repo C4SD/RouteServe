@@ -264,10 +264,23 @@ export const useVehiclesStore = create<VehiclesState>()(
             }
           }
 
-          // Destructure vehicle_type to remap it to the DB column 'type'
-          // Also strip taxonomy FK fields — the static onboarding taxonomy uses non-UUID IDs
-          // which would fail DB validation; these columns are nullable in the vehicles table
-          const { vehicle_type: vType, category_id: _catId, vehicle_type_id: _vtId, ...createRest } = sanitizedCreateData;
+          // Destructure vehicle_type to remap it to the DB column 'type'.
+          // Also strip fields that don't exist as DB columns: taxonomy FKs with non-UUID
+          // static IDs, telemetry tracker fields (tracker_*), and vehicle outer-body
+          // dimension fields (vehicle_*_cm) — none of these are in the vehicles table.
+          const {
+            vehicle_type: vType,
+            category_id: _catId,
+            vehicle_type_id: _vtId,
+            tracker_sim_number: _trackerSim,
+            tracker_protocol: _trackerProto,
+            tracker_capabilities: _trackerCaps,
+            vehicle_length_cm: _vLenCm,
+            vehicle_width_cm: _vWidCm,
+            vehicle_height_cm: _vHgtCm,
+            vendor_id: _vendorId,
+            ...createRest
+          } = sanitizedCreateData;
           const vehicleData = {
             ...createRest,
             ...(vType !== undefined ? { type: vType } : {}),
