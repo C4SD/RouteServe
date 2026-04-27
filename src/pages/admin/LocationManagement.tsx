@@ -196,6 +196,8 @@ export default function LocationManagement() {
       toast.success(`${imported} ${stateLabel} imported for ${countryName}`);
       refetchUnits();
       queryClient.invalidateQueries({ queryKey: ['boundary-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-units'] });
+      queryClient.invalidateQueries({ queryKey: ['all-lgas-with-zones'] });
     } catch (error) {
       toast.error('Import failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -244,6 +246,8 @@ export default function LocationManagement() {
       });
       refetchUnits();
       queryClient.invalidateQueries({ queryKey: ['boundary-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-units'] });
+      queryClient.invalidateQueries({ queryKey: ['all-lgas-with-zones'] });
       setSelectedStateOsmIds(new Set());
     } catch (error) {
       toast.error('Import failed', {
