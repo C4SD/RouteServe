@@ -8,6 +8,7 @@ import { useOperationalZones, useZoneMetrics } from '@/hooks/useOperationalZones
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateZoneDialog } from './CreateZoneDialog';
 import { ZoneDetailDialog } from './ZoneDetailDialog';
+import { EditZoneDialog } from './EditZoneDialog';
 import { ZoneMapView } from './ZoneMapView';
 import { OperationalZone } from '@/types/zones';
 
@@ -16,6 +17,7 @@ type ViewMode = 'grid' | 'map';
 export function ZoneTabContent() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedZone, setSelectedZone] = useState<OperationalZone | null>(null);
+  const [zoneToEdit, setZoneToEdit] = useState<OperationalZone | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const { zones, loading: zonesLoading } = useOperationalZones();
   const { data: metrics, isLoading: metricsLoading } = useZoneMetrics();
@@ -182,6 +184,15 @@ export function ZoneTabContent() {
           zone={selectedZone}
           open={!!selectedZone}
           onOpenChange={(open) => !open && setSelectedZone(null)}
+          onEditRequest={() => setZoneToEdit(selectedZone)}
+        />
+      )}
+
+      {zoneToEdit && (
+        <EditZoneDialog
+          zone={zoneToEdit}
+          open={!!zoneToEdit}
+          onOpenChange={(open) => !open && setZoneToEdit(null)}
         />
       )}
     </div>
