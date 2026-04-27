@@ -12,6 +12,7 @@ import { MapPin, Users, Plus, X, Check, Search } from 'lucide-react';
 import { useUpdateZone } from '@/hooks/useOperationalZones';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useAllLGAsWithZones } from '@/hooks/useAdminUnits';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { OperationalZone, UpdateZoneInput } from '@/types/zones';
@@ -38,10 +39,11 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
 
   const updateZone = useUpdateZone();
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   const { data: facilitiesData } = useFacilities();
-  const { data: allLGAs } = useAllLGAsWithZones();
-  const { data: zoneLGAs } = useAllLGAsWithZones({ zone_id: zone.id });
+  const { data: allLGAs } = useAllLGAsWithZones({ workspaceId: workspaceId ?? undefined });
+  const { data: zoneLGAs } = useAllLGAsWithZones({ zone_id: zone.id, workspaceId: workspaceId ?? undefined });
 
   const allFacilities = facilitiesData?.facilities || [];
 
@@ -157,11 +159,11 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
         return;
       }
 
-      // Assign the LGA to the zone in admin_units table
-      const { error: lgaError } = await supabase
-        .from('admin_units')
-        .update({ zone_id: zone.id })
-        .eq('id', lgaId);
+      // Use SECURITY DEFINER RPC to bypass RLS on global admin_units records
+      const { error: lgaError } = await supabase.rpc('assign_lga_to_zone' as any, {
+        p_lga_id: lgaId,
+        p_zone_id: zone.id,
+      });
       if (lgaError) throw lgaError;
 
       // Also assign all facilities with matching LGA name to the zone
@@ -204,11 +206,11 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
         return;
       }
 
-      // Remove the LGA from the zone in admin_units table
-      const { error: lgaError } = await supabase
-        .from('admin_units')
-        .update({ zone_id: null })
-        .eq('id', lgaId);
+      // Use SECURITY DEFINER RPC to bypass RLS on global admin_units records
+      const { error: lgaError } = await supabase.rpc('unassign_lga_from_zone' as any, {
+        p_lga_id: lgaId,
+        p_zone_id: zone.id,
+      });
       if (lgaError) throw lgaError;
 
       // Also remove zone assignment from facilities with matching LGA name

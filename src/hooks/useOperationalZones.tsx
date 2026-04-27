@@ -75,17 +75,13 @@ export function useZoneMetrics() {
 
       let totalLGAs = 0;
       try {
-        const { data: lgaData } = await supabase
-          .from('facilities')
-          .select('lga')
+        const { count } = await supabase
+          .from('admin_units')
+          .select('id', { count: 'exact', head: true })
           .eq('workspace_id', workspaceId!)
-          .is('deleted_at', null)
-          .not('lga', 'is', null);
-
-        if (lgaData) {
-          const uniqueLGAs = new Set(lgaData.map((f: any) => f.lga));
-          totalLGAs = uniqueLGAs.size;
-        }
+          .eq('admin_level', 6)
+          .eq('is_active', true);
+        totalLGAs = count ?? 0;
       } catch {
         // fallback if query fails
       }

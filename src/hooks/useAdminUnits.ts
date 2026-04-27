@@ -186,6 +186,7 @@ export function useAllLGAsWithZones(
     stateId?: string;
     search?: string;
     countryId?: string;
+    workspaceId?: string;
   }
 ) {
   const countryId = filters?.countryId;
@@ -210,6 +211,10 @@ export function useAllLGAsWithZones(
       // mismatches when the DB country record ID differs from the constant.
       if (countryId) {
         query = query.eq('country_id', countryId);
+      }
+
+      if (filters?.workspaceId) {
+        query = query.eq('workspace_id', filters.workspaceId);
       }
 
       if (filters?.zone_id) {

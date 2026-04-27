@@ -107,7 +107,7 @@ export default function LocationManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('admin_units')
-        .select('id, name, name_en, admin_level, osm_id, population, is_active')
+        .select('id, name, name_en, admin_level, osm_id, population, is_active, parent_id')
         .eq('country_id', effectiveCountryId)
         .eq('workspace_id', workspaceId!)
         .order('admin_level')
@@ -544,6 +544,72 @@ export default function LocationManagement() {
                   </>
                 )}
               </CardContent>
+            </Card>
+
+            {/* Step 3: Imported LGAs */}
+            <Card className={districtUnits.length === 0 ? 'opacity-50 pointer-events-none' : ''}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
+                  Imported {districtLabel}
+                  {districtUnits.length > 0 && (
+                    <Badge className="ml-1 bg-emerald-500/10 text-emerald-600">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      {districtUnits.length} {districtLabel.toLowerCase()}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {districtUnits.length === 0
+                    ? `Complete Step 2 to import ${districtLabel.toLowerCase()}.`
+                    : `All imported ${districtLabel.toLowerCase()} for ${countryName}, grouped by ${stateLabel.slice(0, -1).toLowerCase()}.`}
+                </CardDescription>
+              </CardHeader>
+              {districtUnits.length > 0 && (
+                <CardContent>
+                  <div className="border rounded-lg overflow-hidden max-h-96 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{districtLabel.slice(0, -1)}</TableHead>
+                          <TableHead>{stateLabel.slice(0, -1)}</TableHead>
+                          <TableHead>Population</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {districtUnits.slice(0, 300).map((unit) => {
+                          const parentState = stateUnits.find((s) => s.id === (unit as any).parent_id);
+                          return (
+                            <TableRow key={unit.id}>
+                              <TableCell className="font-medium">{unit.name}</TableCell>
+                              <TableCell className="text-muted-foreground text-sm">
+                                {parentState?.name || '—'}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {unit.population?.toLocaleString() || '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={unit.is_active ? 'default' : 'outline'}
+                                  className={unit.is_active ? 'bg-emerald-500/10 text-emerald-600' : 'text-muted-foreground'}
+                                >
+                                  {unit.is_active ? 'Active' : 'Inactive'}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                    {districtUnits.length > 300 && (
+                      <p className="text-xs text-muted-foreground p-3 text-center">
+                        Showing first 300 of {districtUnits.length} entries
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              )}
             </Card>
 
             {/* Progress */}
