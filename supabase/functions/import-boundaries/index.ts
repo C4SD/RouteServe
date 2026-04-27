@@ -224,10 +224,11 @@ async function importBoundaries(
         is_active: true,
       }));
 
-      // Insert batch
+      // Insert batch — conflict target matches the constraint added in migration
+      // 20260426000003 (osm_id, country_id, workspace_id).
       const { error } = await supabase
         .from('admin_units')
-        .upsert(records, { onConflict: 'osm_id' });
+        .upsert(records, { onConflict: 'osm_id,country_id,workspace_id' });
 
       if (error) {
         console.error('Batch insert error:', error);

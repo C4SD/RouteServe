@@ -30,6 +30,7 @@ export interface AdminUnit {
   population: number | null;
   area_km2: number | null;
   metadata: Record<string, any>;
+  zone_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -184,31 +185,32 @@ export function useAllLGAsWithZones(
     zone_id?: string;
     stateId?: string;
     search?: string;
-  },
-  countryId: string = DEFAULT_COUNTRY_ID
+    countryId?: string;
+  }
 ) {
+  const countryId = filters?.countryId;
   return useQuery({
-    queryKey: ['all-lgas-with-zones', filters, countryId],
+    queryKey: ['all-lgas-with-zones', filters],
     queryFn: async () => {
       let query = supabase
         .from('admin_units')
         .select(`
           *,
-          zones:zone_id (
-            id,
-            name,
-            code
-          ),
           parent:parent_id (
             id,
             name,
             admin_level
           )
         `)
-        .eq('country_id', countryId)
         .eq('admin_level', 6) // LGA level
         .eq('is_active', true)
         .order('name', { ascending: true });
+
+      // Only filter by country if explicitly provided — avoids hardcoded UUID
+      // mismatches when the DB country record ID differs from the constant.
+      if (countryId) {
+        query = query.eq('country_id', countryId);
+      }
 
       if (filters?.zone_id) {
         query = query.eq('zone_id', filters.zone_id);
@@ -229,11 +231,9 @@ export function useAllLGAsWithZones(
       }
 
       return data as (AdminUnit & {
-        zones?: { id: string; name: string; code: string } | null;
         parent?: { id: string; name: string; admin_level: number } | null;
       })[];
     },
-    enabled: !!countryId,
     staleTime: 1000 * 60 * 5,
   });
 }

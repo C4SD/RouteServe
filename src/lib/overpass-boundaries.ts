@@ -219,7 +219,7 @@ export async function fetchDistrictsForStates(
 
 /**
  * Save imported boundaries to the admin_units table using batch upsert.
- * Requires unique index on (osm_id, country_id) — migration 20260404000001.
+ * Requires unique constraint on (osm_id, country_id, workspace_id) — migration 20260426000003.
  */
 export async function saveBoundariesToDB(
   supabase: any,
@@ -253,7 +253,7 @@ export async function saveBoundariesToDB(
 
     const { error, count } = await supabase
       .from('admin_units')
-      .upsert(rows, { onConflict: 'osm_id,country_id', count: 'exact' });
+      .upsert(rows, { onConflict: 'osm_id,country_id,workspace_id', count: 'exact' });
 
     if (error) {
       console.error('[overpass-boundaries] Upsert error:', error.message, error.details);

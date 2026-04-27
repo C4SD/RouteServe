@@ -413,7 +413,7 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
                         <div>
                           <p className="font-medium text-sm">{lga.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            Kano State
+                            {lga.parent?.name ?? 'Unknown state'}
                             {lga.population && ` · Pop: ${lga.population.toLocaleString()}`}
                           </p>
                         </div>
@@ -467,9 +467,9 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
                         <div>
                           <p className="font-medium text-sm">{lga.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            Kano State
-                            {lga.zone_id && lga.zones?.name && (
-                              <span className="text-orange-600"> · Currently in: {lga.zones.name}</span>
+                            {lga.parent?.name ?? 'Unknown state'}
+                            {lga.zone_id && (
+                              <span className="text-orange-600"> · Already assigned</span>
                             )}
                           </p>
                         </div>
@@ -486,7 +486,11 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    {lgaSearch ? 'No LGAs match your search' : 'All LGAs are in this zone'}
+                    {lgaSearch
+                    ? 'No LGAs match your search'
+                    : (allLGAs?.length ?? 0) === 0
+                      ? 'No LGAs found. Import boundaries from Admin → Location Management.'
+                      : 'All LGAs are in this zone'}
                   </p>
                 )}
               </CardContent>

@@ -72,10 +72,7 @@ export function DashboardMapLibre({
     // The OpenFreeMap positron style references icons (e.g. circle-11) that
     // aren't in its sprite. Add a transparent 1×1 placeholder to silence the warning.
     map.on('styleimagemissing', (e) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1;
-      canvas.height = 1;
-      map.addImage(e.id, canvas);
+      map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
 
     mapRef.current = map;

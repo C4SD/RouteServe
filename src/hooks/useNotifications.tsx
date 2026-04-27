@@ -28,7 +28,8 @@ export function useNotifications() {
 
       if (error) throw error;
       return data as Notification[];
-    }
+    },
+    staleTime: 5 * 60 * 1000, // Realtime subscription handles live updates
   });
 
   // Realtime subscription

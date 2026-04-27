@@ -310,19 +310,31 @@ export default function SettingsGeneralPage() {
 
   // Form state
   const [name, setName] = useState('');
+  const [nameLocked, setNameLocked] = useState(true);
   const [orgName, setOrgName] = useState('');
   const [orgNameLocked, setOrgNameLocked] = useState(true);
   const [orgType, setOrgType] = useState<string | null>(null);
+  const [slug, setSlug] = useState('');
   const [settings, setSettings] = useState<WorkspaceSettings>({});
   const [hasChanges, setHasChanges] = useState(false);
+
+  const generateSlug = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
 
   useEffect(() => {
     if (workspace) {
       setName(workspace.name || '');
+      setSlug(workspace.slug || '');
       setOrgName(workspace.org_name || workspace.name || '');
       setOrgType(workspace.org_type || null);
       setSettings(workspace.settings || {});
       setOrgNameLocked(true);
+      setNameLocked(true);
     }
   }, [workspace]);
 
@@ -341,6 +353,7 @@ export default function SettingsGeneralPage() {
         p_org_type: orgType || null,
         p_settings: settingsToSave as Record<string, unknown>,
         p_org_name: orgName.trim() || null,
+        p_slug: slug.trim() || null,
       } as any);
 
       if (error) {
@@ -350,6 +363,7 @@ export default function SettingsGeneralPage() {
           .from('workspaces')
           .update({
             name: name.trim(),
+            slug: slug.trim() || undefined,
             org_name: orgName.trim() || null,
             org_type: orgType || null,
             settings: settingsToSave as Record<string, unknown>,
@@ -514,6 +528,8 @@ export default function SettingsGeneralPage() {
             variant="outline"
             onClick={() => {
               setName(workspace.name || '');
+              setSlug(workspace.slug || '');
+              setNameLocked(true);
               setOrgName(workspace.org_name || workspace.name || '');
               setOrgNameLocked(true);
               setOrgType(workspace.org_type || null);
@@ -620,26 +636,52 @@ export default function SettingsGeneralPage() {
             )}
             <SettingsSection
               title="Workspace name"
-              description="The name of this team workspace (e.g. Lisbon Team, Munich Team)."
+              description="The name of this team workspace (e.g. Lisbon Team, Munich Team). Only admins can change this."
             >
-              <Input
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setHasChanges(true);
-                }}
-                placeholder="e.g. Lisbon Team"
-                className="w-64"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setName(newName);
+                    setSlug(generateSlug(newName));
+                    setHasChanges(true);
+                  }}
+                  placeholder="e.g. Lisbon Team"
+                  disabled={nameLocked || !isOwnerOrAdmin}
+                  className={cn('w-64', nameLocked && 'opacity-60')}
+                />
+                {isOwnerOrAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                    title={nameLocked ? 'Unlock to edit workspace name' : 'Lock workspace name'}
+                    onClick={() => setNameLocked((v) => !v)}
+                  >
+                    {nameLocked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                  </Button>
+                )}
+                {!isOwnerOrAdmin && (
+                  <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
+              </div>
             </SettingsSection>
 
             <SettingsSection
               title="Workspace ID"
-              description="Auto-generated URL-friendly identifier for this workspace."
+              description="URL-friendly identifier — updates automatically when the workspace name is saved."
             >
-              <Badge variant="secondary" className="text-sm font-mono px-3 py-1">
-                {workspace.slug || '—'}
-              </Badge>
+              <div className="flex flex-col gap-1">
+                <Badge variant="secondary" className="text-sm font-mono px-3 py-1 w-fit">
+                  {slug || workspace.slug || '—'}
+                </Badge>
+                {slug && workspace.slug && slug !== workspace.slug && (
+                  <p className="text-xs text-muted-foreground">
+                    Will change from <span className="font-mono">{workspace.slug}</span> to <span className="font-mono">{slug}</span> on save.
+                  </p>
+                )}
+              </div>
             </SettingsSection>
 
             <SettingsSection
