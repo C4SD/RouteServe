@@ -35,11 +35,13 @@ export function useDeliveryBatches() {
     enabled: !!workspaceId,
     queryFn: async () => {
       // First, fetch all delivery batches with warehouse info
+      // Use !warehouse_id to disambiguate: delivery_batches has two FKs to warehouses
+      // (warehouse_id and dispatch_node_id), so PostgREST needs an explicit hint.
       const { data: batchesData, error: batchesError } = await supabase
         .from('delivery_batches')
         .select(`
           *,
-          warehouse:warehouses(name)
+          warehouse:warehouses!warehouse_id(name)
         `)
         .eq('workspace_id', workspaceId!)
         .order('scheduled_date', { ascending: false });
