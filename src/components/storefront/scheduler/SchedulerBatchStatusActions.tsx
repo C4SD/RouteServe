@@ -33,6 +33,7 @@ import {
   useTransitionSchedulerBatchStatus,
   SCHEDULER_STATUS_META,
 } from '@/hooks/useWorkflowTransitions';
+import { usePublishPreBatchToFleetOps } from '@/hooks/usePublishToFleetOps';
 
 interface SchedulerBatchStatusActionsProps {
   batchId: string;
@@ -50,6 +51,7 @@ export function SchedulerBatchStatusActions({
   const [showDialog, setShowDialog] = useState(false);
 
   const transitionStatus = useTransitionSchedulerBatchStatus();
+  const publishPreBatch = usePublishPreBatchToFleetOps();
 
   // Define available transitions based on current status
   const getAvailableStates = (status: string): string[] => {
@@ -75,11 +77,15 @@ export function SchedulerBatchStatusActions({
   const handleConfirmTransition = async () => {
     if (!selectedStatus) return;
 
-    await transitionStatus.mutateAsync({
-      batchId,
-      newStatus: selectedStatus,
-      notes: notes || undefined,
-    });
+    if (selectedStatus === 'published') {
+      await publishPreBatch.mutateAsync([batchId]);
+    } else {
+      await transitionStatus.mutateAsync({
+        batchId,
+        newStatus: selectedStatus,
+        notes: notes || undefined,
+      });
+    }
 
     setShowDialog(false);
     setSelectedStatus(null);
@@ -213,10 +219,10 @@ export function SchedulerBatchStatusActions({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleCancelDialog} disabled={transitionStatus.isPending}>
+            <Button variant="outline" onClick={handleCancelDialog} disabled={transitionStatus.isPending || publishPreBatch.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmTransition} disabled={transitionStatus.isPending}>
+            <Button onClick={handleConfirmTransition} disabled={transitionStatus.isPending || publishPreBatch.isPending}>
               {transitionStatus.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -58,11 +58,16 @@ import type { Facility, Warehouse, Vehicle } from '@/types';
 import type { VehicleWithRelations } from '@/types/vlms';
 
 function mapPreBatchToSchedulerBatch(pb: PreBatchWithRelations): SchedulerBatch {
-  const statusMap: Record<string, SchedulerBatchStatus> = {
-    draft: 'draft',
-    ready: 'ready',
-    converted: 'scheduled',
-    cancelled: 'cancelled',
+  const getStatus = (pb: PreBatchWithRelations): SchedulerBatchStatus => {
+    if (pb.status === 'converted') {
+      return pb.converted_batch_id ? 'published' : 'scheduled';
+    }
+    const map: Record<string, SchedulerBatchStatus> = {
+      draft: 'draft',
+      ready: 'ready',
+      cancelled: 'cancelled',
+    };
+    return map[pb.status] || 'draft';
   };
 
   return {
@@ -82,7 +87,7 @@ function mapPreBatchToSchedulerBatch(pb: PreBatchWithRelations): SchedulerBatch 
     total_weight_kg: null,
     total_volume_m3: null,
     capacity_utilization_pct: null,
-    status: statusMap[pb.status] || 'draft',
+    status: getStatus(pb),
     scheduling_mode: pb.source_sub_option === 'ai_optimization' ? 'ai_optimized' : 'manual',
     priority: 'medium',
     created_by: pb.created_by,

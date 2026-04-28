@@ -204,6 +204,134 @@ export function usePublishToFleetOps() {
 }
 
 /**
+ * Publish a scheduler_pre_batch to FleetOps (delivery_batches table).
+ *
+ * Unlike usePublishToFleetOps (which targets the legacy scheduler_batches table),
+ * this hook reads from scheduler_pre_batches — the data source used by the
+ * storefront scheduler page.  It creates a delivery_batches row and writes the
+ * resulting id back to scheduler_pre_batches.converted_batch_id so the status
+ * mapping in mapPreBatchToSchedulerBatch can transition the row to 'published'.
+ */
+export function usePublishPreBatchToFleetOps() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (preBatchIds: string[]): Promise<PublishResponse> => {
+      const published_batches: PublishResult[] = [];
+      const errors: PublishError[] = [];
+
+      const { data: preBatches, error: fetchError } = await supabase
+        .from('scheduler_pre_batches')
+        .select('*')
+        .in('id', preBatchIds);
+
+      if (fetchError) throw new Error(`Failed to fetch pre-batches: ${fetchError.message}`);
+      if (!preBatches || preBatches.length === 0) throw new Error('No pre-batches found to publish');
+
+      for (const pb of preBatches) {
+        if (!pb.facility_order || pb.facility_order.length === 0) {
+          errors.push({ scheduler_batch_id: pb.id, error_message: 'Pre-batch must have at least one facility' });
+          continue;
+        }
+
+        if (pb.converted_batch_id) {
+          errors.push({ scheduler_batch_id: pb.id, error_message: 'Pre-batch already published to FleetOps' });
+          continue;
+        }
+
+        try {
+          const scheduledTime =
+            pb.time_window === 'morning' ? '08:00:00'
+            : pb.time_window === 'afternoon' ? '13:00:00'
+            : pb.time_window === 'evening' ? '18:00:00'
+            : '06:00:00';
+
+          const { data: deliveryBatch, error: createError } = await supabase
+            .from('delivery_batches')
+            .insert([{
+              name: pb.schedule_title,
+              workspace_id: pb.workspace_id,
+              warehouse_id: pb.start_location_id,
+              facility_ids: pb.facility_order,
+              scheduled_date: pb.planned_date,
+              scheduled_time: scheduledTime,
+              vehicle_id: pb.suggested_vehicle_id ?? null,
+              driver_id: null,
+              status: 'planned',
+              priority: 'medium',
+              pre_batch_id: pb.id,
+              optimized_route: [],
+              total_distance: 0,
+              estimated_duration: 0,
+              medication_type: 'Mixed',
+              total_quantity: pb.facility_order.length || 1,
+              notes: pb.notes ?? null,
+            }])
+            .select()
+            .single();
+
+          if (createError) {
+            errors.push({ scheduler_batch_id: pb.id, error_message: createError.message });
+            continue;
+          }
+
+          const { error: updateError } = await supabase
+            .from('scheduler_pre_batches')
+            .update({ converted_batch_id: deliveryBatch.id })
+            .eq('id', pb.id);
+
+          if (updateError) {
+            await supabase.from('delivery_batches').delete().eq('id', deliveryBatch.id);
+            errors.push({ scheduler_batch_id: pb.id, error_message: `Failed to link delivery batch: ${updateError.message}` });
+            continue;
+          }
+
+          published_batches.push({
+            scheduler_batch_id: pb.id,
+            delivery_batch_id: deliveryBatch.id,
+            batch_code: pb.id.slice(0, 8).toUpperCase(),
+          });
+        } catch (error) {
+          errors.push({ scheduler_batch_id: pb.id, error_message: error instanceof Error ? error.message : 'Unknown error' });
+        }
+      }
+
+      return { success: errors.length === 0, published_batches, errors };
+    },
+
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['pre-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['delivery-batches'] });
+
+      if (result.success) {
+        toast.success(
+          `${result.published_batches.length} batch${result.published_batches.length > 1 ? 'es' : ''} published to FleetOps`,
+          { description: 'Visible in FleetOps batch list', duration: 5000 }
+        );
+      } else {
+        const successCount = result.published_batches.length;
+        const errorCount = result.errors.length;
+        if (successCount > 0) {
+          toast.warning(`${successCount} published, ${errorCount} failed`, {
+            description: result.errors.map(e => e.error_message).join(', '),
+            duration: 7000,
+          });
+        } else {
+          toast.error('Failed to publish batches', {
+            description: result.errors.map(e => e.error_message).join(', '),
+            duration: 7000,
+          });
+        }
+      }
+    },
+
+    onError: (error: Error) => {
+      toast.error('Failed to publish to FleetOps', { description: error.message, duration: 5000 });
+    },
+  });
+}
+
+/**
  * Unpublish a batch (move back from FleetOps to Scheduler)
  * Use with caution - only for batches not yet dispatched
  */
