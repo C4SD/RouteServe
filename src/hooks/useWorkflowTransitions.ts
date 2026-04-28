@@ -174,7 +174,7 @@ export function useTransitionSchedulerBatchStatus() {
     }) => {
       const preBatchStatus = toPreBatchStatus(newStatus);
       const { data, error } = await supabase
-        .from('pre_batches')
+        .from('scheduler_pre_batches')
         .update({ status: preBatchStatus, ...(notes ? { notes } : {}) })
         .eq('id', batchId)
         .select()

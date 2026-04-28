@@ -295,8 +295,7 @@ export function EditServiceAreaDialog({ serviceArea, open, onOpenChange }: EditS
                       >
                         <Checkbox
                           checked={effectiveSelectedIds.includes(f.id)}
-                          onCheckedChange={() => toggleFacility(f.id)}
-                          onClick={e => e.stopPropagation()}
+                          onCheckedChange={() => {}}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{f.name}</p>
