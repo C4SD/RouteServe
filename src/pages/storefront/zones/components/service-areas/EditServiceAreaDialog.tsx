@@ -124,7 +124,7 @@ export function EditServiceAreaDialog({ serviceArea, open, onOpenChange }: EditS
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Edit Service Area</DialogTitle>
           <DialogDescription>Update service area configuration and facility assignments</DialogDescription>
@@ -296,6 +296,7 @@ export function EditServiceAreaDialog({ serviceArea, open, onOpenChange }: EditS
                         <Checkbox
                           checked={effectiveSelectedIds.includes(f.id)}
                           onCheckedChange={() => toggleFacility(f.id)}
+                          onClick={e => e.stopPropagation()}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{f.name}</p>
