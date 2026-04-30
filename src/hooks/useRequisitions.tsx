@@ -88,11 +88,13 @@ export function useRequisition(id: string) {
 
 export function useCreateRequisition() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (data: CreateRequisitionData) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+      if (!workspaceId) throw new Error('No workspace selected');
 
       // Generate requisition number
       const reqNumber = `REQ-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -108,7 +110,8 @@ export function useCreateRequisition() {
           priority: data.priority,
           requested_delivery_date: data.requested_delivery_date,
           notes: data.notes,
-          status: 'pending'
+          status: 'pending',
+          workspace_id: workspaceId
         })
         .select()
         .single();
