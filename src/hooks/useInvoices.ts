@@ -8,7 +8,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 // Helper Functions
 // ========================================
 
-function mapDbToInvoice(dbInvoice: any): Invoice {
+function mapDbToInvoice(dbInvoice: any, items?: any[]): Invoice {
   return {
     id: dbInvoice.id,
     invoice_number: dbInvoice.invoice_number,
@@ -35,6 +35,7 @@ function mapDbToInvoice(dbInvoice: any): Invoice {
       address: dbInvoice.facilities.address,
       lga: dbInvoice.facilities.lga,
     } : undefined,
+    items: items || [],
   };
 }
 
@@ -103,7 +104,7 @@ export function useInvoices(filters?: InvoiceFilters, page?: number, pageSize: n
       if (error) throw error;
 
       return {
-        invoices: (data || []).map(mapDbToInvoice),
+        invoices: (data || []).map(invoice => mapDbToInvoice(invoice)),
         total: count || 0,
       };
     },
@@ -117,23 +118,33 @@ export function useInvoice(id: string | undefined) {
     queryFn: async () => {
       if (!id) return null;
 
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*, warehouses(id, name), facilities(id, name, address, lga)')
-        .eq('id', id)
-        .single();
+      const [invoiceData, itemsData] = await Promise.all([
+        supabase
+          .from('invoices')
+          .select('*, warehouses(id, name), facilities(id, name, address, lga)')
+          .eq('id', id)
+          .single(),
+        supabase
+          .from('invoice_line_items')
+          .select('*')
+          .eq('invoice_id', id)
+      ]);
 
-      if (error) throw error;
-      return data ? mapDbToInvoice(data) : null;
+      if (invoiceData.error) throw invoiceData.error;
+
+      return mapDbToInvoice(invoiceData.data, itemsData.data || []);
     },
   });
 }
 
 export function useCreateInvoice() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (data: InvoiceFormData) => {
+      if (!workspaceId) throw new Error('No workspace selected');
+
       const invoiceData = {
         invoice_number: data.invoice_number || generateInvoiceNumber(),
         ref_number: data.ref_number || null,
@@ -143,6 +154,7 @@ export function useCreateInvoice() {
         status: 'draft' as InvoiceStatus,
         total_price: data.items.reduce((sum, item) => sum + item.total_price, 0),
         notes: data.notes || null,
+        workspace_id: workspaceId,
       };
 
       const { data: invoice, error } = await supabase
