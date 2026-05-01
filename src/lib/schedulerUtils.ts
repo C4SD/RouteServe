@@ -289,6 +289,8 @@ export interface RouteStopInfo {
   distance_from_prev_km: number;
   cumulative_distance_km: number;
   eta_minutes: number; // minutes from departure
+  drive_time_min: number; // drive time from previous stop
+  waiting_time_min: number; // service/waiting time at this stop
 }
 
 /**
@@ -323,6 +325,8 @@ export function computeRouteMetrics(
         distance_from_prev_km: 0,
         cumulative_distance_km: cumulativeDist,
         eta_minutes: cumulativeTime,
+        drive_time_min: 0,
+        waiting_time_min: waitingTimeMin,
       });
       cumulativeTime += waitingTimeMin;
       continue;
@@ -354,9 +358,11 @@ export function computeRouteMetrics(
       distance_from_prev_km: segmentDist,
       cumulative_distance_km: cumulativeDist,
       eta_minutes: cumulativeTime,
+      drive_time_min: Math.round(driveTime),
+      waiting_time_min: waitingTimeMin,
     });
 
-    cumulativeTime += SERVICE_TIME_MIN;
+    cumulativeTime += waitingTimeMin;
   }
 
   return {

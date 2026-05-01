@@ -371,6 +371,14 @@ export function UnifiedWorkflowDialog({
     onOpenChange,
   ]);
 
+  // Handle next step — auto-commits suggested vehicle when leaving Step 2
+  const handleNextStep = React.useCallback(() => {
+    if (currentStep === 2 && suggestedVehicleId && !vehicleId) {
+      actions.commitVehicle(suggestedVehicleId);
+    }
+    actions.nextStep();
+  }, [currentStep, suggestedVehicleId, vehicleId, actions]);
+
   // Handle route optimization (Step 4) (memoized to prevent infinite loops)
   const handleOptimizeRoute = React.useCallback(async () => {
     const startLocation = warehouses.find(w => w.id === startLocationId) || null;
@@ -640,7 +648,7 @@ export function UnifiedWorkflowDialog({
                 Create Batch
               </Button>
             ) : (
-              <Button onClick={actions.nextStep} disabled={!canProceed}>
+              <Button onClick={handleNextStep} disabled={!canProceed}>
                 {currentStep === 2 ? 'Proceed to Batch' : 'Next'}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>

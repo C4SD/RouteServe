@@ -127,7 +127,11 @@ export function useDeliveryBatches() {
           actualEndTime: b.actual_end_time || undefined,
           medicationType: b.medication_type,
           totalQuantity: b.total_quantity,
-          optimizedRoute: b.optimized_route as [number, number][],
+          optimizedRoute: b.optimized_route
+            ? (b.optimized_route as any[]).map((p: any) =>
+                Array.isArray(p) ? p : [p.lng, p.lat]
+              ) as [number, number][]
+            : null,
           notes: b.notes || undefined,
           createdAt: b.created_at,
           // RFC-012: Batch integrity indicator

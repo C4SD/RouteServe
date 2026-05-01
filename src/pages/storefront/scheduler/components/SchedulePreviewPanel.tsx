@@ -555,7 +555,17 @@ export function SchedulePreviewPanel({
                               <span className="text-xs font-semibold text-blue-700">{stop.sequence}</span>
                             )}
                           </div>
-                          {!isLast && <div className="h-8 w-px bg-gray-200" />}
+                          {!isLast && (
+                            <div className="flex flex-col items-center">
+                              <div className="h-1 w-px bg-gray-200" />
+                              {stop.drive_time_min > 0 && (
+                                <span className="text-[10px] text-gray-400 leading-none py-0.5">
+                                  ~{stop.drive_time_min}m drive
+                                </span>
+                              )}
+                              <div className="h-1 w-px bg-gray-200" />
+                            </div>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0 pb-2">
                           <p className="text-sm font-medium text-gray-900 truncate">
@@ -579,6 +589,12 @@ export function SchedulePreviewPanel({
                                     hour12: false,
                                   })}
                                 </span>
+                              </>
+                            )}
+                            {stop.waiting_time_min > 0 && (
+                              <>
+                                <span>·</span>
+                                <span>{stop.waiting_time_min}m stop</span>
                               </>
                             )}
                           </div>
