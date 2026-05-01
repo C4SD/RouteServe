@@ -64,7 +64,8 @@ export const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = {
   clusterPriority: false,
 };
 
-export const SERVICE_TIME_HOURS = 0.25; // 15 min per stop
+/** Default waiting time per stop in hours (15 min) — overridden by workspace Waiting Time SLA */
+export const SERVICE_TIME_HOURS = 0.25;
 export const AVG_SPEED_KMH = 40;
 
 export const ROUTE_COLORS: Record<string, string> = {
@@ -108,7 +109,8 @@ export type TetherMode = 'cardinal' | 'route' | 'alternatives';
 export function solveWithConfig(
   depot: { lat: number; lng: number },
   facilityPoints: GeoPoint[],
-  config: OptimizationConfig
+  config: OptimizationConfig,
+  waitingTimeMin: number = SERVICE_TIME_HOURS * 60
 ): OptimizationResult {
   // Validate inputs
   if (!Array.isArray(facilityPoints)) {
@@ -143,12 +145,13 @@ export function solveWithConfig(
     );
     labels.push('Fuel Efficient');
   } else if (config.timeOptimized) {
+    const waitingTimeHours = waitingTimeMin / 60;
     matrix = Array.from({ length: total }, (_, i) =>
       Array.from({ length: total }, (_, j) => {
         if (i === j) return 0;
         const dist = rawMatrix[i][j];
         const speed = dist < 10 ? 25 : dist < 30 ? 35 : 50;
-        return dist / speed + SERVICE_TIME_HOURS;
+        return dist / speed + waitingTimeHours;
       })
     );
     labels.push('Time Optimized');

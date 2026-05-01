@@ -43,6 +43,7 @@ interface SchedulerListViewProps {
   isLoading?: boolean;
   selectedBatchId: string | null;
   onBatchSelect: (batchId: string) => void;
+  programsMap?: Record<string, string[]>;
 }
 
 const STATUS_ORDER: SchedulerBatchStatus[] = [
@@ -129,6 +130,7 @@ export function SchedulerListView({
   isLoading,
   selectedBatchId,
   onBatchSelect,
+  programsMap = {},
 }: SchedulerListViewProps) {
   const facilityMap = useMemo(() => {
     if (!Array.isArray(facilities)) return {};
@@ -229,7 +231,10 @@ export function SchedulerListView({
                       const driver = batch.driver_id ? driverMap[batch.driver_id] : undefined;
                       const vehicle = batch.vehicle_id ? vehicleMap[batch.vehicle_id] : undefined;
 
-                      const { display: programTags, remainder: remainingPrograms } = formatTags(batch.tags);
+                      const mergedPrograms = Array.from(
+                        new Set([...(programsMap[batch.id] ?? []), ...(batch.tags ?? [])])
+                      );
+                      const { display: programTags, remainder: remainingPrograms } = formatTags(mergedPrograms);
 
                       return (
                         <div

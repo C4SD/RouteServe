@@ -14,6 +14,7 @@ function mapDbToInvoice(dbInvoice: any, items?: any[]): Invoice {
     invoice_number: dbInvoice.invoice_number,
     ref_number: dbInvoice.ref_number || undefined,
     requisition_id: dbInvoice.requisition_id || undefined,
+    program: dbInvoice.program || undefined,
     warehouse_id: dbInvoice.warehouse_id,
     facility_id: dbInvoice.facility_id,
     status: dbInvoice.status || 'draft',
@@ -85,6 +86,10 @@ export function useInvoices(filters?: InvoiceFilters, page?: number, pageSize: n
         query = query.eq('facility_id', filters.facility_id);
       }
 
+      if (filters?.program) {
+        query = query.eq('program', filters.program);
+      }
+
       if (filters?.date_from) {
         query = query.gte('created_at', filters.date_from);
       }
@@ -149,6 +154,7 @@ export function useCreateInvoice() {
         invoice_number: data.invoice_number || generateInvoiceNumber(),
         ref_number: data.ref_number || null,
         requisition_id: data.requisition_id || null,
+        program: data.program || null,
         warehouse_id: data.warehouse_id,
         facility_id: data.facility_id,
         status: 'draft' as InvoiceStatus,

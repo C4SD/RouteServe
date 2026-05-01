@@ -283,6 +283,8 @@ export interface DeliveryBatch {
   createdAt: string;
   // Batch integrity indicator
   hasIntegrity?: boolean;
+  // Distinct programs from linked requisitions and invoices
+  programs?: string[];
 }
 
 export interface RouteOptimization {

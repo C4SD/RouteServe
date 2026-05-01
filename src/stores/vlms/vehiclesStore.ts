@@ -268,6 +268,7 @@ export const useVehiclesStore = create<VehiclesState>()(
           // Also strip fields that don't exist as DB columns: taxonomy FKs with non-UUID
           // static IDs, telemetry tracker fields (tracker_*), and vehicle outer-body
           // dimension fields (vehicle_*_cm) — none of these are in the vehicles table.
+          // Also map cargo_capacity to capacity for the public.vehicles table.
           const {
             vehicle_type: vType,
             category_id: _catId,
@@ -279,11 +280,13 @@ export const useVehiclesStore = create<VehiclesState>()(
             vehicle_width_cm: _vWidCm,
             vehicle_height_cm: _vHgtCm,
             vendor_id: _vendorId,
+            cargo_capacity,
             ...createRest
           } = sanitizedCreateData;
           const vehicleData = {
             ...createRest,
             ...(vType !== undefined ? { type: vType } : {}),
+            ...(cargo_capacity !== undefined ? { capacity: cargo_capacity } : {}),
             workspace_id: workspaceId,
             capacity_m3: (data as any).capacity_m3 ?? 0,
             capacity_kg: (data as any).capacity_kg ?? 0,
@@ -348,10 +351,16 @@ export const useVehiclesStore = create<VehiclesState>()(
 
           // Create update payload with proper type mapping
           // Destructure vehicle_type to remap it to the DB column 'type'
-          const { vehicle_type, ...rest } = sanitizedData;
+          // Also map cargo_capacity to capacity for the public.vehicles table
+          const { 
+            vehicle_type, 
+            cargo_capacity,
+            ...rest 
+          } = sanitizedData;
           const updateData: Partial<Vehicle> = {
             ...rest,
             ...(vehicle_type !== undefined ? { type: vehicle_type } : {}),
+            ...(cargo_capacity !== undefined ? { capacity: cargo_capacity } : {}),
             fuel_type: normalizeFuelType(data.fuel_type) as any,
             status: data.status ? (normalizeStatus(data.status) as 'available' | 'in-use' | 'maintenance') : undefined,
             updated_by: userId,

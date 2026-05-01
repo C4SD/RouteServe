@@ -271,7 +271,7 @@ const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
 
 // ─── OSRM Fallback (genuinely different road paths) ───
 
-const OSRM_BASE_URL = import.meta.env.VITE_ROUTING_API_URL || 'https://router.project-osrm.org/route/v1/driving';
+const OSRM_BASE_URL = import.meta.env.VITE_ROUTING_API_URL || 'https://routing.openstreetmap.de/routed-car/route/v1/driving';
 const OSRM_ROUTE_COLORS = ['#3b82f6', '#22c55e', '#f97316']; // blue, green, orange
 const OSRM_ROUTE_LABELS = ['Primary Route', 'Alternative A', 'Alternative B'];
 

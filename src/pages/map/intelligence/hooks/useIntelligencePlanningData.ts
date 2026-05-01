@@ -6,13 +6,14 @@
  * - Service area hulls (convex polygons)
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRoutes } from '@/hooks/useRoutes';
 import { useServiceAreas } from '@/hooks/useServiceAreas';
 import { useOperationalZones } from '@/hooks/useOperationalZones';
 import { supabase } from '@/integrations/supabase/client';
 import { computeConvexHull } from '@/lib/algorithms/convexHull';
+import { getRoadRoute } from '@/lib/geoapify';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { ZonePolygonData } from '@/maps-v3/layers/ZonePolygonLayer';
 import type { RouteGeometryData } from '@/maps-v3/layers/RouteGeometryLayer';
@@ -98,18 +99,107 @@ export function useIntelligencePlanningData() {
       }));
   }, [zones]);
 
+  // ── Road geometry fetching for routes without stored optimized_geometry ─────
+  const [fetchedGeometries, setFetchedGeometries] = useState<
+    Record<string, { type: string; coordinates: [number, number][] }>
+  >({});
+  const handledRoutesRef = useRef<Set<string>>(new Set());
+
+  const facilitiesByRoute = useMemo(() => {
+    const m = new Map<string, Array<{ lat: number; lng: number; sequence_order: number }>>();
+    (allRouteFacilities || []).forEach((rf) => {
+      if (!rf.facilities || rf.facilities.lat == null || rf.facilities.lng == null) return;
+      const list = m.get(rf.route_id) || [];
+      list.push({ lat: rf.facilities.lat, lng: rf.facilities.lng, sequence_order: rf.sequence_order });
+      m.set(rf.route_id, list);
+    });
+    return m;
+  }, [allRouteFacilities]);
+
+  useEffect(() => {
+    if (!routes || routes.length === 0) return;
+
+    const needsGeometry = routes.filter((r) => {
+      if (r.optimized_geometry) return false;
+      if (handledRoutesRef.current.has(r.id)) return false;
+      const wh = r.warehouses;
+      if (!wh || wh.lat == null || wh.lng == null) return false;
+      return (facilitiesByRoute.get(r.id) || []).length >= 1;
+    });
+
+    if (needsGeometry.length === 0) return;
+    needsGeometry.forEach((r) => handledRoutesRef.current.add(r.id));
+
+    // Fetch up to 3 at a time to avoid hammering the routing API
+    const chunk = needsGeometry.slice(0, 3);
+
+    Promise.all(
+      chunk.map(async (route) => {
+        const wh = route.warehouses!;
+        const facilities = [...(facilitiesByRoute.get(route.id) || [])]
+          .sort((a, b) => a.sequence_order - b.sequence_order);
+
+        const waypoints = [
+          { lat: wh.lat!, lng: wh.lng! },
+          ...facilities.map((f) => ({ lat: f.lat, lng: f.lng })),
+          { lat: wh.lat!, lng: wh.lng! },
+        ];
+
+        try {
+          const road = await getRoadRoute(waypoints);
+          if (road && road.geometry.length > 0) {
+            const geometry = { type: 'LineString' as const, coordinates: road.geometry };
+            // Persist so future renders use the stored geometry
+            supabase
+              .from('routes')
+              .update({
+                optimized_geometry: geometry,
+                total_distance_km: road.roadDistanceKm,
+                estimated_duration_min: road.roadTimeMinutes,
+              })
+              .eq('id', route.id)
+              .then(({ error }) => {
+                if (error) console.error(`[IntelMap] Failed to persist geometry for ${route.id}:`, error);
+              });
+            return { routeId: route.id, geometry };
+          }
+        } catch (err) {
+          console.error(`[IntelMap] Road route fetch failed for ${route.id}:`, err);
+        }
+        return null;
+      })
+    ).then((results) => {
+      const newGeoms: Record<string, { type: string; coordinates: [number, number][] }> = {};
+      let hasNew = false;
+      results.forEach((r) => {
+        if (!r) return;
+        hasNew = true;
+        newGeoms[r.routeId] = r.geometry;
+      });
+      if (hasNew) setFetchedGeometries((prev) => ({ ...prev, ...newGeoms }));
+    });
+  }, [routes, facilitiesByRoute]);
+
   // ── Route geometries ────────────────────────────────────────────────────────
   const routeGeometries: RouteGeometryData[] = useMemo(() => {
     return (routes || [])
-      .filter((r) => r.optimized_geometry != null)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        status: r.status,
-        isSandbox: !!r.is_sandbox,
-        geometry: r.optimized_geometry as { type: string; coordinates: [number, number][] },
-      }));
-  }, [routes]);
+      .map((r) => {
+        const storedGeom = r.optimized_geometry != null
+          ? r.optimized_geometry as { type: string; coordinates: [number, number][] }
+          : fetchedGeometries[r.id] ?? null;
+
+        if (!storedGeom) return null;
+
+        return {
+          id: r.id,
+          name: r.name,
+          status: r.status,
+          isSandbox: !!r.is_sandbox,
+          geometry: storedGeom,
+        };
+      })
+      .filter((r): r is RouteGeometryData => r !== null);
+  }, [routes, fetchedGeometries]);
 
   // ── Service area hulls ──────────────────────────────────────────────────────
   const facilitiesBySA = useMemo(() => {

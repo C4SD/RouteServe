@@ -49,6 +49,8 @@ import {
 import { usePreBatch } from '@/hooks/usePreBatch';
 import { useVehiclesStore } from '@/stores/vlms/vehiclesStore';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSettings } from '@/hooks/settings/useWorkspaceSettings';
+import { DEFAULT_SERVICE_TIME_MIN } from '@/lib/schedulerUtils';
 import { useBatchSlotAssignments } from '@/hooks/useBatchSlotAssignments';
 import { BatchAllocationPanel } from '@/components/vlms/vehicles/capacity/BatchAllocationPanel';
 import type { VehicleCapacity } from '@/fleetops/payload/types';
@@ -252,6 +254,8 @@ export function SchedulePreviewPanel({
 }: SchedulePreviewPanelProps) {
   const [loadPlanOpen, setLoadPlanOpen] = useState(false);
   const { workspaceId } = useWorkspace();
+  const { data: wsSettings } = useWorkspaceSettings(workspaceId);
+  const waitingTimeMin = wsSettings?.settings?.waiting_time_sla_minutes ?? DEFAULT_SERVICE_TIME_MIN;
 
   // Fetch batch data independently as fallback
   const { data: preBatchData, isLoading } = usePreBatch(batchId, {
@@ -299,8 +303,8 @@ export function SchedulePreviewPanel({
       ? { lat: Number(warehouse.lat), lng: Number(warehouse.lng) }
       : null;
 
-    return computeRouteMetrics(batch.facility_ids, facilityMap, startLocation);
-  }, [batch, facilityMap, warehouseMap]);
+    return computeRouteMetrics(batch.facility_ids, facilityMap, startLocation, waitingTimeMin);
+  }, [batch, facilityMap, warehouseMap, waitingTimeMin]);
 
   // Compute capacity utilization if vehicle is known
   const capacityPct = useMemo(() => {

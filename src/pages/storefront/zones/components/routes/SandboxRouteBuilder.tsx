@@ -50,6 +50,8 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useOperationalZones } from '@/hooks/useOperationalZones';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useCreateRoute } from '@/hooks/useRoutes';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSettings } from '@/hooks/settings/useWorkspaceSettings';
 import { calculateDistance } from '@/lib/routeOptimization';
 import { computeDistanceMatrix, type GeoPoint } from '@/lib/algorithms/distanceMatrix';
 import { solveTSP } from '@/lib/algorithms/tsp';
@@ -115,6 +117,9 @@ export function SandboxRouteBuilder({ onClose }: SandboxRouteBuilderProps) {
   const cardinalFetchingRef = useRef<Set<string>>(new Set());
 
   const { theme } = useTheme();
+  const { workspaceId } = useWorkspace();
+  const { data: wsSettings } = useWorkspaceSettings(workspaceId);
+  const waitingTimeMin = wsSettings?.settings?.waiting_time_sla_minutes ?? SERVICE_TIME_HOURS * 60;
   const { zones } = useOperationalZones();
   const selectedZone = zones?.find((z) => z.id === zoneId);
   const zoneCenter = selectedZone?.region_center ?? null;
@@ -408,7 +413,7 @@ export function SandboxRouteBuilder({ onClose }: SandboxRouteBuilderProps) {
 
         // Solve TSP with depot (zone center) as starting point
         const { orderedIds, algorithmLabel: label } = solveWithConfig(
-          zoneCenter, points, optConfig
+          zoneCenter, points, optConfig, waitingTimeMin
         );
 
         // Compute haversine distance for the full route: depot → facilities → depot
@@ -421,7 +426,7 @@ export function SandboxRouteBuilder({ onClose }: SandboxRouteBuilderProps) {
         }
         haversineDistance += calculateDistance(prev.lat, prev.lng, zoneCenter.lat, zoneCenter.lng);
 
-        const estTime = haversineDistance / AVG_SPEED_KMH + selected.length * SERVICE_TIME_HOURS;
+        const estTime = haversineDistance / AVG_SPEED_KMH + (selected.length * waitingTimeMin) / 60;
 
         setOptimizedOrder(orderedIds);
         setOptimizedDistance(Math.round(haversineDistance * 10) / 10);
@@ -445,7 +450,7 @@ export function SandboxRouteBuilder({ onClose }: SandboxRouteBuilderProps) {
           if (road) {
             setRoadRoute(road);
             setOptimizedDistance(road.roadDistanceKm);
-            const totalMinutes = road.roadTimeMinutes + selected.length * SERVICE_TIME_HOURS * 60;
+            const totalMinutes = road.roadTimeMinutes + selected.length * waitingTimeMin;
             setOptimizedTime(Math.round((totalMinutes / 60) * 10) / 10);
           }
         } catch (roadErr) {
@@ -533,7 +538,7 @@ export function SandboxRouteBuilder({ onClose }: SandboxRouteBuilderProps) {
       // Deduplicate identical orderings
       const uniqueOrderings = new Map<string, { orderedIds: string[]; algorithmLabel: string }>();
       for (const { config, label } of configs) {
-        const result = solveWithConfig(zoneCenter, points, config);
+        const result = solveWithConfig(zoneCenter, points, config, waitingTimeMin);
         const key = result.orderedIds.join(',');
         if (!uniqueOrderings.has(key)) {
           uniqueOrderings.set(key, { orderedIds: result.orderedIds, algorithmLabel: label });

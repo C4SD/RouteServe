@@ -5,6 +5,7 @@ import { useFacilities } from '@/hooks/useFacilities';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useDeliveryBatches } from '@/hooks/useDeliveryBatches';
+import { useBatchRouteGeometries } from '@/hooks/useBatchRouteGeometries';
 import { useRealtimeDrivers } from '@/hooks/useRealtimeDrivers';
 import { useRealtimeZones } from '@/hooks/useRealtimeZones';
 import { useRealtimeVehicles } from '@/hooks/useRealtimeVehicles';
@@ -44,7 +45,8 @@ export default function TacticalMap() {
   const { data: warehousesData } = useWarehouses();
   const warehouses = warehousesData?.warehouses || [];
   const { data: vehicles = [] } = useVehicles();
-  const { data: batches = [] } = useDeliveryBatches();
+  const { data: rawBatches = [] } = useDeliveryBatches();
+  const batches = useBatchRouteGeometries(rawBatches, warehouses);
   const { data: stats } = useRealtimeStats();
   const { layers } = useMapLayers();
 
@@ -223,7 +225,7 @@ export default function TacticalMap() {
         <UnifiedMapContainer
           mode="fullscreen"
           facilities={layers.facilities ? facilities : []}
-          warehouses={layers.warehouses ? warehouses : []}
+          warehouses={warehouses}
           drivers={layers.drivers ? drivers : []}
           batches={layers.batches ? batches : []}
           vehicles={layers.vehicles ? vehicles : []}

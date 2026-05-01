@@ -9,11 +9,13 @@ import { SchedulePreviewPanel } from './components/SchedulePreviewPanel';
 import { SummaryStrip } from './components/SummaryStrip';
 import { UnifiedWorkflowDialog } from '@/components/unified-workflow';
 import { CalendarView } from './components/CalendarView';
+import { exportSchedulePdf } from './utils/exportSchedulePdf';
 import type { SchedulerFilters, SchedulerBatch, SchedulerBatchStatus } from '@/types/scheduler';
 import type { PreBatchWithRelations } from '@/types/unified-workflow';
 import { useDrivers } from '@/hooks/useDrivers';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useFacilities } from '@/hooks/useFacilities.tsx';
+import { useBatchPrograms } from '@/hooks/useBatchPrograms';
 
 /** Map pre-batch records to SchedulerBatch format for the list view */
 function mapPreBatchToSchedulerBatch(pb: PreBatchWithRelations): SchedulerBatch {
@@ -112,6 +114,24 @@ export default function SchedulerPage() {
     return mapped;
   }, [preBatches, statusFilters]);
 
+  // Collect delivery batch IDs for published scheduler batches to fetch their programs
+  const publishedDeliveryBatchIds = useMemo(
+    () => preBatches.flatMap(pb => pb.converted_batch_id ? [pb.converted_batch_id] : []),
+    [preBatches]
+  );
+  const { data: deliveryBatchPrograms = {} } = useBatchPrograms(publishedDeliveryBatchIds);
+
+  // Map scheduler-batch-id → programs[] using the converted_batch_id as the bridge
+  const schedulerProgramsMap = useMemo<Record<string, string[]>>(() => {
+    const map: Record<string, string[]> = {};
+    preBatches.forEach(pb => {
+      if (pb.converted_batch_id && deliveryBatchPrograms[pb.converted_batch_id]) {
+        map[pb.id] = deliveryBatchPrograms[pb.converted_batch_id];
+      }
+    });
+    return map;
+  }, [preBatches, deliveryBatchPrograms]);
+
   const [statusExtras, setStatusExtras] = useState<StatusFilterExtras>({
     assignment: 'any',
     program: 'all',
@@ -138,7 +158,10 @@ export default function SchedulerPage() {
       }
 
       if (statusExtras.program !== 'all') {
-        const programs = batch.tags || [];
+        const programs = [
+          ...(batch.tags ?? []),
+          ...(schedulerProgramsMap[batch.id] ?? []),
+        ];
         if (!programs.includes(statusExtras.program)) {
           return false;
         }
@@ -157,14 +180,11 @@ export default function SchedulerPage() {
   const availablePrograms = useMemo(() => {
     const programSet = new Set<string>();
     batches.forEach((batch) => {
-      batch.tags?.forEach((tag) => {
-        if (tag) {
-          programSet.add(tag);
-        }
-      });
+      batch.tags?.forEach((tag) => { if (tag) programSet.add(tag); });
+      schedulerProgramsMap[batch.id]?.forEach((p) => programSet.add(p));
     });
     return Array.from(programSet).sort();
-  }, [batches]);
+  }, [batches, schedulerProgramsMap]);
 
   const availableZones = useMemo(() => {
     const zoneSet = new Set<string>();
@@ -185,6 +205,15 @@ export default function SchedulerPage() {
     setSelectedBatchId(schedule.id);
   };
 
+  const handleExport = () => {
+    exportSchedulePdf(
+      filteredBatches,
+      facilities,
+      Array.isArray(warehouses) ? warehouses : [],
+      vehicles
+    );
+  };
+
   const header = (
     <UnifiedHeader
       activeView={activeView}
@@ -203,6 +232,8 @@ export default function SchedulerPage() {
       availablePrograms={availablePrograms}
       availableZones={availableZones}
       onNewSchedule={() => setWizardOpen(true)}
+      onExport={handleExport}
+      scheduleCount={filteredBatches.length}
     />
   );
 
@@ -218,6 +249,7 @@ export default function SchedulerPage() {
           drivers={drivers}
           vehicles={vehicles}
           facilities={facilities}
+          programsMap={schedulerProgramsMap}
         />
       </div>
       {selectedBatchId && (
@@ -232,14 +264,28 @@ export default function SchedulerPage() {
       )}
     </div>
   ) : (
-    <CalendarView
-      selectedDate={selectedDate}
-      onDateChange={setSelectedDate}
-      viewMode={calendarViewMode}
-      onViewModeChange={setCalendarViewMode}
-      schedules={batches}
-      onScheduleClick={handleScheduleClick}
-    />
+    <div className="flex h-full min-h-0">
+      <div className="flex-1 min-w-0">
+        <CalendarView
+          selectedDate={selectedDate}
+          onDateChange={setSelectedDate}
+          viewMode={calendarViewMode}
+          onViewModeChange={setCalendarViewMode}
+          schedules={batches}
+          onScheduleClick={handleScheduleClick}
+        />
+      </div>
+      {selectedBatchId && (
+        <SchedulePreviewPanel
+          batchId={selectedBatchId}
+          batch={batches.find(b => b.id === selectedBatchId)}
+          onClose={() => setSelectedBatchId(null)}
+          facilities={facilities}
+          warehouses={warehouses}
+          vehicles={vehicles}
+        />
+      )}
+    </div>
   );
 
   const summary = activeView === 'status' ? (

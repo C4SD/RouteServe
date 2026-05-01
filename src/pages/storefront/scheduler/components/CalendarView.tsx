@@ -27,7 +27,7 @@ interface CalendarViewProps {
   onDateChange?: (date: Date) => void;
   viewMode?: 'day' | 'week' | 'month';
   onViewModeChange?: (mode: 'day' | 'week' | 'month') => void;
-  schedules: any[]; // Could be scheduler batches or planner schedules
+  schedules: any[];
   onScheduleClick?: (schedule: any) => void;
 }
 
@@ -70,8 +70,8 @@ export function CalendarView({
     return schedules.map((schedule) => {
       // Handle both scheduler batches and planner schedules
       const isSchedulerBatch = 'batch_code' in schedule;
-      const plannedDate = isSchedulerBatch 
-        ? schedule.scheduled_date || schedule.created_at
+      const plannedDate = isSchedulerBatch
+        ? schedule.planned_date || schedule.created_at
         : schedule.planned_date;
 
       return {
@@ -83,7 +83,7 @@ export function CalendarView({
         end: new Date(plannedDate),
         timeWindow: schedule.time_window || 'morning',
         status: mapToStatus(schedule.status),
-        facilityCount: isSchedulerBatch ? schedule.facilities?.length || 0 : schedule.facility_ids?.length || 0,
+        facilityCount: schedule.facility_ids?.length || 0,
         warehouseName: schedule.warehouse?.name || 'Unknown Warehouse',
         driverName: schedule.driver?.name,
         vehiclePlate: schedule.vehicle?.plate_number,

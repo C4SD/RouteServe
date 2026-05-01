@@ -34,6 +34,7 @@ export interface Invoice {
   invoice_number: string;
   ref_number?: string;
   requisition_id?: string;
+  program?: string;
   warehouse_id: string;
   facility_id: string;
   status: InvoiceStatus;
@@ -109,6 +110,7 @@ export interface InvoiceFilters {
   status?: InvoiceStatus[];
   warehouse_id?: string;
   facility_id?: string;
+  program?: string;
   date_from?: string;
   date_to?: string;
 }
@@ -117,6 +119,7 @@ export interface InvoiceFormData {
   invoice_number?: string;
   ref_number?: string;
   requisition_id?: string;
+  program?: string;
   warehouse_id: string;
   facility_id: string;
   notes?: string;

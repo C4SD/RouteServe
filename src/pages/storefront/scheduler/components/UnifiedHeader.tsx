@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarIcon,
+  Download,
   Filter,
   LayoutList,
   MapPin,
@@ -75,6 +76,8 @@ interface UnifiedHeaderProps {
   availableZones?: string[];
 
   onNewSchedule: () => void;
+  onExport?: () => void;
+  scheduleCount?: number;
 }
 
 export function UnifiedHeader({
@@ -94,6 +97,8 @@ export function UnifiedHeader({
   availablePrograms = [],
   availableZones = [],
   onNewSchedule,
+  onExport,
+  scheduleCount = 0,
 }: UnifiedHeaderProps) {
   const [statusDateRange, setStatusDateRange] = useState<DateRange | undefined>(
     statusFilters.date_range
@@ -404,6 +409,18 @@ export function UnifiedHeader({
               Calendar View
             </ToggleGroupItem>
           </ToggleGroup>
+          {onExport && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExport}
+              disabled={scheduleCount === 0}
+              className="gap-1.5"
+            >
+              <Download className="h-4 w-4" />
+              Export PDF
+            </Button>
+          )}
           <Button onClick={onNewSchedule} size="sm" className="gap-2">
             <Plus className="h-4 w-4" />
             New Schedule

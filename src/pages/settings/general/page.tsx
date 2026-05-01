@@ -1130,7 +1130,6 @@ export default function SettingsGeneralPage() {
             <SettingsSection
               title="Delivery SLA"
               description="Maximum hours allowed for delivery completion."
-              showSeparator={false}
             >
               <div className="flex items-center gap-2">
                 <Input
@@ -1150,6 +1149,32 @@ export default function SettingsGeneralPage() {
                   placeholder="24"
                 />
                 <span className="text-sm text-muted-foreground">hours</span>
+              </div>
+            </SettingsSection>
+
+            <SettingsSection
+              title="Waiting Time SLA"
+              description="Agreed time allocated per stop for drivers and couriers to load and offload. Applied to every delivery stop in route duration and turnaround calculations."
+              showSeparator={false}
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={240}
+                  value={settings.waiting_time_sla_minutes ?? ''}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!e.target.value) {
+                      updateSettings('waiting_time_sla_minutes', undefined);
+                    } else if (val >= 1 && val <= 240) {
+                      updateSettings('waiting_time_sla_minutes', val);
+                    }
+                  }}
+                  className="w-24"
+                  placeholder="15"
+                />
+                <span className="text-sm text-muted-foreground">minutes per stop</span>
               </div>
             </SettingsSection>
           </div>

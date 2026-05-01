@@ -222,6 +222,22 @@ const ActiveDeliveriesPanel = ({
                           )}
                         </div>
 
+                        {/* Programs */}
+                        {batch.programs && batch.programs.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {batch.programs.slice(0, 2).map((p) => (
+                              <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0">
+                                {p}
+                              </Badge>
+                            ))}
+                            {batch.programs.length > 2 && (
+                              <span className="text-[10px] text-muted-foreground self-center">
+                                +{batch.programs.length - 2} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+
                         {/* Stats */}
                         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                           <div className="flex items-center gap-1">

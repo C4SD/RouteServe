@@ -43,6 +43,8 @@ import { RouteComparisonPanel } from '@/pages/storefront/zones/components/routes
 import { VehicleSuggestionCard } from '@/components/unified-workflow/shared/VehicleSuggestionCard';
 import { useBatchUpdate } from '@/hooks/useBatchUpdate';
 import { useVehicles } from '@/hooks/useVehicles';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useWorkspaceSettings } from '@/hooks/settings/useWorkspaceSettings';
 import type { DeliveryBatch } from '@/types';
 import type { ComparisonRoute } from '@/types/routes';
 
@@ -73,6 +75,9 @@ export function BatchOptimizationPanel({ batch, depot }: BatchOptimizationPanelP
 
   const batchUpdate = useBatchUpdate();
   const { data: vehicles = [] } = useVehicles();
+  const { workspaceId } = useWorkspace();
+  const { data: wsSettings } = useWorkspaceSettings(workspaceId);
+  const waitingTimeMin = wsSettings?.settings?.waiting_time_sla_minutes ?? SERVICE_TIME_HOURS * 60;
 
   // Current route distance (haversine)
   const currentDistanceKm = useMemo(() => {
@@ -148,7 +153,7 @@ export function BatchOptimizationPanel({ batch, depot }: BatchOptimizationPanelP
         lng: f.lng,
       }));
 
-      const { orderedIds, algorithmLabel } = solveWithConfig(depot, points, config);
+      const { orderedIds, algorithmLabel } = solveWithConfig(depot, points, config, waitingTimeMin);
 
       // Calculate haversine distance for optimized order
       const orderedFacs = orderedIds
@@ -211,7 +216,7 @@ export function BatchOptimizationPanel({ batch, depot }: BatchOptimizationPanelP
       // Deduplicate identical orderings
       const uniqueOrderings = new Map<string, { orderedIds: string[]; algorithmLabel: string }>();
       for (const { config: cfg, label } of configs) {
-        const res = solveWithConfig(depot, points, cfg);
+        const res = solveWithConfig(depot, points, cfg, waitingTimeMin);
         const key = res.orderedIds.join(',');
         if (!uniqueOrderings.has(key)) {
           uniqueOrderings.set(key, { orderedIds: res.orderedIds, algorithmLabel: label });
@@ -315,12 +320,12 @@ export function BatchOptimizationPanel({ batch, depot }: BatchOptimizationPanelP
       updates.optimized_route = result.roadRoute.geometry;
       updates.total_distance = result.roadRoute.roadDistanceKm;
       updates.estimated_duration =
-        result.roadRoute.roadTimeMinutes + validFacilities.length * SERVICE_TIME_HOURS * 60;
+        result.roadRoute.roadTimeMinutes + validFacilities.length * waitingTimeMin;
     } else {
       updates.total_distance = result.haversineKm;
       updates.estimated_duration =
         (result.haversineKm / AVG_SPEED_KMH) * 60 +
-        validFacilities.length * SERVICE_TIME_HOURS * 60;
+        validFacilities.length * waitingTimeMin;
     }
 
     if (suggestedVehicleId) {

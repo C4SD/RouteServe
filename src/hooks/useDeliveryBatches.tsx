@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { DeliveryBatch, Facility } from '@/types';
 import { toast } from 'sonner';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { fetchProgramsForBatches } from '@/hooks/useBatchPrograms';
 
 /**
  * Check if a batch has integrity based on RFC-012 requirements.
@@ -85,6 +86,10 @@ export function useDeliveryBatches() {
         });
       }
 
+      // Fetch distinct programs per batch from requisitions + invoices
+      const batchIds = batchesData.map(b => b.id);
+      const programsMap = await fetchProgramsForBatches(batchIds);
+
       // Map batches with their facilities
       return batchesData.map(b => {
         // Get facilities for this batch in the order they appear in facility_ids
@@ -127,6 +132,7 @@ export function useDeliveryBatches() {
           createdAt: b.created_at,
           // RFC-012: Batch integrity indicator
           hasIntegrity: checkBatchHasIntegrity(batchData),
+          programs: programsMap[b.id] ?? [],
         };
       }) as DeliveryBatch[];
     }

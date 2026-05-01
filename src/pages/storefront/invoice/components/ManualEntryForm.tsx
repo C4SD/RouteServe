@@ -21,11 +21,13 @@ import { useWarehouses } from '@/hooks/useWarehouses';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useCreateInvoice } from '@/hooks/useInvoices';
 import { useItems } from '@/hooks/useItems';
+import { usePrograms } from '@/hooks/usePrograms';
 import type { ItemCategory, Item } from '@/types/items';
 import type { InvoiceFormData } from '@/types/invoice';
 
 const headerSchema = z.object({
   ref_number: z.string().optional(),
+  program: z.string().optional(),
   warehouse_id: z.string().min(1, 'Warehouse is required'),
   facility_id: z.string().min(1, 'Facility is required'),
   packaging_required: z.boolean().default(false),
@@ -174,10 +176,9 @@ interface ManualEntryFormProps {
 export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
   const [items, setItems] = useState<LineItem[]>([createEmptyItem()]);
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
   const createInvoice = useCreateInvoice();
   const queryClient = useQueryClient();
-  
+
   // Invalidate queries on mount to ensure fresh data
   React.useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ['facilities'] });
@@ -186,30 +187,25 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
 
   const { data: warehousesData, isLoading: warehousesLoading } = useWarehouses();
   const { data: facilitiesData, isLoading: facilitiesLoading } = useFacilities();
-  const { data: itemsData } = useItems({ warehouse_id: selectedWarehouseId });
+  const { data: itemsData } = useItems();
+  const { data: programsData } = usePrograms({ status: 'active' });
 
   const warehouses = warehousesData?.warehouses || [];
   const facilities = facilitiesData?.facilities || [];
   const availableItems = itemsData?.items || [];
+  const programs = programsData?.programs || [];
 
   const form = useForm<HeaderValues>({
     resolver: zodResolver(headerSchema),
     defaultValues: {
       ref_number: '',
+      program: '',
       warehouse_id: '',
       facility_id: '',
       packaging_required: false,
       notes: '',
     },
   });
-
-  // Update selected warehouse when form changes
-  const watchedWarehouseId = form.watch('warehouse_id');
-  React.useEffect(() => {
-    if (watchedWarehouseId !== selectedWarehouseId) {
-      setSelectedWarehouseId(watchedWarehouseId);
-    }
-  }, [watchedWarehouseId, selectedWarehouseId]);
 
   const handleItemChange = (index: number, field: keyof LineItem, value: string | number | undefined) => {
     setItems(prev => {
@@ -272,6 +268,7 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
 
     const formData: InvoiceFormData = {
       ref_number: header.ref_number || undefined,
+      program: header.program || undefined,
       warehouse_id: header.warehouse_id,
       facility_id: header.facility_id,
       notes: header.notes || undefined,
@@ -359,16 +356,36 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
             />
           </div>
 
-          <div className="flex items-center justify-between pt-6">
-            <div className="space-y-0.5">
-              <Label>Packaging Required</Label>
-              <p className="text-xs text-muted-foreground">Needs packaging before dispatch</p>
-            </div>
-            <Switch
-              checked={form.watch('packaging_required')}
-              onCheckedChange={(checked) => form.setValue('packaging_required', checked)}
-            />
+          <div className="space-y-2">
+            <Label htmlFor="program">Program</Label>
+            <Select
+              value={form.watch('program') || ''}
+              onValueChange={(value) => form.setValue('program', value === '__none__' ? '' : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select program (optional)" />
+              </SelectTrigger>
+              <SelectContent className="z-[9999]">
+                <SelectItem value="__none__">None</SelectItem>
+                {programs.map(p => (
+                  <SelectItem key={p.id} value={p.name}>
+                    {p.name}{p.code ? ` (${p.code})` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label>Packaging Required</Label>
+            <p className="text-xs text-muted-foreground">Needs packaging before dispatch</p>
+          </div>
+          <Switch
+            checked={form.watch('packaging_required')}
+            onCheckedChange={(checked) => form.setValue('packaging_required', checked)}
+          />
         </div>
 
         <div className="space-y-2">

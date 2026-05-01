@@ -111,6 +111,23 @@ export function BatchDrawer({ isOpen, batchId, onClose }: BatchDrawerProps) {
                   <span className="font-medium">{batch.totalWeight} kg</span>
                 </div>
               )}
+              {batch.programs && batch.programs.length > 0 && (
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-muted-foreground shrink-0">Programs:</span>
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {batch.programs.slice(0, 2).map((p: string) => (
+                      <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0">
+                        {p}
+                      </Badge>
+                    ))}
+                    {batch.programs.length > 2 && (
+                      <span className="text-[10px] text-muted-foreground self-center">
+                        +{batch.programs.length - 2} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

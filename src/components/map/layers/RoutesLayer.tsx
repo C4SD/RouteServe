@@ -18,11 +18,7 @@ export function RoutesLayer({ map, routes, warehouses }: RoutesLayerProps) {
 
     const handleZoom = () => {
       if (!layerRef.current) return;
-      if (map.getZoom() < 12) {
-        layerRef.current.clearLayers();
-      } else {
-        renderRoutes();
-      }
+      renderRoutes();
     };
 
     const renderRoutes = () => {

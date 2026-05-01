@@ -46,7 +46,7 @@ export function findOptimalWarehouse(facility: Facility, warehouses: Warehouse[]
 }
 
 // Enhanced VRP optimization with clustering and vehicle assignment
-export function optimizeRoutes(facilities: Facility[], warehouses: Warehouse[]): RouteOptimization[] {
+export function optimizeRoutes(facilities: Facility[], warehouses: Warehouse[], waitingTimeMin = 20): RouteOptimization[] {
   const routesByWarehouse: { [warehouseId: string]: RouteOptimization } = {};
 
   // Initialize routes for each warehouse
@@ -72,8 +72,8 @@ export function optimizeRoutes(facilities: Facility[], warehouses: Warehouse[]):
 
     routesByWarehouse[optimalWarehouse.id].facilities.push(facility);
     routesByWarehouse[optimalWarehouse.id].totalDistance += distance;
-    // Estimate: 20 min service time per facility + travel time (40 km/h average) + 10 min loading
-    routesByWarehouse[optimalWarehouse.id].estimatedDuration += 20 + (distance / 40) * 60;
+    // waiting time SLA per stop + travel time at 40 km/h average
+    routesByWarehouse[optimalWarehouse.id].estimatedDuration += waitingTimeMin + (distance / 40) * 60;
   });
 
   // Optimize routes for each warehouse using nearest neighbor with 2-opt improvement
@@ -198,10 +198,11 @@ export async function optimizeBatchDeliveryWithAPI(
 
 // Original client-side optimization (kept as fallback)
 export function optimizeBatchDelivery(
-  facilities: Facility[], 
+  facilities: Facility[],
   warehouses: Warehouse[],
   medicationType: string,
-  priority: 'low' | 'medium' | 'high' | 'urgent'
+  priority: 'low' | 'medium' | 'high' | 'urgent',
+  waitingTimeMin?: number
 ): RouteOptimization {
   // Find optimal warehouse based on facility cluster center
   const centerLat = facilities.reduce((sum, f) => sum + f.lat, 0) / facilities.length;
@@ -217,11 +218,11 @@ export function optimizeBatchDelivery(
   const optimizedRoute = optimizeRouteOrder(optimalWarehouse, facilities);
   const totalDistance = calculateRouteDistance(optimizedRoute);
   
-  // Calculate estimated duration based on priority and complexity
-  let baseServiceTime = priority === 'urgent' ? 15 : priority === 'high' ? 20 : 25; // minutes per facility
-  let loadingTime = 15; // base loading time
-  let travelTime = (totalDistance / 45) * 60; // assuming 45 km/h average with stops
-  
+  // Per-stop waiting time: use workspace SLA when provided, otherwise fall back to priority-based defaults
+  const baseServiceTime = waitingTimeMin ?? (priority === 'urgent' ? 15 : priority === 'high' ? 20 : 25);
+  const loadingTime = waitingTimeMin ?? 15; // initial warehouse loading
+  const travelTime = (totalDistance / 45) * 60; // 45 km/h average with stops
+
   const estimatedDuration = (facilities.length * baseServiceTime) + loadingTime + travelTime;
   
   return {

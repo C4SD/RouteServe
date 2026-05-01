@@ -276,8 +276,8 @@ export function haversineDistance(
 
 /** Average driving speed assumption in km/h for duration estimates */
 const AVG_SPEED_KMH = 40;
-/** Average service time per stop in minutes */
-const SERVICE_TIME_MIN = 15;
+/** Default service time per stop in minutes — overridden by workspace Waiting Time SLA when available */
+export const DEFAULT_SERVICE_TIME_MIN = 15;
 
 export interface RouteStopInfo {
   facility_id: string;
@@ -298,7 +298,8 @@ export interface RouteStopInfo {
 export function computeRouteMetrics(
   facilityIds: string[],
   facilityMap: Record<string, { name: string; lat: number; lng: number; lga?: string }>,
-  startLocation?: { lat: number; lng: number } | null
+  startLocation?: { lat: number; lng: number } | null,
+  waitingTimeMin: number = DEFAULT_SERVICE_TIME_MIN
 ): {
   stops: RouteStopInfo[];
   totalDistanceKm: number;
@@ -323,7 +324,7 @@ export function computeRouteMetrics(
         cumulative_distance_km: cumulativeDist,
         eta_minutes: cumulativeTime,
       });
-      cumulativeTime += SERVICE_TIME_MIN;
+      cumulativeTime += waitingTimeMin;
       continue;
     }
 

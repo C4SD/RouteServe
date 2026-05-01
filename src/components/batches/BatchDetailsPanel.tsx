@@ -188,6 +188,23 @@ export function BatchDetailsPanel({ batch, open, onOpenChange }: BatchDetailsPan
                           <p className="font-medium">{batch.totalQuantity} units</p>
                         </div>
                       </div>
+                      {batch.programs && batch.programs.length > 0 && (
+                        <div>
+                          <p className="text-muted-foreground text-sm mb-1.5">Programs</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {batch.programs.slice(0, 2).map((p) => (
+                              <Badge key={p} variant="outline" className="text-xs px-2 py-0.5">
+                                {p}
+                              </Badge>
+                            ))}
+                            {batch.programs.length > 2 && (
+                              <span className="text-xs text-muted-foreground self-center">
+                                +{batch.programs.length - 2} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <Separator />
