@@ -210,7 +210,8 @@ export default function SchedulerPage() {
       filteredBatches,
       facilities,
       Array.isArray(warehouses) ? warehouses : [],
-      vehicles
+      vehicles,
+      drivers
     );
   };
 
