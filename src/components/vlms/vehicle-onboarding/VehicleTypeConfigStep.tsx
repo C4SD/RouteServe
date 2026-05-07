@@ -7,7 +7,6 @@
  *
  * Changes from v3:
  *  - Dimensions input in metres (m), stored internally as cm
- *  - Make/Model pulled from NHTSA vPIC API; VIN auto-decodes all fields
  *  - License plate and VIN are checked for uniqueness against the DB
  *  - New "Slots & Tiers" tab for full tier / slot configuration
  */
@@ -51,11 +50,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { getSubtypesByCategory } from '@/lib/vlms/vehicleTaxonomy';
 import { useVehicleOnboardState } from '@/hooks/useVehicleOnboardState';
@@ -71,7 +65,6 @@ import {
 } from '@/lib/vlms/capacityCalculations';
 import { getSlotConstraints } from '@/lib/vlms/vehicleTaxonomy';
 import { AiDimensionButton } from '@/components/vlms/vehicle-configurator/AiDimensionButton';
-import { useNHTSAMakes, useNHTSAModels, useVINDecoder } from '@/hooks/useVehicleApiLookup';
 import { useLicensePlateUniqueness, useVinUniqueness } from '@/hooks/useVehicleUniquenessCheck';
 import type { VehicleType, TierConfig } from '@/types/vlms-onboarding';
 
@@ -407,66 +400,11 @@ function SpecsPanel() {
   const handleChange = (field: string, value: unknown) =>
     updateRegistrationData({ [field]: value });
 
-  // NHTSA make autocomplete
-  const [makeQuery, setMakeQuery] = useState(registrationData.make);
-  const [makePopoverOpen, setMakePopoverOpen] = useState(false);
-  const { makes: makeSuggestions, isLoading: makesLoading } = useNHTSAMakes(makeQuery);
-
-  // NHTSA model lookup (triggered by confirmed make + year)
-  const [modelQuery, setModelQuery] = useState(registrationData.model ?? '');
-  const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
-  const { models: modelOptions, isLoading: modelsLoading } = useNHTSAModels(
-    registrationData.make,
-    registrationData.year,
-  );
-
-  // VIN decoder
-  const { decodeVin, isDecoding, decodeError } = useVINDecoder();
-
   // Uniqueness checks
   const { isDuplicate: plateDuplicate, isChecking: plateChecking } =
     useLicensePlateUniqueness(registrationData.license_plate);
   const { isDuplicate: vinDuplicate, isChecking: vinChecking } =
     useVinUniqueness(registrationData.vin ?? '');
-
-  const handleMakeSelect = (make: string) => {
-    setMakeQuery(make);
-    handleChange('make', make);
-    setMakePopoverOpen(false);
-  };
-
-  const handleMakeInputChange = (val: string) => {
-    setMakeQuery(val);
-    handleChange('make', val);
-    setMakePopoverOpen(val.length >= 2);
-  };
-
-  const handleModelSelect = (model: string) => {
-    setModelQuery(model);
-    handleChange('model', model);
-    setModelPopoverOpen(false);
-  };
-
-  const handleModelInputChange = (val: string) => {
-    setModelQuery(val);
-    handleChange('model', val);
-    setModelPopoverOpen(val.length >= 1 && modelOptions.length > 0);
-  };
-
-  const handleVinChange = async (vin: string) => {
-    const upper = vin.toUpperCase();
-    handleChange('vin', upper);
-    if (upper.length === 17) {
-      const info = await decodeVin(upper);
-      if (info) {
-        if (info.make)            { handleChange('make', info.make); setMakeQuery(info.make); }
-        if (info.model)           { handleChange('model', info.model); setModelQuery(info.model); }
-        if (info.year)            handleChange('year', info.year);
-        if (info.fuel_type)       handleChange('fuel_type', info.fuel_type);
-        if (info.engine_capacity) handleChange('engine_capacity', info.engine_capacity);
-      }
-    }
-  };
 
   return (
     <div className="space-y-5">
@@ -477,85 +415,28 @@ function SpecsPanel() {
         </p>
 
         <div className="grid grid-cols-2 gap-2">
-          {/* Make — NHTSA autocomplete (always manually typeable) */}
           <div className="space-y-1">
             <Label className="text-xs">
               Make <span className="text-destructive">*</span>
             </Label>
-            <Popover
-              open={makePopoverOpen && makeSuggestions.length > 0}
-              onOpenChange={setMakePopoverOpen}
-            >
-              <PopoverTrigger asChild>
-                <div className="relative">
-                  <Input
-                    placeholder="Toyota"
-                    value={makeQuery}
-                    onChange={(e) => handleMakeInputChange(e.target.value)}
-                    onFocus={() => makeQuery.length >= 2 && setMakePopoverOpen(true)}
-                    className="h-8 text-sm pr-6"
-                    autoComplete="off"
-                  />
-                  {makesLoading && (
-                    <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="p-1 w-52" align="start" side="bottom">
-                {makeSuggestions.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
-                    onClick={() => handleMakeSelect(m)}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
+            <Input
+              placeholder="Toyota"
+              value={registrationData.make}
+              onChange={(e) => handleChange('make', e.target.value)}
+              className="h-8 text-sm"
+            />
           </div>
 
-          {/* Model — NHTSA suggestions with fallback to free-text */}
           <div className="space-y-1">
             <Label className="text-xs">
               Model <span className="text-destructive">*</span>
             </Label>
-            <Popover
-              open={modelPopoverOpen && modelOptions.length > 0}
-              onOpenChange={setModelPopoverOpen}
-            >
-              <PopoverTrigger asChild>
-                <div className="relative">
-                  <Input
-                    placeholder={modelsLoading ? 'Loading…' : 'e.g. Hiace'}
-                    value={modelQuery}
-                    onChange={(e) => handleModelInputChange(e.target.value)}
-                    onFocus={() => modelQuery.length >= 1 && modelOptions.length > 0 && setModelPopoverOpen(true)}
-                    className="h-8 text-sm pr-6"
-                    autoComplete="off"
-                  />
-                  {modelsLoading && (
-                    <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="p-1 w-52 max-h-48 overflow-y-auto" align="start" side="bottom">
-                {modelOptions
-                  .filter((m) => !modelQuery || m.toLowerCase().includes(modelQuery.toLowerCase()))
-                  .slice(0, 20)
-                  .map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
-                      onClick={() => handleModelSelect(m)}
-                    >
-                      {m}
-                    </button>
-                  ))}
-              </PopoverContent>
-            </Popover>
+            <Input
+              placeholder="e.g. Hiace"
+              value={registrationData.model ?? ''}
+              onChange={(e) => handleChange('model', e.target.value)}
+              className="h-8 text-sm"
+            />
           </div>
 
           {/* Year */}
@@ -608,21 +489,14 @@ function SpecsPanel() {
 
       <Separator />
 
-      {/* VIN with auto-decode */}
+      {/* VIN */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">VIN — auto-fills Make, Model, Year &amp; Fuel</Label>
-          {isDecoding && (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" /> Decoding…
-            </span>
-          )}
-        </div>
+        <Label className="text-xs">VIN</Label>
         <div className="relative">
           <Input
             placeholder="17-character VIN"
             value={registrationData.vin || ''}
-            onChange={(e) => handleVinChange(e.target.value)}
+            onChange={(e) => handleChange('vin', e.target.value.toUpperCase())}
             maxLength={17}
             className={cn(
               'h-8 text-sm font-mono pr-7',
@@ -640,10 +514,6 @@ function SpecsPanel() {
           )}
         </div>
         {vinDuplicate && <p className="text-[10px] text-destructive">VIN already registered in this workspace</p>}
-        {decodeError && <p className="text-[10px] text-destructive">{decodeError}</p>}
-        <p className="text-[10px] text-muted-foreground">
-          Powered by NHTSA vPIC — enter 17 chars to auto-fill vehicle details.
-        </p>
       </div>
 
       <Separator />

@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/formatCurrency';
-import { X, Building2, Warehouse, Calendar, Truck, Edit } from 'lucide-react';
+import { X, Building2, Warehouse, Calendar, Truck, Edit, Package, ShoppingBag, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -10,6 +11,7 @@ import type { Invoice } from '@/types/invoice';
 import { INVOICE_STATUS_CONFIG } from '@/types/invoice';
 import { useNavigate } from 'react-router-dom';
 import { InvoiceStatusActions } from '@/components/storefront/invoice/InvoiceStatusActions';
+import { PackagingMenuDialog } from './PackagingMenuDialog';
 
 interface InvoiceDetailPanelProps {
   invoice: Invoice;
@@ -19,6 +21,7 @@ interface InvoiceDetailPanelProps {
 export function InvoiceDetailPanel({ invoice, onClose }: InvoiceDetailPanelProps) {
   const navigate = useNavigate();
   const statusConfig = INVOICE_STATUS_CONFIG[invoice.status];
+  const [packagingDialogOpen, setPackagingDialogOpen] = useState(false);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
@@ -154,6 +157,75 @@ export function InvoiceDetailPanel({ invoice, onClose }: InvoiceDetailPanelProps
             </div>
           </div>
 
+          <Separator />
+
+          {/* Packaging */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground">Packaging</h3>
+
+            {invoice.packaging_required ? (
+              <div className="space-y-2">
+                {/* Package breakdown if available */}
+                {invoice.packaging && invoice.packaging.total_packages > 0 ? (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-purple-700">
+                        <Package className="h-4 w-4" />
+                        <span className="text-sm font-medium">
+                          {invoice.packaging.total_packages} package
+                          {invoice.packaging.total_packages !== 1 ? 's' : ''} configured
+                        </span>
+                      </div>
+                      <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-xs">
+                        {invoice.status === 'packaged' ? 'Packaged' : 'Packaging Pending'}
+                      </Badge>
+                    </div>
+                    {/* Per-type breakdown from package_items */}
+                    <div className="flex flex-wrap gap-1">
+                      {/* Show packaging mode summary */}
+                      <Badge variant="outline" className="text-xs text-purple-700 border-purple-300">
+                        {invoice.packaging.packaging_mode === 'bag' ? (
+                          <><ShoppingBag className="h-3 w-3 mr-1" />Bags</>
+                        ) : (
+                          <><Package className="h-3 w-3 mr-1" />Boxes</>
+                        )}
+                      </Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-700 font-medium">Packaging not yet configured</p>
+                    <p className="text-xs text-yellow-600 mt-0.5">
+                      Configure packaging to unlock dispatch
+                    </p>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => setPackagingDialogOpen(true)}
+                >
+                  <Package className="h-3.5 w-3.5 mr-1.5" />
+                  {invoice.packaging ? 'Edit Packaging' : 'Configure Packaging'}
+                  <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3 bg-muted/30 border rounded-lg">
+                <p className="text-sm text-muted-foreground">No packaging required</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => setPackagingDialogOpen(true)}
+                >
+                  Change
+                </Button>
+              </div>
+            )}
+          </div>
+
           {invoice.notes && (
             <>
               <Separator />
@@ -185,6 +257,13 @@ export function InvoiceDetailPanel({ invoice, onClose }: InvoiceDetailPanelProps
           Edit Invoice
         </Button>
       </div>
+
+      {/* Packaging dialog */}
+      <PackagingMenuDialog
+        open={packagingDialogOpen}
+        onOpenChange={setPackagingDialogOpen}
+        invoice={invoice}
+      />
     </div>
   );
 }

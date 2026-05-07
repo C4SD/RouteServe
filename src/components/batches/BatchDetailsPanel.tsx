@@ -61,7 +61,8 @@ export function BatchDetailsPanel({ batch, open, onOpenChange }: BatchDetailsPan
   if (!batch) return null;
 
   const driver = drivers.find((d) => d.id === batch.driverId);
-  const vehicle = vehicles.find((v) => v.id === batch.vehicleId);
+  const assignedVehicleIds = batch.vehicleIds ?? (batch.vehicleId ? [batch.vehicleId] : []);
+  const assignedVehicles = vehicles.filter((v) => assignedVehicleIds.includes(v.id));
   const rawWarehouse = warehouses.find((w) => w.id === batch.warehouseId);
   // Only pass warehouse to map if it has valid coordinates
   const warehouse = rawWarehouse && rawWarehouse.lat != null && rawWarehouse.lng != null
@@ -255,15 +256,21 @@ export function BatchDetailsPanel({ batch, open, onOpenChange }: BatchDetailsPan
                           )}
                         </div>
                         <div className="rounded-lg border p-3">
-                          <p className="text-xs text-muted-foreground mb-1">Vehicle</p>
-                          {vehicle ? (
-                            <>
-                              <p className="font-medium">{vehicle.model}</p>
-                              <p className="text-xs text-muted-foreground">{vehicle.plateNumber}</p>
-                              <Badge variant="outline" className="text-xs mt-1">
-                                {vehicle.capacity}m³
-                              </Badge>
-                            </>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Vehicles {assignedVehicles.length > 0 && `(${assignedVehicles.length})`}
+                          </p>
+                          {assignedVehicles.length > 0 ? (
+                            <div className="space-y-1.5">
+                              {assignedVehicles.map(v => (
+                                <div key={v.id}>
+                                  <p className="font-medium text-sm">{v.model}</p>
+                                  <p className="text-xs text-muted-foreground">{v.plateNumber}</p>
+                                  <Badge variant="outline" className="text-xs mt-0.5">
+                                    {v.capacity}m³
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
                           ) : (
                             <p className="text-muted-foreground">Not assigned</p>
                           )}

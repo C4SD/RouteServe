@@ -7,17 +7,18 @@ import { fetchProgramsForBatches } from '@/hooks/useBatchPrograms';
 
 /**
  * Check if a batch has integrity based on RFC-012 requirements.
- * A batch has integrity if it has: vehicle, facilities, warehouse, and no slot overflow.
+ * A batch has integrity if it has: vehicle(s), facilities, warehouse, and no slot overflow.
  */
 function checkBatchHasIntegrity(
   batch: {
+    vehicleIds?: string[];
     vehicleId?: string;
     facilities: Facility[];
     warehouseId?: string;
   },
   vehicleTotalSlots?: number
 ): boolean {
-  const hasVehicle = Boolean(batch.vehicleId);
+  const hasVehicle = (batch.vehicleIds && batch.vehicleIds.length > 0) || Boolean(batch.vehicleId);
   const hasFacilities = batch.facilities.length > 0;
   const hasWarehouse = Boolean(batch.warehouseId);
 
@@ -102,9 +103,18 @@ export function useDeliveryBatches() {
           });
         }
 
+        // Resolve vehicle_ids: prefer the array column, fall back to legacy vehicle_id
+        const vehicleIds: string[] =
+          (b as any).vehicle_ids?.length > 0
+            ? (b as any).vehicle_ids
+            : b.vehicle_id
+            ? [b.vehicle_id]
+            : [];
+
         // Build batch object for integrity check
         const batchData = {
-          vehicleId: b.vehicle_id || undefined,
+          vehicleIds,
+          vehicleId: vehicleIds[0],
           facilities: batchFacilities,
           warehouseId: b.warehouse_id,
         };
@@ -116,7 +126,8 @@ export function useDeliveryBatches() {
           warehouseId: b.warehouse_id,
           warehouseName: b.warehouse?.name || '',
           driverId: b.driver_id || undefined,
-          vehicleId: b.vehicle_id || undefined,
+          vehicleIds: vehicleIds.length > 0 ? vehicleIds : undefined,
+          vehicleId: vehicleIds[0] || undefined,
           scheduledDate: b.scheduled_date,
           scheduledTime: b.scheduled_time,
           status: b.status as 'planned' | 'assigned' | 'in-progress' | 'completed' | 'cancelled',
@@ -154,7 +165,8 @@ export function useCreateDeliveryBatch() {
           name: batch.name,
           warehouse_id: batch.warehouseId,
           driver_id: batch.driverId,
-          vehicle_id: batch.vehicleId,
+          vehicle_ids: batch.vehicleIds ?? (batch.vehicleId ? [batch.vehicleId] : []),
+          vehicle_id: batch.vehicleIds?.[0] ?? batch.vehicleId ?? null,
           scheduled_date: batch.scheduledDate,
           scheduled_time: batch.scheduledTime,
           status: batch.status,

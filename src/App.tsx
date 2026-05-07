@@ -51,6 +51,7 @@ const StorefrontScheduler = lazy(() => import("./pages/storefront/scheduler/page
 const StorefrontStockReports = lazy(() => import("./pages/storefront/stock-reports/page"));
 const StorefrontPrograms = lazy(() => import("./pages/storefront/programs/page"));
 const StorefrontItems = lazy(() => import("./pages/storefront/items/page"));
+const StorefrontImports = lazy(() => import("./pages/storefront/imports/page"));
 const StorefrontInvoice = lazy(() => import("./pages/storefront/invoice/page"));
 const StorefrontWarehouse = lazy(() => import("./pages/storefront/warehouse/page"));
 
@@ -196,6 +197,8 @@ const App = () => (
                     <Route path="programs" element={<StorefrontPrograms />} />
                     {/* Analytics */}
                     <Route path="stock-reports" element={<StorefrontStockReports />} />
+                    {/* Data */}
+                    <Route path="imports" element={<StorefrontImports />} />
                     {/* Legacy redirects */}
                     <Route path="schedule-planner" element={<Navigate to="/storefront/scheduler" replace />} />
                     <Route path="lgas" element={<Navigate to="/storefront/zones" replace />} />

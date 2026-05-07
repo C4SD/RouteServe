@@ -118,7 +118,8 @@ export interface PreBatch {
   ai_optimization_options: AiOptimizationOptions | null;
 
   // Vehicle Suggestion
-  suggested_vehicle_id: string | null;
+  suggested_vehicle_id: string | null; // kept for compat (first of suggested_vehicle_ids)
+  suggested_vehicle_ids: string[] | null;
 
   // Status
   status: PreBatchStatus;
@@ -180,6 +181,7 @@ export interface CreatePreBatchPayload {
   facility_requisition_map: Record<string, string[]>;
   ai_optimization_options?: AiOptimizationOptions | null;
   suggested_vehicle_id?: string | null;
+  suggested_vehicle_ids?: string[] | null;
   notes?: string | null;
   created_by?: string | null;
 }
@@ -194,6 +196,7 @@ export interface UpdatePreBatchPayload {
   facility_requisition_map?: Record<string, string[]>;
   ai_optimization_options?: AiOptimizationOptions | null;
   suggested_vehicle_id?: string | null;
+  suggested_vehicle_ids?: string[] | null;
   status?: PreBatchStatus;
   converted_batch_id?: string | null;
   notes?: string | null;
@@ -238,7 +241,8 @@ export interface UnifiedWorkflowState {
 
   // Step 2: Decision Support (Right Column)
   ai_optimization_options: AiOptimizationOptions;
-  suggested_vehicle_id: string | null;
+  suggested_vehicle_id: string | null; // first of suggested_vehicle_ids (backward compat)
+  suggested_vehicle_ids: string[];
 
   // Step 2: Notes
   schedule_notes: string | null;
@@ -246,7 +250,8 @@ export interface UnifiedWorkflowState {
   // Step 3: Batch Details
   batch_name: string | null;
   priority: Priority;
-  vehicle_id: string | null; // COMMITTED vehicle (not suggestion)
+  vehicle_id: string | null; // first of vehicle_ids (backward compat)
+  vehicle_ids: string[]; // COMMITTED vehicles (multi-vehicle)
   driver_id: string | null;
 
   // Step 3: Slot Assignments
@@ -384,6 +389,7 @@ export interface UnifiedWorkflowActions {
 
   // Step 2: Vehicle Suggestion
   setSuggestedVehicle: (vehicleId: string | null) => void;
+  setSuggestedVehicles: (vehicleIds: string[]) => void;
 
   // Step 2: File Upload
   setUploadedFile: (file: File | null) => void;
@@ -401,6 +407,7 @@ export interface UnifiedWorkflowActions {
   setBatchName: (name: string) => void;
   setPriority: (priority: Priority) => void;
   commitVehicle: (vehicleId: string) => void;
+  commitVehicles: (vehicleIds: string[]) => void;
   assignDriver: (driverId: string | null) => void;
 
   // Step 3: Slot Assignments

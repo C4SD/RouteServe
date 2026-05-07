@@ -13,7 +13,13 @@ export function useBatchUpdate() {
       // Map frontend fields to database fields
       if (updates.status) dbUpdates.status = updates.status;
       if (updates.driverId !== undefined) dbUpdates.driver_id = updates.driverId;
-      if (updates.vehicleId !== undefined) dbUpdates.vehicle_id = updates.vehicleId;
+      if (updates.vehicleIds !== undefined) {
+        dbUpdates.vehicle_ids = updates.vehicleIds;
+        // keep vehicle_id in sync with first element for backward compat
+        dbUpdates.vehicle_id = updates.vehicleIds[0] ?? null;
+      } else if (updates.vehicleId !== undefined) {
+        dbUpdates.vehicle_id = updates.vehicleId;
+      }
       if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
       if (updates.priority) dbUpdates.priority = updates.priority;
       if (updates.actualStartTime) dbUpdates.actual_start_time = updates.actualStartTime;

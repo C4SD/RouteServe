@@ -81,7 +81,7 @@ export function useTransitionInvoiceStatus() {
           ...(notes && { notes }),
         })
         .eq('id', invoiceId)
-        .select()
+        .select('id, requisition_id')
         .single();
 
       if (error) {
@@ -89,11 +89,34 @@ export function useTransitionInvoiceStatus() {
         if (error.message.includes('Invalid state transition')) throw new Error(error.message);
         throw error;
       }
+
+      // When invoice is packaged, advance the linked requisition to ready_for_dispatch.
+      // The invoice flow treats packaging as confirmed at this step, so requisitions
+      // at 'approved' or 'packaged' both qualify for the transition.
+      if (newStatus === 'packaged' && data.requisition_id) {
+        const { data: req } = await supabase
+          .from('requisitions')
+          .select('status')
+          .eq('id', data.requisition_id)
+          .single();
+
+        if (req?.status === 'approved' || req?.status === 'packaged') {
+          await supabase
+            .from('requisitions')
+            .update({ status: 'ready_for_dispatch', ready_for_dispatch_at: new Date().toISOString() })
+            .eq('id', data.requisition_id);
+        }
+      }
+
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['invoice', variables.invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      if (variables.newStatus === 'packaged' && (data as any).requisition_id) {
+        queryClient.invalidateQueries({ queryKey: ['requisitions'] });
+        queryClient.invalidateQueries({ queryKey: ['ready-consignments'] });
+      }
       toast({ title: 'Status updated', description: `Invoice status changed to ${variables.newStatus}` });
     },
     onError: (error: Error) => {

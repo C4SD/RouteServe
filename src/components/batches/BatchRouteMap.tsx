@@ -392,11 +392,15 @@ export function BatchRouteMap({
           });
         }
       } else if (optimizedRoute && optimizedRoute.length > 1) {
-        // Fall back to stored optimized route coordinates
+        // Fall back to stored optimized route coordinates.
+        // optimizedRoute is [lat, lng][] (Leaflet convention); flip to [lng, lat][] for GeoJSON.
         tetherFeatures.push({
           type: 'Feature',
           properties: {},
-          geometry: { type: 'LineString', coordinates: optimizedRoute },
+          geometry: {
+            type: 'LineString',
+            coordinates: optimizedRoute.map(([lat, lng]) => [lng, lat] as [number, number]),
+          },
         });
       } else {
         // Straight-line fallback — works with or without warehouse
@@ -422,7 +426,7 @@ export function BatchRouteMap({
       const isRoad = !!(roadRoute && roadRoute.geometry.length > 1);
       const tetherLayer = map.getLayer('tether-lines');
       if (tetherLayer) {
-        map.setPaintProperty('tether-lines', 'line-dasharray', isRoad ? undefined! : [2, 2]);
+        map.setPaintProperty('tether-lines', 'line-dasharray', isRoad ? null : [2, 2]);
         map.setPaintProperty('tether-lines', 'line-width', isRoad ? 3 : 2);
         map.setPaintProperty('tether-lines', 'line-opacity', isRoad ? 0.8 : 0.5);
       }
@@ -487,7 +491,7 @@ export function BatchRouteMap({
       });
 
       // Reset tether style for cardinal
-      map.setPaintProperty('tether-lines', 'line-dasharray', undefined!);
+      map.setPaintProperty('tether-lines', 'line-dasharray', null);
       map.setPaintProperty('tether-lines', 'line-width', 3);
       map.setPaintProperty('tether-lines', 'line-opacity', 0.8);
     } else if (tetherMode === 'alternatives') {

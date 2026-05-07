@@ -265,7 +265,8 @@ export interface DeliveryBatch {
   warehouseId: string;
   warehouseName: string;
   driverId?: string;
-  vehicleId?: string;
+  vehicleId?: string; // primary vehicle (first of vehicleIds) — kept for backward compat
+  vehicleIds?: string[]; // multi-vehicle assignment
   scheduledDate: string;
   scheduledTime: string;
   status: 'planned' | 'assigned' | 'in-progress' | 'completed' | 'cancelled';

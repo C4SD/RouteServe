@@ -31,6 +31,8 @@ import { useDrivers } from '@/hooks/useDrivers';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useCreateDeliveryBatch } from '@/hooks/useDeliveryBatches';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CalendarIcon,
   Clock,
@@ -43,6 +45,7 @@ import {
   Check,
   Loader2,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -60,7 +63,7 @@ interface FormData {
   warehouseId: string;
   facilityIds: string[];
   driverId: string;
-  vehicleId: string;
+  vehicleIds: string[];
 }
 
 // RFC-012: Vehicle-first selection flow
@@ -83,7 +86,7 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
     warehouseId: '',
     facilityIds: [],
     driverId: '',
-    vehicleId: '',
+    vehicleIds: [],
   });
 
   const { data: warehousesData } = useWarehouses();
@@ -98,37 +101,47 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
   // Get selected data for display
   const selectedWarehouse = warehouses.find(w => w.id === formData.warehouseId);
   const selectedDriver = drivers.find(d => d.id === formData.driverId);
-  const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
+  const selectedVehicles = vehicles.filter(v => formData.vehicleIds.includes(v.id));
   const selectedFacilities = facilities.filter(f => formData.facilityIds.includes(f.id));
 
   // Available drivers and vehicles
   const availableDrivers = drivers.filter(d => d.status === 'available');
   const availableVehicles = vehicles.filter(v => v.status === 'available');
+  const inUseVehicles = vehicles.filter(v => v.status === 'in-use');
+  const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance');
 
-  // Calculate slot validation for selected vehicle
+  const toggleVehicle = (vehicleId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      vehicleIds: prev.vehicleIds.includes(vehicleId)
+        ? prev.vehicleIds.filter(id => id !== vehicleId)
+        : [...prev.vehicleIds, vehicleId],
+    }));
+  };
+
+  // Calculate slot validation across all selected vehicles (combined capacity)
   const slotValidation = useMemo(() => {
-    if (!selectedVehicle || formData.facilityIds.length === 0) {
+    if (selectedVehicles.length === 0 || formData.facilityIds.length === 0) {
       return { valid: true, totalSlots: 0, requiredSlots: 0 };
     }
 
-    // Get total slots from vehicle tiered_config
-    const tieredConfig = (selectedVehicle as any).tiered_config;
-    let totalSlots = 0;
+    const totalSlots = selectedVehicles.reduce((sum, v) => {
+      const tieredConfig = (v as any).tiered_config;
+      if (tieredConfig?.tiers && Array.isArray(tieredConfig.tiers)) {
+        return sum + tieredConfig.tiers.reduce((s: number, t: any) => s + (t.slot_count || 0), 0);
+      }
+      return sum;
+    }, 0);
 
-    if (tieredConfig?.tiers && Array.isArray(tieredConfig.tiers)) {
-      totalSlots = tieredConfig.tiers.reduce((sum: number, tier: any) => sum + (tier.slot_count || 0), 0);
-    }
-
-    // Each facility requires 1 slot (simplified - in real app, derive from requisition packaging)
     const requiredSlots = formData.facilityIds.length;
 
     return {
-      valid: requiredSlots <= totalSlots,
+      valid: totalSlots === 0 || requiredSlots <= totalSlots,
       totalSlots,
       requiredSlots,
       overflow: requiredSlots > totalSlots ? requiredSlots - totalSlots : 0,
     };
-  }, [selectedVehicle, formData.facilityIds]);
+  }, [selectedVehicles, formData.facilityIds]);
 
   const handleNext = () => {
     if (currentStep < 4) setCurrentStep(currentStep + 1);
@@ -143,8 +156,8 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
       return;
     }
 
-    // Block if slot overflow and vehicle selected
-    if (formData.vehicleId && !slotValidation.valid) {
+    // Block if slot overflow and vehicles selected
+    if (formData.vehicleIds.length > 0 && !slotValidation.valid) {
       return;
     }
 
@@ -155,15 +168,14 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
         facilities: selectedFacilities,
         scheduledDate: format(formData.scheduledDate, 'yyyy-MM-dd'),
         scheduledTime: formData.scheduledTime,
-        status: formData.driverId && formData.vehicleId ? 'assigned' : 'planned',
+        status: formData.driverId && formData.vehicleIds.length > 0 ? 'assigned' : 'planned',
         priority: formData.priority,
-        // NOTE: medicationType and totalQuantity removed per RFC-012
-        // These values are derived from requisitions, not entered at batch creation
-        totalDistance: 0, // Will be calculated by route optimization
-        estimatedDuration: formData.facilityIds.length * 20, // Rough estimate: 20min per facility
+        totalDistance: 0,
+        estimatedDuration: formData.facilityIds.length * 20,
         optimizedRoute: [],
         driverId: formData.driverId || undefined,
-        vehicleId: formData.vehicleId || undefined,
+        vehicleIds: formData.vehicleIds.length > 0 ? formData.vehicleIds : undefined,
+        vehicleId: formData.vehicleIds[0] || undefined,
         notes: formData.notes || undefined,
       });
 
@@ -177,7 +189,7 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
         warehouseId: '',
         facilityIds: [],
         driverId: '',
-        vehicleId: '',
+        vehicleIds: [],
       });
       setCurrentStep(1);
       onOpenChange(false);
@@ -192,16 +204,15 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
         // Schedule step
         return formData.scheduledDate && formData.scheduledTime;
       case 2:
-        // Vehicle step - vehicle selection is now MANDATORY (vehicle-first flow per RFC-012)
-        return formData.vehicleId !== '';
+        // Vehicle step - at least one vehicle required
+        return formData.vehicleIds.length > 0;
       case 3:
         // Route Planning step - warehouse and at least 1 facility required
-        // Also validate against slot capacity
         if (!formData.warehouseId || formData.facilityIds.length === 0) {
           return false;
         }
-        // If vehicle selected (which it should be), must pass slot validation
-        if (formData.vehicleId && !slotValidation.valid) {
+        // If vehicles selected, must pass slot validation
+        if (formData.vehicleIds.length > 0 && !slotValidation.valid) {
           return false;
         }
         return true;
@@ -310,57 +321,105 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
         );
 
       case 2:
-        // STEP 2: Vehicle Selection (MANDATORY - vehicle-first flow per RFC-012)
+        // STEP 2: Vehicle Selection (multi-vehicle, at least one required)
         return (
           <div className="space-y-4">
             <Alert className="bg-blue-500/10 border-blue-500/20">
               <Truck className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-blue-600">
-                Select a vehicle first to determine available slot capacity for facility assignment.
+                Select one or more vehicles. Combined slot capacity determines how many facilities can be assigned.
               </AlertDescription>
             </Alert>
 
             <div className="space-y-2">
-              <Label>Vehicle *</Label>
-              <Select
-                value={formData.vehicleId}
-                onValueChange={(value) => setFormData({ ...formData, vehicleId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vehicle (required)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableVehicles.map((vehicle) => {
-                    // Calculate slots for each vehicle
-                    const tieredConfig = (vehicle as any).tiered_config;
-                    let vehicleSlots = 0;
-                    if (tieredConfig?.tiers && Array.isArray(tieredConfig.tiers)) {
-                      vehicleSlots = tieredConfig.tiers.reduce((sum: number, tier: any) => sum + (tier.slot_count || 0), 0);
-                    }
+              <Label className="flex items-center gap-2">
+                Vehicles *
+                {formData.vehicleIds.length > 0 && (
+                  <Badge className="ml-1">{formData.vehicleIds.length} selected</Badge>
+                )}
+              </Label>
 
-                    return (
-                      <SelectItem key={vehicle.id} value={vehicle.id}>
-                        <div className="flex items-center gap-2">
-                          <Truck className="h-4 w-4" />
-                          {vehicle.model} ({vehicle.plateNumber})
-                          <Badge variant="outline" className="text-xs">
-                            {vehicle.capacity}m³
-                          </Badge>
-                          {vehicleSlots > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              {vehicleSlots} slots
-                            </Badge>
-                          )}
+              {/* Selected vehicle chips */}
+              {selectedVehicles.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedVehicles.map(v => (
+                    <Badge key={v.id} variant="secondary" className="gap-1 pr-1">
+                      {v.model} · {v.plateNumber}
+                      <button
+                        onClick={() => toggleVehicle(v.id)}
+                        className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              <ScrollArea className="h-44 rounded-md border">
+                <div className="p-2 space-y-0.5">
+                  {availableVehicles.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                        Available ({availableVehicles.length})
+                      </div>
+                      {availableVehicles.map(v => {
+                        const tieredConfig = (v as any).tiered_config;
+                        const slots = tieredConfig?.tiers?.reduce((s: number, t: any) => s + (t.slot_count || 0), 0) ?? 0;
+                        return (
+                          <div
+                            key={v.id}
+                            className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted cursor-pointer"
+                            onClick={() => toggleVehicle(v.id)}
+                          >
+                            <Checkbox checked={formData.vehicleIds.includes(v.id)} onCheckedChange={() => toggleVehicle(v.id)} />
+                            <Truck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-sm flex-1 truncate">{v.model} ({v.plateNumber})</span>
+                            <Badge variant="outline" className="text-xs shrink-0">{v.capacity}m³</Badge>
+                            {slots > 0 && <Badge variant="secondary" className="text-xs shrink-0">{slots} slots</Badge>}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                  {inUseVehicles.length > 0 && (
+                    <>
+                      <Separator className="my-1" />
+                      <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                        In Use ({inUseVehicles.length})
+                      </div>
+                      {inUseVehicles.map(v => (
+                        <div
+                          key={v.id}
+                          className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-muted cursor-pointer"
+                          onClick={() => toggleVehicle(v.id)}
+                        >
+                          <Checkbox checked={formData.vehicleIds.includes(v.id)} onCheckedChange={() => toggleVehicle(v.id)} />
+                          <Truck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-sm flex-1 truncate">{v.model} ({v.plateNumber})</span>
+                          <Badge variant="outline" className="text-xs shrink-0">{v.capacity}m³</Badge>
                         </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              {availableVehicles.length === 0 && (
-                <p className="text-xs text-destructive">
-                  No available vehicles at the moment. Please try again later.
-                </p>
+                      ))}
+                    </>
+                  )}
+                  {vehicles.length === 0 && (
+                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">No vehicles found</div>
+                  )}
+                </div>
+              </ScrollArea>
+
+              {formData.vehicleIds.length === 0 && (
+                <p className="text-xs text-destructive">At least one vehicle is required.</p>
+              )}
+
+              {/* Combined capacity summary */}
+              {selectedVehicles.length > 0 && slotValidation.totalSlots > 0 && (
+                <div className="rounded-md border p-3 text-xs text-muted-foreground space-y-1">
+                  <span className="font-medium text-foreground">Combined capacity: </span>
+                  {selectedVehicles.reduce((s, v) => s + (v.capacity || 0), 0)}m³ volume ·{' '}
+                  {selectedVehicles.reduce((s, v) => s + (v.maxWeight || 0), 0)}kg ·{' '}
+                  {slotValidation.totalSlots} slots
+                </div>
               )}
             </div>
 
@@ -389,24 +448,6 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Vehicle Slot Grid Preview */}
-            {formData.vehicleId && selectedVehicle && (
-              <div className="space-y-2">
-                <Separator className="my-4" />
-                <Label>Vehicle Slot Capacity</Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  This vehicle's slot configuration determines how many facilities can be assigned.
-                </p>
-                <VehicleSlotGrid
-                  vehicle={selectedVehicle}
-                  requiredSlots={0}
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  Available slots: {slotValidation.totalSlots || 'No slot configuration'}
-                </p>
-              </div>
-            )}
           </div>
         );
 
@@ -415,13 +456,13 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
         return (
           <div className="space-y-4">
             {/* Show vehicle capacity constraint */}
-            {selectedVehicle && slotValidation.totalSlots > 0 && (
+            {selectedVehicles.length > 0 && slotValidation.totalSlots > 0 && (
               <Alert className={formData.facilityIds.length > slotValidation.totalSlots ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}>
                 <AlertTriangle className={`h-4 w-4 ${formData.facilityIds.length > slotValidation.totalSlots ? 'text-red-600' : 'text-green-600'}`} />
                 <AlertDescription className={formData.facilityIds.length > slotValidation.totalSlots ? 'text-red-600' : 'text-green-600'}>
                   {formData.facilityIds.length > slotValidation.totalSlots
-                    ? `Slot overflow: ${formData.facilityIds.length} facilities selected but only ${slotValidation.totalSlots} slots available.`
-                    : `Slot capacity: ${formData.facilityIds.length} / ${slotValidation.totalSlots} slots used`}
+                    ? `Slot overflow: ${formData.facilityIds.length} facilities selected but only ${slotValidation.totalSlots} combined slots available.`
+                    : `Slot capacity: ${formData.facilityIds.length} / ${slotValidation.totalSlots} combined slots used`}
                 </AlertDescription>
               </Alert>
             )}
@@ -547,29 +588,27 @@ export function CreateBatchDialog({ open, onOpenChange }: CreateBatchDialogProps
               {/* Vehicle & Driver Section */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Vehicle</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Truck className="h-4 w-4" />
-                    <p className="font-medium">
-                      {selectedVehicle
-                        ? `${selectedVehicle.model} (${selectedVehicle.plateNumber})`
-                        : 'Not assigned'}
-                    </p>
+                  <p className="text-muted-foreground">Vehicles ({selectedVehicles.length})</p>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {selectedVehicles.length > 0 ? selectedVehicles.map(v => (
+                      <div key={v.id} className="flex items-center gap-2">
+                        <Truck className="h-3.5 w-3.5 shrink-0" />
+                        <span className="text-xs">{v.model} ({v.plateNumber})</span>
+                      </div>
+                    )) : <span className="text-muted-foreground">None</span>}
                   </div>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Driver</p>
                   <div className="flex items-center gap-2 mt-1">
                     <User className="h-4 w-4" />
-                    <p className="font-medium">
-                      {selectedDriver?.name || 'Not assigned'}
-                    </p>
+                    <p className="font-medium">{selectedDriver?.name || 'Not assigned'}</p>
                   </div>
                 </div>
               </div>
 
               {/* Slot allocation summary with utilization metrics */}
-              {selectedVehicle && (
+              {selectedVehicles.length > 0 && (
                 <div className="bg-muted/50 rounded-md p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <p className="text-muted-foreground">Slot Utilization</p>

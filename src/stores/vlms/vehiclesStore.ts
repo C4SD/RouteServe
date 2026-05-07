@@ -255,10 +255,11 @@ export const useVehiclesStore = create<VehiclesState>()(
           const workspaceId = localStorage.getItem('biko_active_workspace_id');
           if (!workspaceId) throw new Error('No active workspace selected');
 
-          // Convert empty strings to null for date fields (PostgreSQL rejects "" for date type)
+          // Convert empty strings to null for date fields and unique-constrained optional fields
           const dateFields = ['acquisition_date', 'warranty_expiry', 'insurance_expiry', 'registration_expiry'] as const;
+          const nullableFields = [...dateFields, 'vin'] as const;
           const sanitizedCreateData = { ...data } as any;
-          for (const field of dateFields) {
+          for (const field of nullableFields) {
             if (sanitizedCreateData[field] === '') {
               sanitizedCreateData[field] = null;
             }
@@ -316,8 +317,12 @@ export const useVehiclesStore = create<VehiclesState>()(
           return result;
         } catch (error: any) {
           console.error('Failed to create vehicle:', error);
-          set({ error: error.message, isLoading: false });
-          toast.error(`Failed to create vehicle: ${error.message}`);
+          const userMessage =
+            error?.code === '23505' && error?.message?.includes('plate_number')
+              ? 'A vehicle with this plate number already exists.'
+              : `Failed to create vehicle: ${error.message}`;
+          set({ error: userMessage, isLoading: false });
+          toast.error(userMessage);
           throw error;
         }
       },
@@ -340,10 +345,11 @@ export const useVehiclesStore = create<VehiclesState>()(
             return 'diesel';
           };
 
-          // Convert empty strings to null for date fields (PostgreSQL rejects "" for date type)
+          // Convert empty strings to null for date fields and unique-constrained optional fields
           const dateFields = ['acquisition_date', 'warranty_expiry', 'insurance_expiry', 'registration_expiry'] as const;
+          const nullableFields = [...dateFields, 'vin'] as const;
           const sanitizedData = { ...data } as any;
-          for (const field of dateFields) {
+          for (const field of nullableFields) {
             if (sanitizedData[field] === '') {
               sanitizedData[field] = null;
             }
@@ -352,15 +358,21 @@ export const useVehiclesStore = create<VehiclesState>()(
           // Create update payload with proper type mapping
           // Destructure vehicle_type to remap it to the DB column 'type'
           // Also map cargo_capacity to capacity for the public.vehicles table
-          const { 
-            vehicle_type, 
+          const {
+            vehicle_type,
             cargo_capacity,
-            ...rest 
+            tiered_config: tieredConfigRaw,
+            ...rest
           } = sanitizedData;
+
+          // tiered_config arrives as { tiers: TierConfig[] } from VehicleForm — pass through as-is
+          const tieredConfigValue = tieredConfigRaw !== undefined ? tieredConfigRaw : undefined;
+
           const updateData: Partial<Vehicle> = {
             ...rest,
             ...(vehicle_type !== undefined ? { type: vehicle_type } : {}),
             ...(cargo_capacity !== undefined ? { capacity: cargo_capacity } : {}),
+            ...(tieredConfigValue !== undefined ? { tiered_config: tieredConfigValue } : {}),
             fuel_type: normalizeFuelType(data.fuel_type) as any,
             status: data.status ? (normalizeStatus(data.status) as 'available' | 'in-use' | 'maintenance') : undefined,
             updated_by: userId,

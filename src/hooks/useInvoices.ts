@@ -271,6 +271,102 @@ export function useUpdateInvoiceStatus() {
   });
 }
 
+export function useSaveInvoicePackaging() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      invoiceId,
+      packagingRequired,
+      counts,
+      totalWeight,
+      totalVolume,
+    }: {
+      invoiceId: string;
+      packagingRequired: boolean;
+      counts: Record<string, number>;
+      totalWeight: number;
+      totalVolume: number;
+    }) => {
+      const totalPackages = Object.values(counts).reduce((s, c) => s + c, 0);
+
+      // 1. Update the invoice itself
+      const newStatus = packagingRequired && totalPackages > 0 ? 'packaged' : undefined;
+      const invoiceUpdate: Record<string, any> = {
+        packaging_required: packagingRequired,
+        updated_at: new Date().toISOString(),
+      };
+      if (totalWeight > 0) invoiceUpdate.total_weight_kg = totalWeight;
+      if (totalVolume > 0) invoiceUpdate.total_volume_m3 = totalVolume;
+      if (newStatus) invoiceUpdate.status = newStatus;
+
+      const { error: invoiceErr } = await supabase
+        .from('invoices')
+        .update(invoiceUpdate)
+        .eq('id', invoiceId);
+      if (invoiceErr) throw invoiceErr;
+
+      if (!packagingRequired || totalPackages === 0) return;
+
+      // 2. Upsert invoice_packaging record
+      // Delete existing first (simpler than true upsert given no unique index)
+      await supabase.from('invoice_packaging').delete().eq('invoice_id', invoiceId);
+
+      const { data: pkgRecord, error: pkgErr } = await supabase
+        .from('invoice_packaging')
+        .insert({
+          invoice_id: invoiceId,
+          packaging_mode: counts.box_m > 0 || counts.box_l > 0 || counts.crate_xl > 0
+            ? 'box'
+            : 'bag',
+          total_packages: totalPackages,
+        })
+        .select()
+        .single();
+      if (pkgErr) throw pkgErr;
+
+      // 3. Insert package_items rows (one row per package unit)
+      const TYPE_MAP: Record<string, { package_type: string; size: string }> = {
+        bag_s:    { package_type: 'bag',   size: 'S' },
+        box_m:    { package_type: 'box',   size: 'M' },
+        box_l:    { package_type: 'box',   size: 'L' },
+        crate_xl: { package_type: 'crate', size: 'XL' },
+      };
+
+      const packageRows: any[] = [];
+      let packageNumber = 1;
+
+      for (const [typeKey, count] of Object.entries(counts)) {
+        if (count === 0) continue;
+        const typeInfo = TYPE_MAP[typeKey];
+        if (!typeInfo) continue;
+        for (let i = 0; i < count; i++) {
+          packageRows.push({
+            packaging_id: pkgRecord.id,
+            package_type: typeInfo.package_type,
+            size: typeInfo.size,
+            package_number: packageNumber++,
+          });
+        }
+      }
+
+      if (packageRows.length > 0) {
+        const { error: itemsErr } = await supabase
+          .from('package_items')
+          .insert(packageRows);
+        if (itemsErr) throw itemsErr;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Packaging saved');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to save packaging: ${error.message}`);
+    },
+  });
+}
+
 export function useDeleteInvoice() {
   const queryClient = useQueryClient();
 

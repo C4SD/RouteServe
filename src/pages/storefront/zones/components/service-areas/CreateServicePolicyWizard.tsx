@@ -237,6 +237,10 @@ export function CreateServicePolicyWizard({
       }
     });
 
+    map.on('load', () => {
+      setTimeout(() => map.resize(), 150);
+    });
+
     mapRef.current = map;
 
     const resizeObserver = new ResizeObserver(() => {
@@ -244,12 +248,13 @@ export function CreateServicePolicyWizard({
     });
     resizeObserver.observe(mapContainerRef.current);
 
+    // Keep pulsing resize until style has loaded (style fetch can exceed 500ms)
     let resizeCount = 0;
     const resizeInterval = setInterval(() => {
-      map.resize();
+      if (mapRef.current) mapRef.current.resize();
       resizeCount++;
-      if (resizeCount > 10) clearInterval(resizeInterval);
-    }, 50);
+      if (resizeCount > 30) clearInterval(resizeInterval);
+    }, 100);
 
     return () => {
       clearInterval(resizeInterval);

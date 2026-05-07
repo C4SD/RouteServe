@@ -9,7 +9,8 @@ import {
   Package,
   FileText,
   Warehouse,
-  FolderKanban
+  FolderKanban,
+  History,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SecondarySidebar, NavigationGroup } from '@/components/layout/SecondarySidebar';
@@ -113,6 +114,17 @@ const navigationGroups: GatedNavGroup[] = [
         href: '/storefront/stock-reports',
         icon: BarChart3,
         permission: 'reports.read',
+      },
+    ],
+  },
+  {
+    label: 'DATA',
+    items: [
+      {
+        label: 'Import History',
+        href: '/storefront/imports',
+        icon: History,
+        permission: 'item.manage',
       },
     ],
   },

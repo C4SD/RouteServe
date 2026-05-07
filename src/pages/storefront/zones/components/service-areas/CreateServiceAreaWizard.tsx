@@ -74,6 +74,7 @@ interface CreateServiceAreaWizardProps {
 export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAreaWizardProps) {
   const [step, setStep] = useState<Step>('zone');
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
+  const [facilityLoadMode, setFacilityLoadMode] = useState<'zone' | 'all'>('zone');
   const [facilityFilterLga, setFacilityFilterLga] = useState<string>('all');
   const [facilityFilterType, setFacilityFilterType] = useState<string>('all');
   const [facilityFilterLoc, setFacilityFilterLoc] = useState<string>('all');
@@ -137,6 +138,10 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
     if (!open) {
       setForm(INITIAL_FORM);
       setStep('zone');
+      setFacilityLoadMode('zone');
+      setFacilityFilterLga('all');
+      setFacilityFilterType('all');
+      setFacilityFilterLoc('all');
     }
     onOpenChange(open);
   };
@@ -156,6 +161,9 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
   const locOptions = [...new Set(allFacilities.map((f: any) => f.level_of_care).filter(Boolean))].sort();
 
   const facilityList = allFacilities.filter((f: any) => {
+    if (facilityLoadMode === 'zone' && form.zone_id) {
+      if (f.zone_id !== form.zone_id) return false;
+    }
     if (facilityFilterLga !== 'all' && f.lga !== facilityFilterLga) return false;
     if (facilityFilterType !== 'all' && f.type !== facilityFilterType) return false;
     if (facilityFilterLoc !== 'all' && f.level_of_care !== facilityFilterLoc) return false;
@@ -345,6 +353,35 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
           {/* Step: Facilities */}
           {step === 'facilities' && (
             <div className="space-y-4">
+              {/* Load mode toggle */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">Load facilities from</p>
+                <div className="flex gap-1 p-1 rounded-lg bg-muted">
+                  <button
+                    type="button"
+                    onClick={() => setFacilityLoadMode('zone')}
+                    className={`flex-1 text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                      facilityLoadMode === 'zone'
+                        ? 'bg-background shadow text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {selectedZone?.name ?? 'Zone'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFacilityLoadMode('all')}
+                    className={`flex-1 text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                      facilityLoadMode === 'all'
+                        ? 'bg-background shadow text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    All Facilities / LGA
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <Label>Assign Facilities ({form.facility_ids.length} selected)</Label>
                 <Button

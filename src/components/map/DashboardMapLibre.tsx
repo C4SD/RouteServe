@@ -180,42 +180,51 @@ export function DashboardMapLibre({
         });
 
         // Batch route lines
+        // Solid lines (in-progress batches)
         map.addLayer({
-          id: 'batch-lines',
+          id: 'batch-lines-solid',
           type: 'line',
           source: 'batches',
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
+          filter: ['!', ['get', 'dashed']],
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
             'line-color': ['get', 'color'],
             'line-width': ['get', 'width'],
             'line-opacity': ['get', 'opacity'],
-            'line-dasharray': [
-              'case',
-              ['get', 'dashed'],
-              ['literal', [2, 2]],
-              ['literal', [1, 0]],
-            ],
           },
         });
 
-        // Click interaction
-        map.on('click', 'batch-lines', (e) => {
+        // Dashed lines (planned / assigned / completed batches)
+        // line-dasharray does not support data-driven expressions so we use a filtered layer
+        map.addLayer({
+          id: 'batch-lines-dashed',
+          type: 'line',
+          source: 'batches',
+          filter: ['get', 'dashed'],
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['get', 'width'],
+            'line-opacity': ['get', 'opacity'],
+            'line-dasharray': [4, 3],
+          },
+        });
+
+        // Click interaction on both layers
+        const handleBatchClick = (e: maplibregl.MapLayerMouseEvent) => {
           const feature = e.features?.[0];
           if (feature && onBatchClick) {
             onBatchClick(feature.properties?.id);
           }
-        });
+        };
+        map.on('click', 'batch-lines-solid', handleBatchClick);
+        map.on('click', 'batch-lines-dashed', handleBatchClick);
 
         // Cursor changes
-        map.on('mouseenter', 'batch-lines', () => {
-          map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', 'batch-lines', () => {
-          map.getCanvas().style.cursor = '';
-        });
+        map.on('mouseenter', 'batch-lines-solid', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'batch-lines-solid', () => { map.getCanvas().style.cursor = ''; });
+        map.on('mouseenter', 'batch-lines-dashed', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'batch-lines-dashed', () => { map.getCanvas().style.cursor = ''; });
       }
     },
     [buildBatchFeatures, onBatchClick]

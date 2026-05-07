@@ -264,6 +264,16 @@ export const vehicleFormSchema = z.object({
     .nonnegative('Book value cannot be negative')
     .optional(),
 
+  // Capacity & Payload
+  capacity_kg: z.number().positive('Must be positive').optional(),
+  capacity_m3: z.number().positive('Must be positive').optional(),
+  gross_vehicle_weight_kg: z.number().positive('Must be positive').optional(),
+
+  // Cargo Hold Dimensions (cm)
+  length_cm: z.number().int().positive('Must be positive').optional(),
+  width_cm: z.number().int().positive('Must be positive').optional(),
+  height_cm: z.number().int().positive('Must be positive').optional(),
+
   // Metadata
   notes: z.string().optional(),
   tags: z.array(z.string()).optional(),

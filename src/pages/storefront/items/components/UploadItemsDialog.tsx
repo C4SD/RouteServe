@@ -37,6 +37,10 @@ import { cn } from '@/lib/utils';
 import { useBulkCreateItems } from '@/hooks/useItems';
 import type { ItemCategory, ItemFormData, ItemProgram } from '@/types/items';
 import { ITEM_CATEGORIES, ITEM_PROGRAMS } from '@/types/items';
+import { computeItemDiff, type ImportDiffResult, type DbRow } from '@/lib/import-diff';
+import { useAllItemsForDiff, useBulkUpdateItems, useLogImportSession } from '@/hooks/useImportDiff';
+import { ImportDiffPreview } from '@/components/import/ImportDiffPreview';
+import { useNavigate } from 'react-router-dom';
 
 // Configure PDF.js worker (bundled locally, no CDN dependency)
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -47,7 +51,7 @@ interface UploadItemsDialogProps {
   onSuccess?: () => void;
 }
 
-type UploadStep = 'upload' | 'mapping' | 'preview';
+type UploadStep = 'upload' | 'mapping' | 'preview' | 'diff' | 'complete';
 type FileType = 'csv' | 'xlsx' | 'docx' | 'pdf';
 
 interface ParsedItem {
@@ -166,6 +170,12 @@ export function UploadItemsDialog({ open, onOpenChange, onSuccess }: UploadItems
   const [skippedFields, setSkippedFields] = useState<Set<string>>(new Set());
 
   const bulkCreate = useBulkCreateItems();
+  const { data: existingItemsForDiff = [], refetch: refetchItemsForDiff } = useAllItemsForDiff();
+  const bulkUpdateItems = useBulkUpdateItems();
+  const logSession = useLogImportSession();
+  const navigate = useNavigate();
+  const [diffResult, setDiffResult] = useState<ImportDiffResult | null>(null);
+  const [isCommitting, setIsCommitting] = useState(false);
 
   const getFileType = (fileName: string): FileType | null => {
     const ext = fileName.split('.').pop()?.toLowerCase();
@@ -518,33 +528,93 @@ export function UploadItemsDialog({ open, onOpenChange, onSuccess }: UploadItems
     setParsedItems(items => items.filter(item => item.row !== row));
   };
 
-  const handleConfirm = async () => {
-    const validItems = parsedItems
+  const buildDbItems = (): DbRow[] =>
+    parsedItems
       .filter(item => item.isValid)
       .map(item => ({
-        // For skipped fields, use placeholder values that can be edited later
         serial_number: item.serial_number || `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         description: item.description || 'Pending description',
         unit_pack: item.unit_pack || 'N/A',
-        category: (item.category || 'Tablet') as ItemCategory,
-        program: item.program as ItemProgram | undefined,
-        weight_kg: item.weight_kg,
-        volume_m3: item.volume_m3,
-        batch_number: item.batch_number,
-        mfg_date: item.mfg_date,
-        expiry_date: item.expiry_date,
-        store_address: item.store_address,
-        lot_number: item.lot_number,
+        category: item.category || 'Tablet',
+        program: item.program || null,
+        weight_kg: item.weight_kg ?? null,
+        volume_m3: item.volume_m3 ?? null,
+        batch_number: item.batch_number || null,
+        mfg_date: item.mfg_date || null,
+        expiry_date: item.expiry_date || null,
+        store_address: item.store_address || null,
+        lot_number: item.lot_number || null,
         stock_on_hand: item.stock_on_hand,
         unit_price: item.unit_price,
+      }));
+
+  const handleProceedToDiff = async () => {
+    const dbItems = buildDbItems();
+    const { data: freshItems = [] } = await refetchItemsForDiff();
+    const result = computeItemDiff(dbItems, freshItems);
+    setDiffResult(result);
+    setStep('diff');
+  };
+
+  const handleConfirm = async (selectedUpdateIds: Set<string>) => {
+    if (!diffResult || isCommitting) return;
+    setIsCommitting(true);
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
+    const logErrors: Array<{ rowNumber: number; message: string }> = [];
+
+    // Insert new records
+    if (diffResult.newRecords.length > 0) {
+      const itemsToCreate = diffResult.newRecords.map(r => ({
+        serial_number: String(r['serial_number'] ?? ''),
+        description: String(r['description'] ?? ''),
+        unit_pack: String(r['unit_pack'] ?? 'N/A'),
+        category: (r['category'] as ItemCategory) || 'Tablet',
+        program: r['program'] as ItemProgram | undefined,
+        weight_kg: r['weight_kg'] as number | undefined,
+        volume_m3: r['volume_m3'] as number | undefined,
+        batch_number: r['batch_number'] as string | undefined,
+        mfg_date: r['mfg_date'] as string | undefined,
+        expiry_date: r['expiry_date'] as string | undefined,
+        store_address: r['store_address'] as string | undefined,
+        lot_number: r['lot_number'] as string | undefined,
+        stock_on_hand: (r['stock_on_hand'] as number) || 0,
+        unit_price: (r['unit_price'] as number) || 0,
       } as ItemFormData));
+      try {
+        await bulkCreate.mutateAsync(itemsToCreate);
+      } catch (error: any) {
+        logErrors.push({ rowNumber: 0, message: error.message });
+      }
+    }
+
+    // Update selected records
+    const updates = diffResult.updateRecords
+      .filter(r => selectedUpdateIds.has(r.dbId))
+      .map(r => {
+        const fields: Record<string, unknown> = {};
+        for (const diff of r.fieldDiffs) fields[diff.field] = diff.uploadValue;
+        return { id: r.dbId, fields };
+      });
+    if (updates.length > 0) {
+      const { successIds } = await bulkUpdateItems.mutateAsync(updates);
+      updatedIds.push(...successIds);
+    }
 
     try {
-      await bulkCreate.mutateAsync(validItems);
+      await logSession.mutateAsync({
+        entityType: 'item',
+        sourceFile: file?.name ?? 'unknown',
+        diffResult,
+        selectedUpdateIds,
+        commitResults: { insertedIds, updatedIds, errors: logErrors },
+        getRecordName: (r) => String(r['description'] ?? ''),
+      });
+
       onSuccess?.();
-      handleClose();
-    } catch (error) {
-      // Error handled by mutation
+      setStep('complete');
+    } finally {
+      setIsCommitting(false);
     }
   };
 
@@ -559,6 +629,7 @@ export function UploadItemsDialog({ open, onOpenChange, onSuccess }: UploadItems
     setUploadProgress(0);
     setParseError(null);
     setSkippedFields(new Set());
+    setIsCommitting(false);
     onOpenChange(false);
   };
 
@@ -573,6 +644,7 @@ export function UploadItemsDialog({ open, onOpenChange, onSuccess }: UploadItems
     setUploadProgress(0);
     setParseError(null);
     setSkippedFields(new Set());
+    setIsCommitting(false);
   };
 
   const downloadTemplate = () => {
@@ -995,6 +1067,28 @@ export function UploadItemsDialog({ open, onOpenChange, onSuccess }: UploadItems
               )}
             </div>
           )}
+
+          {/* Diff preview step */}
+          {step === 'diff' && diffResult && (
+            <div className="flex-1 overflow-y-auto p-1">
+              <ImportDiffPreview
+                diffResult={diffResult}
+                entityLabel="item"
+                getRecordName={(r) => String(r['description'] ?? '')}
+                onBack={() => setStep('preview')}
+                onConfirm={(ids) => handleConfirm(ids)}
+                isCommitting={isCommitting}
+              />
+            </div>
+          )}
+
+          {/* Complete step */}
+          {step === 'complete' && (
+            <div className="flex flex-col items-center gap-4 py-8">
+              <Check className="size-12 text-green-500" />
+              <p className="text-sm font-medium">Import complete. Check Import History for details.</p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
@@ -1028,11 +1122,21 @@ export function UploadItemsDialog({ open, onOpenChange, onSuccess }: UploadItems
                 Upload Different File
               </Button>
               <Button
-                onClick={handleConfirm}
-                disabled={validItemsCount === 0 || bulkCreate.isPending}
+                onClick={handleProceedToDiff}
+                disabled={validItemsCount === 0}
               >
-                {bulkCreate.isPending ? 'Uploading...' : `Upload ${validItemsCount} Items`}
+                Review Changes
+                <ArrowRight className="h-4 w-4 ml-1" />
               </Button>
+            </>
+          )}
+
+          {step === 'complete' && (
+            <>
+              <Button variant="outline" onClick={() => navigate('/storefront/imports')}>
+                View Import History
+              </Button>
+              <Button onClick={handleClose}>Done</Button>
             </>
           )}
         </DialogFooter>

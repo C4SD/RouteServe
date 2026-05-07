@@ -48,6 +48,10 @@ import type { Program } from '@/types/program';
 import type { ParsedFile, ColumnMappingDiagnostic } from '@/lib/file-import';
 import type { MultiSourceResult, MergeResult } from '@/lib/multi-source-parser';
 import { chunk } from '@/lib/utils';
+import { computeProgramItemDiff, type ImportDiffResult, type DbRow } from '@/lib/import-diff';
+import { useAllProgramItemsForDiff, useBulkUpdateProgramItems, useLogImportSession } from '@/hooks/useImportDiff';
+import { ImportDiffPreview } from '@/components/import/ImportDiffPreview';
+import { useNavigate } from 'react-router-dom';
 
 interface UploadProgramItemsDialogProps {
   program: Program;
@@ -55,7 +59,7 @@ interface UploadProgramItemsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type ImportStep = 'upload' | 'conflicts' | 'mapping' | 'preview' | 'importing' | 'complete';
+type ImportStep = 'upload' | 'conflicts' | 'mapping' | 'preview' | 'diff' | 'importing' | 'complete';
 
 interface ImportResult {
   total: number;
@@ -123,8 +127,13 @@ export function UploadProgramItemsDialog({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [skipValidation, setSkipValidation] = useState(false);
   const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
+  const [diffResult, setDiffResult] = useState<ImportDiffResult | null>(null);
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { data: existingProgramItems = [] } = useAllProgramItemsForDiff(program.code);
+  const bulkUpdateProgramItems = useBulkUpdateProgramItems();
+  const logSession = useLogImportSession();
 
   // Auto-detect column mappings from file headers
   const autoDetectMappings = useCallback((headers: string[]): Record<string, string> => {
@@ -303,66 +312,82 @@ export function UploadProgramItemsDialog({
     return ITEM_CATEGORIES.find((c) => c.toLowerCase() === lower) || null;
   };
 
-  const handleImport = async () => {
-    if (!parsedData) return;
+  const buildDbItems = (): DbRow[] => {
+    if (!parsedData) return [];
+    const items: DbRow[] = [];
+    for (let i = 0; i < parsedData.rows.length; i++) {
+      const row = getMergedRow(i);
+      const productCode = String(row.product_code || '').trim();
+      const itemName = String(row.item_name || '').trim();
+      if (!productCode && !itemName) continue;
+      const category = normalizeCategory(row.category) || 'Tablet';
+      const stockRaw = String(row.stock_on_hand || '0').replace(/[,]/g, '');
+      const priceRaw = String(row.unit_price || '0').replace(/[₦,]/g, '');
+      items.push({
+        serial_number: productCode || `TEMP-${Date.now()}-${i}`,
+        description: itemName,
+        unit_pack: String(row.unit_pack || '').trim() || null,
+        category,
+        program: program.code,
+        stock_on_hand: parseInt(stockRaw) || 0,
+        unit_price: parseFloat(priceRaw) || 0,
+        batch_number: row.batch_number ? String(row.batch_number).trim() : null,
+        expiry_date: row.expiry_date ? String(row.expiry_date).trim() : null,
+        lot_number: row.lot_number ? String(row.lot_number).trim() : null,
+        weight_kg: row.weight_kg ? parseFloat(row.weight_kg) : null,
+        volume_m3: row.volume_m3 ? parseFloat(row.volume_m3) : null,
+      });
+    }
+    return items;
+  };
 
+  const handleProceedToDiff = () => {
+    const dbItems = buildDbItems();
+    const result = computeProgramItemDiff(dbItems, existingProgramItems);
+    setDiffResult(result);
+    setStep('diff');
+  };
+
+  const handleImport = async (selectedUpdateIds: Set<string>) => {
+    if (!diffResult) return;
     setStep('importing');
     setImportProgress(0);
 
-    const result: ImportResult = { total: parsedData.rows.length, success: 0, failed: 0, errors: [] };
+    const result: ImportResult = { total: diffResult.newRecords.length + diffResult.updateRecords.length + diffResult.duplicateRecords.length, success: 0, failed: 0, errors: [] };
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
+    const logErrors: Array<{ rowNumber: number; message: string }> = [];
 
     try {
-      const dbItems: any[] = [];
-
-      for (let i = 0; i < parsedData.rows.length; i++) {
-        const row = getMergedRow(i);
-
-        const productCode = String(row.product_code || '').trim();
-        const itemName = String(row.item_name || '').trim();
-
-        if (!productCode && !itemName) {
-          result.failed++;
-          result.errors.push({ row: i + 1, error: 'Skipped: missing product code and item name' });
-          continue;
+      // Insert new records
+      if (diffResult.newRecords.length > 0) {
+        const BATCH_SIZE = 100;
+        const batches = chunk(diffResult.newRecords, BATCH_SIZE);
+        for (let b = 0; b < batches.length; b++) {
+          const { data, error } = await supabase.from('items').insert(batches[b]).select();
+          if (error) {
+            result.failed += batches[b].length;
+            result.errors.push({ row: b * BATCH_SIZE + 1, error: error.message });
+            logErrors.push({ rowNumber: b * BATCH_SIZE + 1, message: error.message });
+          } else {
+            result.success += (data || []).length;
+            insertedIds.push(...(data || []).map((d: any) => d.id));
+          }
+          setImportProgress(Math.round(((b + 1) / batches.length) * 70));
         }
-
-        const category = normalizeCategory(row.category) || 'Tablet';
-        const stockRaw = String(row.stock_on_hand || '0').replace(/[,]/g, '');
-        const priceRaw = String(row.unit_price || '0').replace(/[₦,]/g, '');
-
-        dbItems.push({
-          serial_number: productCode || `TEMP-${Date.now()}-${i}`,
-          description: itemName,
-          unit_pack: String(row.unit_pack || '').trim() || null,
-          category,
-          program: program.code,
-          stock_on_hand: parseInt(stockRaw) || 0,
-          unit_price: parseFloat(priceRaw) || 0,
-          batch_number: row.batch_number ? String(row.batch_number).trim() : null,
-          expiry_date: row.expiry_date ? String(row.expiry_date).trim() : null,
-          lot_number: row.lot_number ? String(row.lot_number).trim() : null,
-          weight_kg: row.weight_kg ? parseFloat(row.weight_kg) : null,
-          volume_m3: row.volume_m3 ? parseFloat(row.volume_m3) : null,
-        });
       }
 
-      // Batch insert
-      const BATCH_SIZE = 100;
-      const batches = chunk(dbItems, BATCH_SIZE);
-
-      for (let b = 0; b < batches.length; b++) {
-        const batch = batches[b];
-
-        const { data, error } = await supabase.from('items').insert(batch).select();
-
-        if (error) {
-          result.failed += batch.length;
-          result.errors.push({ row: b * BATCH_SIZE + 1, error: error.message });
-        } else {
-          result.success += (data || []).length;
-        }
-
-        setImportProgress(Math.round(((b + 1) / batches.length) * 100));
+      // Update selected records
+      const updates = diffResult.updateRecords
+        .filter(r => selectedUpdateIds.has(r.dbId))
+        .map(r => {
+          const fields: Record<string, unknown> = {};
+          for (const diff of r.fieldDiffs) fields[diff.field] = diff.uploadValue;
+          return { id: r.dbId, fields };
+        });
+      if (updates.length > 0) {
+        const { successIds } = await bulkUpdateProgramItems.mutateAsync(updates);
+        updatedIds.push(...successIds);
       }
     } catch (error: any) {
       toast.error(`Import failed: ${error.message}`);
@@ -370,11 +395,20 @@ export function UploadProgramItemsDialog({
 
     queryClient.invalidateQueries({ queryKey: ['items'] });
 
+    await logSession.mutateAsync({
+      entityType: 'program_item',
+      sourceFile: parsedData?.fileName ?? 'unknown',
+      diffResult,
+      selectedUpdateIds,
+      commitResults: { insertedIds, updatedIds, errors: logErrors },
+      getRecordName: (r) => String(r['description'] ?? ''),
+      metadata: { program_id: program.id, program_code: program.code },
+    });
+
     setImportResult(result);
     setStep('complete');
-
-    if (result.success > 0) toast.success(`Successfully imported ${result.success} items`);
-    if (result.failed > 0) toast.error(`Failed to import ${result.failed} items`);
+    if (result.success > 0) toast.success(`Imported ${result.success} items`);
+    if (result.failed > 0) toast.error(`Failed: ${result.failed} items`);
   };
 
   const handleClose = () => {
@@ -387,6 +421,7 @@ export function UploadProgramItemsDialog({
     setImportResult(null);
     setSkipValidation(false);
     setMergeResult(null);
+    setDiffResult(null);
     onOpenChange(false);
   };
 
@@ -729,6 +764,18 @@ export function UploadProgramItemsDialog({
             </div>
           )}
 
+          {/* Step: Diff Preview */}
+          {step === 'diff' && diffResult && (
+            <ImportDiffPreview
+              diffResult={diffResult}
+              entityLabel="program item"
+              getRecordName={(r) => String(r['description'] ?? '')}
+              onBack={() => setStep('preview')}
+              onConfirm={(ids) => handleImport(ids)}
+              isCommitting={false}
+            />
+          )}
+
           {/* Step: Importing */}
           {step === 'importing' && (
             <div className="space-y-6 py-8">
@@ -820,21 +867,24 @@ export function UploadProgramItemsDialog({
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Mapping
                 </Button>
-                <Button onClick={handleImport} disabled={importDisabled}>
-                  <FileUp className="h-4 w-4 mr-2" />
-                  {skipValidation && validationSummary?.hasBlockingErrors
-                    ? `Import Anyway (${parsedData?.rows.length} items)`
-                    : `Import ${parsedData?.rows.length} Items`}
+                <Button onClick={handleProceedToDiff} disabled={importDisabled}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Review Changes
                 </Button>
               </>
             );
           })()}
 
           {step === 'complete' && (
-            <Button onClick={handleClose}>
-              <X className="h-4 w-4 mr-2" />
-              Close
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => { handleClose(); navigate('/storefront/imports'); }}>
+                View Import History
+              </Button>
+              <Button onClick={handleClose}>
+                <X className="h-4 w-4 mr-2" />
+                Close
+              </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

@@ -71,9 +71,12 @@ export function VehicleOnboardSummary() {
 
       // Navigate to vehicle detail page
       navigate(`/fleetops/vlms/vehicles/${newVehicle.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating vehicle:', error);
-      toast.error('Failed to create vehicle. Please try again.');
+      // Store already shows a toast; only show a fallback for unexpected errors
+      if (error?.code !== '23505') {
+        toast.error('Failed to create vehicle. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

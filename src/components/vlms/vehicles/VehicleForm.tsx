@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { VehicleFormData, vehicleFormSchema } from '@/lib/vlms/validationSchemas';
@@ -14,14 +15,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { useFacilities } from '@/hooks/useFacilities';
 import { Vehicle } from '@/types/vlms';
-import { Loader2, FileText, Image as ImageIcon } from 'lucide-react';
+import { Loader2, FileText, Image as ImageIcon, Package, Plus, Trash2, Layers } from 'lucide-react';
 import { VehicleDocumentsTab } from './VehicleDocumentsTab';
 import { VehiclePhotosTab } from './VehiclePhotosTab';
+
+interface TierConfig {
+  tier_name: string;
+  tier_order: number;
+  slot_count: number;
+  max_weight_kg?: number;
+  max_volume_m3?: number;
+}
+
+const DEFAULT_TIER_NAMES = ['Lower', 'Middle', 'Upper'];
 
 interface VehicleFormProps {
   vehicle?: Vehicle;
@@ -33,6 +45,34 @@ interface VehicleFormProps {
 export function VehicleForm({ vehicle, onSubmit, onCancel, isSubmitting }: VehicleFormProps) {
   const { data: facilitiesData } = useFacilities();
   const facilities = facilitiesData?.facilities;
+
+  // Parse existing tiered_config from vehicle (supports bare array or {tiers:[]} format)
+  const parseTiers = (tc: any): TierConfig[] => {
+    if (!tc) return [];
+    if (Array.isArray(tc)) return tc;
+    if (Array.isArray(tc?.tiers)) return tc.tiers;
+    return [];
+  };
+
+  const [tiers, setTiers] = useState<TierConfig[]>(() => parseTiers((vehicle as any)?.tiered_config));
+
+  const addTier = () => {
+    if (tiers.length >= 3) return;
+    const order = tiers.length + 1;
+    setTiers([...tiers, {
+      tier_name: DEFAULT_TIER_NAMES[tiers.length] || `Tier ${order}`,
+      tier_order: order,
+      slot_count: 6,
+    }]);
+  };
+
+  const removeTier = (index: number) => {
+    setTiers(tiers.filter((_, i) => i !== index).map((t, i) => ({ ...t, tier_order: i + 1 })));
+  };
+
+  const updateTier = (index: number, field: keyof TierConfig, value: string | number) => {
+    setTiers(tiers.map((t, i) => i === index ? { ...t, [field]: value } : t));
+  };
 
   const {
     register,
@@ -56,6 +96,12 @@ export function VehicleForm({ vehicle, onSubmit, onCancel, isSubmitting }: Vehic
           color: vehicle.color || '',
           seating_capacity: vehicle.seating_capacity || undefined,
           cargo_capacity: vehicle.cargo_capacity || undefined,
+          capacity_kg: (vehicle as any).capacity_kg || undefined,
+          capacity_m3: (vehicle as any).capacity_m3 || undefined,
+          gross_vehicle_weight_kg: (vehicle as any).gross_vehicle_weight_kg || undefined,
+          length_cm: (vehicle as any).length_cm || undefined,
+          width_cm: (vehicle as any).width_cm || undefined,
+          height_cm: (vehicle as any).height_cm || undefined,
           acquisition_date: vehicle.acquisition_date,
           acquisition_type: vehicle.acquisition_type as any,
           purchase_price: vehicle.purchase_price || undefined,
@@ -81,14 +127,26 @@ export function VehicleForm({ vehicle, onSubmit, onCancel, isSubmitting }: Vehic
         },
   });
 
+  const handleFormSubmit = async (data: VehicleFormData) => {
+    const enriched = {
+      ...data,
+      ...(tiers.length > 0 ? { tiered_config: { tiers } } : {}),
+    } as any;
+    await onSubmit(enriched);
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form onSubmit={handleSubmit(handleFormSubmit)}>
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className={`grid w-full ${vehicle ? 'grid-cols-6' : 'grid-cols-4'}`}>
+        <TabsList className={`grid w-full ${vehicle ? 'grid-cols-7' : 'grid-cols-5'}`}>
           <TabsTrigger value="basic">Basic Info</TabsTrigger>
           <TabsTrigger value="specs">Specifications</TabsTrigger>
           <TabsTrigger value="acquisition">Acquisition</TabsTrigger>
           <TabsTrigger value="insurance">Insurance & Reg</TabsTrigger>
+          <TabsTrigger value="capacity">
+            <Package className="h-4 w-4 mr-1.5" />
+            Capacity & Slots
+          </TabsTrigger>
           {vehicle && (
             <>
               <TabsTrigger value="documents">
@@ -517,6 +575,219 @@ export function VehicleForm({ vehicle, onSubmit, onCancel, isSubmitting }: Vehic
             </CardContent>
           </Card>
         </TabsContent>
+        {/* Capacity & Slots Tab */}
+        <TabsContent value="capacity">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payload & Capacity</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Payload */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="capacity_kg">Payload Capacity (kg)</Label>
+                  <Input
+                    id="capacity_kg"
+                    type="number"
+                    step="0.1"
+                    {...register('capacity_kg', { valueAsNumber: true })}
+                    placeholder="1500"
+                  />
+                  {errors.capacity_kg && (
+                    <p className="text-sm text-destructive">{errors.capacity_kg.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="capacity_m3">Volume Capacity (m³)</Label>
+                  <Input
+                    id="capacity_m3"
+                    type="number"
+                    step="0.01"
+                    {...register('capacity_m3', { valueAsNumber: true })}
+                    placeholder="8.5"
+                  />
+                  {errors.capacity_m3 && (
+                    <p className="text-sm text-destructive">{errors.capacity_m3.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gross_vehicle_weight_kg">Gross Vehicle Weight (kg)</Label>
+                  <Input
+                    id="gross_vehicle_weight_kg"
+                    type="number"
+                    step="1"
+                    {...register('gross_vehicle_weight_kg', { valueAsNumber: true })}
+                    placeholder="3500"
+                  />
+                  {errors.gross_vehicle_weight_kg && (
+                    <p className="text-sm text-destructive">{errors.gross_vehicle_weight_kg.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Cargo Hold Dimensions */}
+              <div>
+                <h3 className="text-sm font-medium mb-3">Cargo Hold Dimensions (cm)</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="length_cm">Length</Label>
+                    <Input
+                      id="length_cm"
+                      type="number"
+                      step="1"
+                      {...register('length_cm', { valueAsNumber: true })}
+                      placeholder="300"
+                    />
+                    {errors.length_cm && (
+                      <p className="text-sm text-destructive">{errors.length_cm.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="width_cm">Width</Label>
+                    <Input
+                      id="width_cm"
+                      type="number"
+                      step="1"
+                      {...register('width_cm', { valueAsNumber: true })}
+                      placeholder="200"
+                    />
+                    {errors.width_cm && (
+                      <p className="text-sm text-destructive">{errors.width_cm.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="height_cm">Height</Label>
+                    <Input
+                      id="height_cm"
+                      type="number"
+                      step="1"
+                      {...register('height_cm', { valueAsNumber: true })}
+                      placeholder="180"
+                    />
+                    {errors.height_cm && (
+                      <p className="text-sm text-destructive">{errors.height_cm.message}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Slot Tier Configuration */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-medium flex items-center gap-1.5">
+                      <Layers className="h-4 w-4" />
+                      Slot Tiers
+                      {tiers.length > 0 && (
+                        <Badge variant="secondary" className="ml-1">
+                          {tiers.reduce((s, t) => s + t.slot_count, 0)} slots
+                        </Badge>
+                      )}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configure cargo tiers for slot-based batch assignment (max 3 tiers, max 12 slots each)
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addTier}
+                    disabled={tiers.length >= 3}
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add Tier
+                  </Button>
+                </div>
+
+                {tiers.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    No slot tiers configured. Add a tier to enable slot-based batching.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {tiers.map((tier, index) => (
+                      <div key={index} className="rounded-lg border p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline">Tier {tier.tier_order}</Badge>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeTier(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Tier Name</Label>
+                            <Input
+                              value={tier.tier_name}
+                              onChange={(e) => updateTier(index, 'tier_name', e.target.value)}
+                              placeholder="Lower"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Slots (1–12)</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={12}
+                              value={tier.slot_count}
+                              onChange={(e) => updateTier(index, 'slot_count', Math.min(12, Math.max(1, parseInt(e.target.value) || 1)))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Max Weight (kg)</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={tier.max_weight_kg ?? ''}
+                              onChange={(e) => updateTier(index, 'max_weight_kg', parseFloat(e.target.value) || 0)}
+                              placeholder="Optional"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Max Volume (m³)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={tier.max_volume_m3 ?? ''}
+                              onChange={(e) => updateTier(index, 'max_volume_m3', parseFloat(e.target.value) || 0)}
+                              placeholder="Optional"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                        {/* Slot preview */}
+                        <div className="flex items-center gap-1 pt-1">
+                          {Array.from({ length: tier.slot_count }).map((_, si) => (
+                            <div
+                              key={si}
+                              className="h-6 w-8 rounded border border-dashed bg-muted/40 text-[10px] flex items-center justify-center text-muted-foreground"
+                            >
+                              {si + 1}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Documents Tab — only for existing vehicles */}
         {vehicle && (
           <TabsContent value="documents">

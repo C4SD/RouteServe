@@ -266,6 +266,7 @@ export function useBulkCreateItems() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['items-for-diff'] });
       toast.success(`Successfully uploaded ${data.length} items`);
     },
     onError: (error: Error) => {

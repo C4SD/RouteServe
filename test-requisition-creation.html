@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Requisition Creation</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Test Requisition Creation</h1>
+    <button onclick="testRequisitionCreation()">Test Create Requisition</button>
+    <div id="result"></div>
+
+    <script>
+        const supabaseUrl = 'https://f4falalu.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImY0ZmFsYWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQxMDQyMDcsImV4cCI6MjA0OTY4MDIwN30.MgQYPiuOKUjTUiHzzpQvJOYh-IMB6E8mI0sVc7kHdW0';
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+        async function testRequisitionCreation() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing...';
+
+            try {
+                // First, let's check current auth status
+                const { data: { user }, error: authError } = await supabase.auth.getUser();
+                
+                if (authError || !user) {
+                    resultDiv.innerHTML = `<p style="color: red;">Authentication error: ${authError?.message || 'Not authenticated'}</p>`;
+                    return;
+                }
+
+                resultDiv.innerHTML = `<p>Authenticated as: ${user.email}</p>`;
+
+                // Test creating a requisition with items
+                const testRequisition = {
+                    facility_id: '00000000-0000-0000-0000-000000000000', // You'll need to update this
+                    warehouse_id: '00000000-0000-0000-0000-000000000000', // You'll need to update this
+                    priority: 'medium',
+                    requested_delivery_date: new Date().toISOString().split('T')[0],
+                    notes: 'Test requisition',
+                    items: [
+                        {
+                            item_name: 'Test Item',
+                            quantity: 1,
+                            unit: 'units',
+                            weight_kg: 1.0,
+                            volume_m3: 0.001,
+                            temperature_required: false,
+                            handling_instructions: 'Test instructions'
+                        }
+                    ]
+                };
+
+                // This would normally be done through the API, but let's test the raw insert
+                const { data, error } = await supabase
+                    .from('requisition_items')
+                    .insert({
+                        requisition_id: '00000000-0000-0000-0000-000000000000', // Test with dummy ID
+                        item_name: 'Test Item',
+                        quantity: 1,
+                        unit: 'units'
+                    });
+
+                if (error) {
+                    resultDiv.innerHTML += `<p style="color: orange;">Expected error (dummy requisition_id): ${error.message}</p>`;
+                } else {
+                    resultDiv.innerHTML += `<p style="color: green;">Insert successful (unexpected)</p>`;
+                }
+
+                // Check if we can view requisition_items
+                const { data: itemsData, error: itemsError } = await supabase
+                    .from('requisition_items')
+                    .select('count')
+                    .limit(1);
+
+                if (itemsError) {
+                    resultDiv.innerHTML += `<p style="color: red;">Cannot view requisition_items: ${itemsError.message}</p>`;
+                } else {
+                    resultDiv.innerHTML += `<p style="color: green;">Can view requisition_items: ${itemsData.length} items returned</p>`;
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

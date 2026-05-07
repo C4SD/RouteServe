@@ -56,17 +56,23 @@ import { batchGenerateWarehouseCodes } from '@/lib/warehouse-code-generator';
 import { chunk } from '@/lib/utils';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { detectCoordinateIssues } from '@/lib/geo-bounds';
+import { computeFacilityDiff, type ImportDiffResult, type DbRow } from '@/lib/import-diff';
+import { useAllFacilitiesForDiff, useBulkUpdateFacilities, useLogImportSession } from '@/hooks/useImportDiff';
+import { ImportDiffPreview } from '@/components/import/ImportDiffPreview';
+import { useNavigate } from 'react-router-dom';
 
 interface EnhancedCSVImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type ImportStep = 'upload' | 'conflicts' | 'mapping' | 'preview' | 'importing' | 'complete';
+type ImportStep = 'upload' | 'conflicts' | 'mapping' | 'preview' | 'diff' | 'importing' | 'complete';
 
 interface ImportResult {
   total: number;
   success: number;
+  updated: number;
+  skipped: number;
   failed: number;
   errors: Array<{ row: number; error: string }>;
 }
@@ -86,15 +92,24 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
   const [cancelImport, setCancelImport] = useState(false);
   const [importStats, setImportStats] = useState({ processed: 0, currentBatch: 0, totalBatches: 0 });
   const [mergeResult, setMergeResult] = useState<MergeResult | null>(null);
+  const [diffResult, setDiffResult] = useState<ImportDiffResult | null>(null);
+  const [selectedUpdateIds, setSelectedUpdateIds] = useState<Set<string>>(new Set());
+  const [preparedDbFacilities, setPreparedDbFacilities] = useState<DbRow[]>([]);
 
   const queryClient = useQueryClient();
   const { workspaceId } = useWorkspace();
+  const navigate = useNavigate();
 
   // Fetch DB reference data for normalization and validation
   const { data: facilityTypes = [] } = useFacilityTypes();
   const { data: levelsOfCare = [] } = useLevelsOfCare();
   const { data: zones = [] } = useOperationalZones();
   const { data: lgas = [] } = useAllLGAsWithZones();
+
+  // Diff-related hooks
+  const { data: existingFacilitiesForDiff = [] } = useAllFacilitiesForDiff();
+  const bulkUpdateFacilities = useBulkUpdateFacilities();
+  const logSession = useLogImportSession();
 
   const proceedToMapping = useCallback((data: ParsedFile) => {
     // Auto-detect mappings from headers
@@ -358,151 +373,157 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
     };
   };
 
-  const handleImport = async () => {
+  // Step: Prepare rows → compute diff → show diff preview
+  const handleProceedToDiff = useCallback(async () => {
     if (!parsedData) return;
 
+    const preparedRows: Array<{ row: any; normalizedRow: NormalizedRow; originalIndex: number }> = [];
+    for (let i = 0; i < parsedData.rows.length; i++) {
+      const row = getMergedRow(i);
+      if (!row.name || String(row.name).trim() === '') continue;
+      preparedRows.push({ row, normalizedRow: normalizedRows[i], originalIndex: i });
+    }
+
+    if (autoGenerateWarehouseCode) {
+      const facilitiesForCodeGen = preparedRows.map((item) => ({
+        service_zone: item.row.service_zone,
+        originalIndex: item.originalIndex,
+      }));
+      const warehouseCodeMap = await batchGenerateWarehouseCodes(facilitiesForCodeGen, supabase);
+      preparedRows.forEach((item) => {
+        const generatedCode = warehouseCodeMap.get(item.originalIndex);
+        if (generatedCode) item.row.warehouse_code = generatedCode;
+      });
+    }
+
+    const dbFacilities = preparedRows.map((item) =>
+      buildDbFacility(item.row, item.normalizedRow)
+    ) as DbRow[];
+
+    const result = computeFacilityDiff(dbFacilities, existingFacilitiesForDiff);
+    setPreparedDbFacilities(dbFacilities);
+    setDiffResult(result);
+    setSelectedUpdateIds(new Set(result.updateRecords.map(r => r.dbId)));
+    setStep('diff');
+  }, [parsedData, normalizedRows, autoGenerateWarehouseCode, existingFacilitiesForDiff, getMergedRow, buildDbFacility]);
+
+  // Step: Commit — insert new + update selected, then log the session
+  const handleImport = async (confirmedUpdateIds: Set<string>) => {
+    if (!diffResult) return;
+
+    setSelectedUpdateIds(confirmedUpdateIds);
     setStep('importing');
     setImportProgress(0);
     setCancelImport(false);
 
     const result: ImportResult = {
-      total: parsedData.rows.length,
+      total: diffResult.newRecords.length + diffResult.updateRecords.length + diffResult.duplicateRecords.length,
       success: 0,
+      updated: 0,
+      skipped: diffResult.duplicateRecords.length + diffResult.updateRecords.filter(r => !confirmedUpdateIds.has(r.dbId)).length,
       failed: 0,
       errors: [],
     };
 
     const BATCH_SIZE = 150;
+    const insertedIds: string[] = [];
+    const updatedIds: string[] = [];
+    const logErrors: Array<{ rowNumber: number; message: string }> = [];
 
     try {
-      // Prepare all rows first (validation, merging edits)
-      const preparedRows: Array<{ row: any; normalizedRow: NormalizedRow; originalIndex: number }> = [];
+      // 1. Insert new records
+      const newFacilities = diffResult.newRecords;
+      if (newFacilities.length > 0) {
+        const batches = chunk(newFacilities, BATCH_SIZE);
+        const totalBatches = batches.length;
+        const CONCURRENCY = 3;
+        setImportStats({ processed: 0, currentBatch: 0, totalBatches });
+        let completedBatches = 0;
 
-      for (let i = 0; i < parsedData.rows.length; i++) {
-        const row = getMergedRow(i);
+        for (let startIdx = 0; startIdx < batches.length; startIdx += CONCURRENCY) {
+          if (cancelImport) { toast.info('Import cancelled'); break; }
 
-        // Skip rows that have no name (minimum viable field)
-        if (!row.name || String(row.name).trim() === '') {
-          result.failed++;
-          result.errors.push({
-            row: i + 1,
-            error: 'Skipped: facility name is required',
-          });
-          continue;
-        }
-
-        preparedRows.push({
-          row,
-          normalizedRow: normalizedRows[i],
-          originalIndex: i,
-        });
-      }
-
-      // Batch generate warehouse codes if needed (one query per zone instead of per facility)
-      if (autoGenerateWarehouseCode) {
-        const facilitiesForCodeGen = preparedRows.map((item) => ({
-          service_zone: item.row.service_zone,
-          originalIndex: item.originalIndex,
-        }));
-
-        const warehouseCodeMap = await batchGenerateWarehouseCodes(facilitiesForCodeGen, supabase);
-
-        // Apply generated codes to rows
-        preparedRows.forEach((item) => {
-          const generatedCode = warehouseCodeMap.get(item.originalIndex);
-          if (generatedCode) {
-            item.row.warehouse_code = generatedCode;
-          }
-        });
-      }
-
-      // Build all DB-ready facilities
-      const dbFacilities = preparedRows.map((item) =>
-        buildDbFacility(item.row, item.normalizedRow)
-      );
-
-      // Split into batches and insert via SECURITY DEFINER RPC (bypasses RLS)
-      const batches = chunk(dbFacilities, BATCH_SIZE);
-      const totalBatches = batches.length;
-      const CONCURRENCY = 3;
-      setImportStats({ processed: 0, currentBatch: 0, totalBatches });
-
-      let completedBatches = 0;
-
-      for (let startIdx = 0; startIdx < batches.length; startIdx += CONCURRENCY) {
-        if (cancelImport) {
-          toast.info('Import cancelled');
-          break;
-        }
-
-        const concurrentBatches = batches.slice(startIdx, startIdx + CONCURRENCY);
-
-        const batchPromises = concurrentBatches.map(async (batch, offsetInGroup) => {
-          const batchIndex = startIdx + offsetInGroup;
-          const batchStartIndex = batchIndex * BATCH_SIZE;
-
-          try {
-            const { data, error } = await supabase.rpc('bulk_insert_facilities', {
-              facilities: batch,
-            });
-
-            if (error) throw error;
-
-            const row = Array.isArray(data) ? data[0] : data;
-            const insertedCount = row?.inserted_count ?? 0;
-            const failedCount = row?.failed_count ?? 0;
-            const errMsg = row?.error_message;
-
-            result.success += insertedCount;
-            result.failed += failedCount;
-
-            // Surface per-row errors from the RPC
-            if (errMsg) {
-              const rowErrors = errMsg.split('; ');
-              rowErrors.forEach((msg: string) => {
-                result.errors.push({
-                  row: batchStartIndex + 1,
-                  error: msg,
+          const concurrentBatches = batches.slice(startIdx, startIdx + CONCURRENCY);
+          const batchPromises = concurrentBatches.map(async (batch, offsetInGroup) => {
+            const batchIndex = startIdx + offsetInGroup;
+            const batchStartIndex = batchIndex * BATCH_SIZE;
+            try {
+              const { data, error } = await supabase.rpc('bulk_insert_facilities', { facilities: batch });
+              if (error) throw error;
+              const row = Array.isArray(data) ? data[0] : data;
+              const insertedCount = row?.inserted_count ?? 0;
+              const failedCount = row?.failed_count ?? 0;
+              const errMsg = row?.error_message;
+              result.success += insertedCount;
+              result.failed += failedCount;
+              if (errMsg) {
+                errMsg.split('; ').forEach((msg: string) => {
+                  result.errors.push({ row: batchStartIndex + 1, error: msg });
+                  logErrors.push({ rowNumber: batchStartIndex + 1, message: msg });
                 });
-              });
+              }
+            } catch (error: any) {
+              result.failed += batch.length;
+              result.errors.push({ row: batchStartIndex + 1, error: error.message || 'Unknown error' });
+              logErrors.push({ rowNumber: batchStartIndex + 1, message: error.message });
             }
-          } catch (error: any) {
-            console.error(`Batch ${batchIndex + 1} failed:`, error);
-            result.failed += batch.length;
-            result.errors.push({
-              row: batchStartIndex + 1,
-              error: error.message || 'Unknown error',
-            });
-          }
-        });
+          });
 
-        await Promise.all(batchPromises);
-
-        completedBatches += concurrentBatches.length;
-        const processed = Math.min(completedBatches * BATCH_SIZE, preparedRows.length);
-        setImportStats({
-          processed,
-          currentBatch: completedBatches,
-          totalBatches,
-        });
-        setImportProgress(Math.round(((result.success + result.failed) / preparedRows.length) * 100));
+          await Promise.all(batchPromises);
+          completedBatches += concurrentBatches.length;
+          setImportStats({ processed: Math.min(completedBatches * BATCH_SIZE, newFacilities.length), currentBatch: completedBatches, totalBatches });
+          setImportProgress(Math.round((completedBatches / totalBatches) * 70));
+        }
       }
+
+      // 2. Update selected records
+      const selectedUpdates = diffResult.updateRecords
+        .filter(r => confirmedUpdateIds.has(r.dbId))
+        .map(r => {
+          const fields: Record<string, unknown> = {};
+          for (const diff of r.fieldDiffs) {
+            fields[diff.field] = diff.uploadValue;
+          }
+          return { id: r.dbId, fields };
+        });
+
+      if (selectedUpdates.length > 0) {
+        const { successIds, errors: updateErrors } = await bulkUpdateFacilities.mutateAsync(selectedUpdates);
+        updatedIds.push(...successIds);
+        result.updated = successIds.length;
+        result.failed += updateErrors.length;
+        updateErrors.forEach(e => {
+          result.errors.push({ row: 0, error: `Update failed for ${e.id}: ${e.message}` });
+          logErrors.push({ rowNumber: 0, message: e.message, dbId: e.id });
+        });
+      }
+      setImportProgress(90);
     } catch (error: any) {
       toast.error(`Import failed: ${error.message}`);
-      console.error('Import error:', error);
     }
 
-    // Invalidate facilities cache so the table refreshes
     queryClient.invalidateQueries({ queryKey: ['facilities'] });
 
-    setImportResult(result);
-    setStep('complete');
-
-    if (result.success > 0) {
-      toast.success(`Successfully imported ${result.success} facilities`);
-    }
-    if (result.failed > 0) {
-      toast.error(`Failed to import ${result.failed} facilities`);
+    // 3. Log the session
+    try {
+      const sessionId = await logSession.mutateAsync({
+        entityType: 'facility',
+        sourceFile: parsedData?.fileName ?? 'unknown',
+        diffResult,
+        selectedUpdateIds: confirmedUpdateIds,
+        commitResults: { insertedIds, updatedIds, errors: logErrors },
+        getRecordName: (r) => String(r['name'] ?? ''),
+      });
+      setImportProgress(100);
+      setImportResult({ ...result });
+      setStep('complete');
+      if (result.success > 0) toast.success(`Imported ${result.success} new facilities`);
+      if (result.updated > 0) toast.success(`Updated ${result.updated} facilities`);
+      if (result.failed > 0) toast.error(`${result.failed} rows failed`);
+      return sessionId;
+    } catch {
+      setImportResult({ ...result });
+      setStep('complete');
     }
   };
 
@@ -521,6 +542,9 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
     setCancelImport(false);
     setImportStats({ processed: 0, currentBatch: 0, totalBatches: 0 });
     setMergeResult(null);
+    setDiffResult(null);
+    setSelectedUpdateIds(new Set());
+    setPreparedDbFacilities([]);
 
     // Clear fuzzy match cache on dialog close
     fuzzyMatchCache.clear();
@@ -568,8 +592,12 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
             {mergeResult?.conflicts.length ? '3' : '2'}. Map Columns
           </StepIndicator>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          <StepIndicator active={step === 'preview'} completed={['importing', 'complete'].includes(step)}>
+          <StepIndicator active={step === 'preview'} completed={['diff', 'importing', 'complete'].includes(step)}>
             {mergeResult?.conflicts.length ? '4' : '3'}. Preview
+          </StepIndicator>
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          <StepIndicator active={step === 'diff'} completed={['importing', 'complete'].includes(step)}>
+            {mergeResult?.conflicts.length ? '5' : '4'}. Review Changes
           </StepIndicator>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
           <StepIndicator active={step === 'importing'} completed={step === 'complete'}>
@@ -936,7 +964,19 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
             </div>
           )}
 
-          {/* Step 4: Importing */}
+          {/* Step: Diff Preview */}
+          {step === 'diff' && diffResult && (
+            <ImportDiffPreview
+              diffResult={diffResult}
+              entityLabel="facility"
+              getRecordName={(r) => String(r['name'] ?? '')}
+              onBack={() => setStep('preview')}
+              onConfirm={(ids) => handleImport(ids)}
+              isCommitting={false}
+            />
+          )}
+
+          {/* Step: Importing */}
           {step === 'importing' && (
             <div className="space-y-6 py-8">
               <div className="text-center">
@@ -982,10 +1022,22 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
                 <CheckCircle className="h-12 w-12 text-success" />
                 <div>
                   <h3 className="text-lg font-semibold">Import Complete</h3>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge variant="default" className="bg-success text-success-foreground">
-                      {importResult.success} succeeded
-                    </Badge>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {importResult.success > 0 && (
+                      <Badge variant="default" className="bg-green-600 text-white">
+                        {importResult.success} inserted
+                      </Badge>
+                    )}
+                    {importResult.updated > 0 && (
+                      <Badge variant="default" className="bg-blue-600 text-white">
+                        {importResult.updated} updated
+                      </Badge>
+                    )}
+                    {importResult.skipped > 0 && (
+                      <Badge variant="outline">
+                        {importResult.skipped} skipped
+                      </Badge>
+                    )}
                     {importResult.failed > 0 && (
                       <Badge variant="destructive">
                         {importResult.failed} failed
@@ -1030,7 +1082,7 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
               ? (validationSummary.errors / parsedData.rows.length) * 100
               : 0;
             const highErrorRate = errorRate > 20;
-            const importDisabled = !skipValidation && (validationSummary?.hasBlockingErrors || highErrorRate);
+            const proceedDisabled = !skipValidation && (validationSummary?.hasBlockingErrors || highErrorRate);
 
             return (
               <>
@@ -1039,25 +1091,27 @@ export function EnhancedCSVImportDialog({ open, onOpenChange }: EnhancedCSVImpor
                   Back to Mapping
                 </Button>
                 <Button
-                  onClick={handleImport}
-                  disabled={importDisabled}
+                  onClick={handleProceedToDiff}
+                  disabled={proceedDisabled}
                   variant={skipValidation && validationSummary?.hasBlockingErrors ? 'secondary' : 'default'}
                 >
-                  <FileUp className="h-4 w-4 mr-2" />
-                  {skipValidation && validationSummary?.hasBlockingErrors
-                    ? `Import Anyway (${parsedData?.rows.length} rows)`
-                    : `Import ${parsedData?.rows.length} Facilities`
-                  }
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Review Changes ({parsedData?.rows.length} rows)
                 </Button>
               </>
             );
           })()}
 
           {step === 'complete' && (
-            <Button onClick={handleClose}>
-              <X className="h-4 w-4 mr-2" />
-              Close
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" onClick={() => navigate('/storefront/imports')}>
+                View Import History
+              </Button>
+              <Button onClick={handleClose}>
+                <X className="h-4 w-4 mr-2" />
+                Close
+              </Button>
+            </div>
           )}
         </DialogFooter>
       </DialogContent>
