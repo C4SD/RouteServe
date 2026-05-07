@@ -81,7 +81,10 @@ function mapPreBatchToSchedulerBatch(pb: PreBatchWithRelations): SchedulerBatch 
     planned_date: pb.planned_date,
     time_window: pb.time_window ?? null,
     driver_id: null,
-    vehicle_id: pb.suggested_vehicle_id,
+    vehicle_id: (pb as any).suggested_vehicle_ids?.[0] ?? pb.suggested_vehicle_id,
+    vehicle_ids: (pb as any).suggested_vehicle_ids?.length
+      ? (pb as any).suggested_vehicle_ids
+      : pb.suggested_vehicle_id ? [pb.suggested_vehicle_id] : [],
     optimized_route: null,
     total_distance_km: null,
     estimated_duration_min: null,
@@ -306,22 +309,23 @@ export function SchedulePreviewPanel({
     return computeRouteMetrics(batch.facility_ids, facilityMap, startLocation, waitingTimeMin);
   }, [batch, facilityMap, warehouseMap, waitingTimeMin]);
 
-  // Compute capacity utilization if vehicle is known
+  // Compute capacity utilization across all assigned vehicles
   const capacityPct = useMemo(() => {
-    if (!batch?.vehicle_id || !routeMetrics) return null;
-    const vehicle = vehicleMap[batch.vehicle_id];
-    if (!vehicle) return null;
+    if (!batch || !routeMetrics) return null;
+    const assignedIds = batch.vehicle_ids ?? (batch.vehicle_id ? [batch.vehicle_id] : []);
+    if (assignedIds.length === 0) return null;
 
-    // Use facility count / vehicle capacity as a rough proxy
-    const maxWeight = (vehicle as any).maxWeight || (vehicle as any).max_weight;
-    if (maxWeight && batch.total_weight_kg) {
-      return Math.round((batch.total_weight_kg / maxWeight) * 100);
+    const assignedVehicles = assignedIds.map(id => vehicleMap[id]).filter(Boolean);
+    if (assignedVehicles.length === 0) return null;
+
+    const totalMaxWeight = assignedVehicles.reduce((s, v) => s + ((v as any).maxWeight || (v as any).max_weight || 0), 0);
+    if (totalMaxWeight > 0 && batch.total_weight_kg) {
+      return Math.round((batch.total_weight_kg / totalMaxWeight) * 100);
     }
 
-    // Fallback: slots-based utilization
-    const capacity = (vehicle as any).capacity;
-    if (capacity && batch.facility_ids.length) {
-      return Math.round((batch.facility_ids.length / capacity) * 100);
+    const totalCapacity = assignedVehicles.reduce((s, v) => s + ((v as any).capacity || 0), 0);
+    if (totalCapacity > 0 && batch.facility_ids.length) {
+      return Math.round((batch.facility_ids.length / totalCapacity) * 100);
     }
 
     return null;
@@ -345,7 +349,6 @@ export function SchedulePreviewPanel({
   }
 
   const warehouse = batch.warehouse_id ? warehouseMap[batch.warehouse_id] : null;
-  const vehicle = batch.vehicle_id ? vehicleMap[batch.vehicle_id] : null;
 
   const totalDistanceKm = batch.total_distance_km ?? routeMetrics?.totalDistanceKm ?? null;
   const estimatedDurationMin = batch.estimated_duration_min ?? routeMetrics?.estimatedDurationMin ?? null;
@@ -455,15 +458,29 @@ export function SchedulePreviewPanel({
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-sm">
-              <Truck className="h-4 w-4 text-gray-400" />
+            <div className="flex items-start gap-3 text-sm">
+              <Truck className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-gray-500">Vehicle</p>
-                <p className="font-medium">
-                  {vehicle
-                    ? `${vehicle.model || ''} ${(vehicle as any).plateNumber || (vehicle as any).plate_number || ''}`.trim() || batch.vehicle_id
-                    : batch.vehicle_id || 'Not assigned'}
+                <p className="text-gray-500">
+                  Vehicles {((batch.vehicle_ids?.length ?? 0) > 1) && `(${batch.vehicle_ids!.length})`}
                 </p>
+                {(() => {
+                  const assignedVehicleIds = batch.vehicle_ids ?? (batch.vehicle_id ? [batch.vehicle_id] : []);
+                  if (assignedVehicleIds.length === 0) {
+                    return <p className="font-medium text-gray-400">Not assigned</p>;
+                  }
+                  return (
+                    <div className="space-y-0.5">
+                      {assignedVehicleIds.map(vid => {
+                        const v = vehicleMap[vid];
+                        const label = v
+                          ? `${(v as any).model || ''} ${(v as any).plateNumber || (v as any).plate_number || ''}`.trim() || vid
+                          : vid;
+                        return <p key={vid} className="font-medium">{label}</p>;
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

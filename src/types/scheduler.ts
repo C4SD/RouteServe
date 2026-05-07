@@ -87,7 +87,8 @@ export interface SchedulerBatch {
 
   // Assignment
   driver_id: string | null;
-  vehicle_id: string | null;
+  vehicle_id: string | null; // first vehicle (backward compat)
+  vehicle_ids?: string[]; // multi-vehicle
 
   // Route & Optimization
   optimized_route: RoutePoint[] | null;

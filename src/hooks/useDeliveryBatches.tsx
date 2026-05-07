@@ -105,8 +105,8 @@ export function useDeliveryBatches() {
 
         // Resolve vehicle_ids: prefer the array column, fall back to legacy vehicle_id
         const vehicleIds: string[] =
-          (b as any).vehicle_ids?.length > 0
-            ? (b as any).vehicle_ids
+          b.vehicle_ids?.length > 0
+            ? b.vehicle_ids
             : b.vehicle_id
             ? [b.vehicle_id]
             : [];

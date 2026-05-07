@@ -255,7 +255,10 @@ export function usePublishPreBatchToFleetOps() {
               facility_ids: pb.facility_order,
               scheduled_date: pb.planned_date,
               scheduled_time: scheduledTime,
-              vehicle_id: pb.suggested_vehicle_id ?? null,
+              vehicle_ids: (pb as any).suggested_vehicle_ids?.length
+                ? (pb as any).suggested_vehicle_ids
+                : pb.suggested_vehicle_id ? [pb.suggested_vehicle_id] : [],
+              vehicle_id: (pb as any).suggested_vehicle_ids?.[0] ?? pb.suggested_vehicle_id ?? null,
               driver_id: null,
               status: 'planned',
               priority: 'medium',

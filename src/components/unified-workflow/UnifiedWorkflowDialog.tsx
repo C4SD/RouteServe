@@ -91,6 +91,7 @@ export function UnifiedWorkflowDialog({
   const batchName = useUnifiedWorkflowStore((state) => state.batch_name);
   const priority = useUnifiedWorkflowStore((state) => state.priority);
   const vehicleId = useUnifiedWorkflowStore((state) => state.vehicle_id);
+  const vehicleIds = useUnifiedWorkflowStore((state) => state.vehicle_ids);
   const driverId = useUnifiedWorkflowStore((state) => state.driver_id);
   const slotAssignments = useUnifiedWorkflowStore((state) => state.slot_assignments);
   const optimizedRoute = useUnifiedWorkflowStore((state) => state.optimized_route);
@@ -215,11 +216,15 @@ export function UnifiedWorkflowDialog({
       .slice(0, 3);
   }, [vehicles, workingSet]);
 
-  // Get selected vehicle/driver names for review (memoized to prevent infinite loops)
-  const selectedVehicle = React.useMemo(
-    () => vehicles.find((v) => v.id === vehicleId),
-    [vehicles, vehicleId]
+  // Get selected vehicles for review (multi-vehicle support)
+  const selectedVehicles = React.useMemo(
+    () => {
+      const ids = vehicleIds.length > 0 ? vehicleIds : (vehicleId ? [vehicleId] : []);
+      return vehicles.filter(v => ids.includes(v.id));
+    },
+    [vehicles, vehicleIds, vehicleId]
   );
+  const selectedVehicle = selectedVehicles[0] ?? null;
   const selectedDriver = React.useMemo(
     () => drivers.find((d) => d.id === driverId),
     [drivers, driverId]
@@ -371,13 +376,19 @@ export function UnifiedWorkflowDialog({
     onOpenChange,
   ]);
 
-  // Handle next step — auto-commits suggested vehicle when leaving Step 2
+  const suggestedVehicleIds = useUnifiedWorkflowStore((state) => state.suggested_vehicle_ids);
+
+  // Handle next step — auto-commits suggested vehicles when leaving Step 2
   const handleNextStep = React.useCallback(() => {
-    if (currentStep === 2 && suggestedVehicleId && !vehicleId) {
-      actions.commitVehicle(suggestedVehicleId);
+    if (currentStep === 2 && vehicleIds.length === 0) {
+      if (suggestedVehicleIds.length > 0) {
+        actions.commitVehicles(suggestedVehicleIds);
+      } else if (suggestedVehicleId) {
+        actions.commitVehicle(suggestedVehicleId);
+      }
     }
     actions.nextStep();
-  }, [currentStep, suggestedVehicleId, vehicleId, actions]);
+  }, [currentStep, suggestedVehicleIds, suggestedVehicleId, vehicleIds, actions]);
 
   // Handle route optimization (Step 4) (memoized to prevent infinite loops)
   const handleOptimizeRoute = React.useCallback(async () => {
@@ -447,9 +458,10 @@ export function UnifiedWorkflowDialog({
             plannedDate={plannedDate}
             timeWindow={timeWindow}
             facilities={workingSet}
-            selectedVehicleId={vehicleId}
+            selectedVehicleIds={vehicleIds.length > 0 ? vehicleIds : (vehicleId ? [vehicleId] : [])}
             vehicles={vehicles}
             onVehicleChange={actions.commitVehicle}
+            onVehiclesChange={actions.commitVehicles}
             selectedDriverId={driverId}
             drivers={drivers}
             onDriverChange={actions.assignDriver}

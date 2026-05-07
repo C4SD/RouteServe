@@ -123,6 +123,7 @@ const initialState: UnifiedWorkflowState = {
   // Step 2: Decision Support
   ai_optimization_options: initialAiOptions,
   suggested_vehicle_id: null,
+  suggested_vehicle_ids: [],
 
   // Step 2: Notes
   schedule_notes: null,
@@ -131,6 +132,7 @@ const initialState: UnifiedWorkflowState = {
   batch_name: null,
   priority: 'medium',
   vehicle_id: null,
+  vehicle_ids: [],
   driver_id: null,
 
   // Step 3: Slot Assignments
@@ -356,7 +358,25 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         // =====================================================
 
         setSuggestedVehicle: (vehicleId: string | null) => {
-          set({ suggested_vehicle_id: vehicleId }, false, 'unified/setSuggestedVehicle');
+          set(
+            {
+              suggested_vehicle_id: vehicleId,
+              suggested_vehicle_ids: vehicleId ? [vehicleId] : [],
+            },
+            false,
+            'unified/setSuggestedVehicle'
+          );
+        },
+
+        setSuggestedVehicles: (vehicleIds: string[]) => {
+          set(
+            {
+              suggested_vehicle_ids: vehicleIds,
+              suggested_vehicle_id: vehicleIds[0] ?? null,
+            },
+            false,
+            'unified/setSuggestedVehicles'
+          );
         },
 
         // =====================================================
@@ -451,14 +471,28 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         },
 
         commitVehicle: (vehicleId: string) => {
+          const prev = get().vehicle_ids;
+          const next = prev.includes(vehicleId) ? prev : [vehicleId, ...prev.filter(id => id !== vehicleId)];
           set(
             {
               vehicle_id: vehicleId,
-              // Clear slot assignments when vehicle changes
+              vehicle_ids: next,
               slot_assignments: {},
             },
             false,
             'unified/commitVehicle'
+          );
+        },
+
+        commitVehicles: (vehicleIds: string[]) => {
+          set(
+            {
+              vehicle_ids: vehicleIds,
+              vehicle_id: vehicleIds[0] ?? null,
+              slot_assignments: {},
+            },
+            false,
+            'unified/commitVehicles'
           );
         },
 
@@ -740,11 +774,11 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             }
 
             case 3:
-              // Step 3: Must have batch name and vehicle committed
+              // Step 3: Must have batch name and at least one vehicle committed
               return (
                 state.batch_name !== null &&
                 state.batch_name.trim() !== '' &&
-                state.vehicle_id !== null
+                (state.vehicle_ids.length > 0 || state.vehicle_id !== null)
               );
 
             case 4:
@@ -800,8 +834,8 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               if (!state.batch_name || state.batch_name.trim() === '') {
                 errors.push('Batch name is required');
               }
-              if (!state.vehicle_id) {
-                errors.push('Vehicle selection is required');
+              if (state.vehicle_ids.length === 0 && !state.vehicle_id) {
+                errors.push('At least one vehicle is required');
               }
               break;
 
@@ -842,10 +876,12 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
           working_set: state.working_set,
           ai_optimization_options: state.ai_optimization_options,
           suggested_vehicle_id: state.suggested_vehicle_id,
+          suggested_vehicle_ids: state.suggested_vehicle_ids,
           schedule_notes: state.schedule_notes,
           batch_name: state.batch_name,
           priority: state.priority,
           vehicle_id: state.vehicle_id,
+          vehicle_ids: state.vehicle_ids,
           driver_id: state.driver_id,
           slot_assignments: state.slot_assignments,
           optimized_route: state.optimized_route,
@@ -1011,8 +1047,8 @@ export const useValidationErrors = () =>
         if (!state.batch_name || state.batch_name.trim() === '') {
           errors.push('Batch name is required');
         }
-        if (!state.vehicle_id) {
-          errors.push('Vehicle selection is required');
+        if (state.vehicle_ids.length === 0 && !state.vehicle_id) {
+          errors.push('At least one vehicle is required');
         }
         break;
 
@@ -1058,6 +1094,7 @@ export const useWorkflowActions = () => {
       setAiOptimizationOptions: state.setAiOptimizationOptions,
       toggleAiOption: state.toggleAiOption,
       setSuggestedVehicle: state.setSuggestedVehicle,
+      setSuggestedVehicles: state.setSuggestedVehicles,
       setUploadedFile: state.setUploadedFile,
       setParsedFacilities: state.setParsedFacilities,
       updateParsedFacility: state.updateParsedFacility,
@@ -1068,6 +1105,7 @@ export const useWorkflowActions = () => {
       setBatchName: state.setBatchName,
       setPriority: state.setPriority,
       commitVehicle: state.commitVehicle,
+      commitVehicles: state.commitVehicles,
       assignDriver: state.assignDriver,
       assignFacilityToSlot: state.assignFacilityToSlot,
       unassignSlot: state.unassignSlot,

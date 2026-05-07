@@ -67,10 +67,11 @@ interface Step3BatchProps {
   // Facilities (from Step 2)
   facilities: WorkingSetItem[];
 
-  // Vehicle
-  selectedVehicleId: string | null;
+  // Vehicle (multi)
+  selectedVehicleIds: string[];
   vehicles: Vehicle[];
   onVehicleChange: (vehicleId: string) => void;
+  onVehiclesChange: (vehicleIds: string[]) => void;
 
   // Driver
   selectedDriverId: string | null;
@@ -98,9 +99,10 @@ export function Step3Batch({
   plannedDate,
   timeWindow,
   facilities,
-  selectedVehicleId,
+  selectedVehicleIds,
   vehicles,
   onVehicleChange,
+  onVehiclesChange,
   selectedDriverId,
   drivers,
   onDriverChange,
@@ -178,9 +180,11 @@ export function Step3Batch({
           {/* Middle Column: Slot Grid */}
           <MiddleColumn>
             <SlotGridColumn
-              selectedVehicleId={selectedVehicleId}
+              selectedVehicleId={selectedVehicleIds[0] ?? null}
+              selectedVehicleIds={selectedVehicleIds}
               vehicles={vehicles}
               onVehicleChange={onVehicleChange}
+              onVehiclesChange={onVehiclesChange}
               slotAssignments={slotAssignments}
               availableFacilities={facilities}
               onAssignSlot={onAssignSlot}

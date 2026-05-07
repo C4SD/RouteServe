@@ -265,6 +265,7 @@ export type Database = {
           total_weight: number | null
           updated_at: string | null
           vehicle_id: string | null
+          vehicle_ids: string[]
           vehicle_total_slots: number | null
           warehouse_id: string
         }
@@ -305,6 +306,7 @@ export type Database = {
           total_weight?: number | null
           updated_at?: string | null
           vehicle_id?: string | null
+          vehicle_ids?: string[]
           vehicle_total_slots?: number | null
           warehouse_id: string
         }
@@ -345,6 +347,7 @@ export type Database = {
           total_weight?: number | null
           updated_at?: string | null
           vehicle_id?: string | null
+          vehicle_ids?: string[]
           vehicle_total_slots?: number | null
           warehouse_id?: string
         }
@@ -4502,6 +4505,7 @@ export type Database = {
           start_location_type: string
           status: string
           suggested_vehicle_id: string | null
+          suggested_vehicle_ids: string[]
           time_window: string | null
           updated_at: string
           workspace_id: string
@@ -4523,6 +4527,7 @@ export type Database = {
           start_location_type: string
           status?: string
           suggested_vehicle_id?: string | null
+          suggested_vehicle_ids?: string[]
           time_window?: string | null
           updated_at?: string
           workspace_id: string
@@ -4544,6 +4549,7 @@ export type Database = {
           start_location_type?: string
           status?: string
           suggested_vehicle_id?: string | null
+          suggested_vehicle_ids?: string[]
           time_window?: string | null
           updated_at?: string
           workspace_id?: string
