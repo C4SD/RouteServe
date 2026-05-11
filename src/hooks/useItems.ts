@@ -322,9 +322,10 @@ export function useItemAnalytics(itemId: string | undefined) {
 }
 
 export function useItemShipmentHistory(itemId: string | undefined) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: ['items', itemId, 'shipments'],
-    enabled: !!itemId,
+    queryKey: ['items', itemId, workspaceId, 'shipments'],
+    enabled: !!itemId && !!workspaceId,
     queryFn: async (): Promise<ItemShipmentHistory[]> => {
       if (!itemId) return [];
 

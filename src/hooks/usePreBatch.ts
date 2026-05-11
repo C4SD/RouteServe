@@ -216,13 +216,15 @@ export function useUpdatePreBatch() {
 
 export function useDeletePreBatch() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('scheduler_pre_batches')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('workspace_id', workspaceId!);
 
       if (error) throw error;
     },

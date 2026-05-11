@@ -33,8 +33,8 @@ export const dispatchRunKeys = {
   lists:   () => [...dispatchRunKeys.all, 'list'] as const,
   list:    (filters?: object) => [...dispatchRunKeys.lists(), filters] as const,
   details: () => [...dispatchRunKeys.all, 'detail'] as const,
-  detail:  (id: string) => [...dispatchRunKeys.details(), id] as const,
-  byBatch: (batchId: string) => [...dispatchRunKeys.all, 'batch', batchId] as const,
+  detail:  (id: string, workspaceId?: string) => workspaceId ? [...dispatchRunKeys.details(), id, workspaceId] as const : [...dispatchRunKeys.details(), id] as const,
+  byBatch: (batchId: string, workspaceId?: string) => workspaceId ? [...dispatchRunKeys.all, 'batch', batchId, workspaceId] as const : [...dispatchRunKeys.all, 'batch', batchId] as const,
 };
 
 // =====================================================
@@ -84,19 +84,21 @@ export function useDispatchRuns(options: UseDispatchRunsOptions = {}) {
 // =====================================================
 
 export function useDispatchRun(id: string | null) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: dispatchRunKeys.detail(id || ''),
+    queryKey: dispatchRunKeys.detail(id || '', workspaceId ?? undefined),
     queryFn: async () => {
       if (!id) return null;
       const { data, error } = await supabase
         .from('dispatch_runs')
         .select('*')
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .single();
       if (error) throw error;
       return data as DispatchRun;
     },
-    enabled: !!id,
+    enabled: !!id && !!workspaceId,
     staleTime: 1000 * 15,
   });
 }
@@ -106,20 +108,22 @@ export function useDispatchRun(id: string | null) {
 // =====================================================
 
 export function useDispatchRunForBatch(batchId: string | null) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: dispatchRunKeys.byBatch(batchId || ''),
+    queryKey: dispatchRunKeys.byBatch(batchId || '', workspaceId ?? undefined),
     queryFn: async () => {
       if (!batchId) return null;
       const { data, error } = await supabase
         .from('dispatch_runs')
         .select('*')
         .eq('batch_id', batchId)
+        .eq('workspace_id', workspaceId!)
         .in('status', ['pending', 'dispatched', 'in_transit'])
         .maybeSingle();
       if (error) throw error;
       return data as DispatchRun | null;
     },
-    enabled: !!batchId,
+    enabled: !!batchId && !!workspaceId,
     staleTime: 1000 * 15,
   });
 }

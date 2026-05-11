@@ -216,8 +216,9 @@ export function useFacilities(filters?: FacilityFilters, page?: number, pageSize
  * Fetches a single facility by ID
  */
 export function useFacility(id: string | undefined): UseQueryResult<Facility, Error> {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: ['facility', id],
+    queryKey: ['facility', id, workspaceId],
     queryFn: async () => {
       if (!id) throw new Error('Facility ID is required');
 
@@ -225,12 +226,13 @@ export function useFacility(id: string | undefined): UseQueryResult<Facility, Er
         .from('facilities')
         .select('*')
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (error) throw error;
       return mapDbToFacility(data);
     },
-    enabled: !!id,
+    enabled: !!id && !!workspaceId,
   });
 }
 
@@ -321,14 +323,14 @@ export function useUpdateFacility() {
     onMutate: async ({ id, updates }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['facilities'] });
-      await queryClient.cancelQueries({ queryKey: ['facility', id] });
+      await queryClient.cancelQueries({ queryKey: ['facility', id, workspaceId] });
 
       // Snapshot previous values
       const previousFacilities = queryClient.getQueryData(['facilities']);
-      const previousFacility = queryClient.getQueryData(['facility', id]);
+      const previousFacility = queryClient.getQueryData(['facility', id, workspaceId]);
 
       // Optimistically update cache
-      queryClient.setQueryData(['facility', id], (old: any) => ({
+      queryClient.setQueryData(['facility', id, workspaceId], (old: any) => ({
         ...old,
         ...updates,
       }));
@@ -337,16 +339,16 @@ export function useUpdateFacility() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['facilities'] });
-      queryClient.invalidateQueries({ queryKey: ['facility', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['facility', variables.id, workspaceId] });
       toast.success('Facility updated successfully');
     },
-    onError: (error: Error, _, context) => {
+    onError: (error: Error, variables, context) => {
       // Rollback on error
       if (context?.previousFacilities) {
         queryClient.setQueryData(['facilities'], context.previousFacilities);
       }
       if (context?.previousFacility) {
-        queryClient.setQueryData(['facility'], context.previousFacility);
+        queryClient.setQueryData(['facility', variables.id, workspaceId], context.previousFacility);
       }
       toast.error(`Failed to update facility: ${error.message}`);
     },
@@ -415,8 +417,9 @@ export function useBulkDeleteFacilities() {
  * Fetches services for a facility
  */
 export function useFacilityServices(facilityId: string | undefined) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: ['facility-services', facilityId],
+    queryKey: ['facility-services', facilityId, workspaceId],
     queryFn: async () => {
       if (!facilityId) throw new Error('Facility ID is required');
 
@@ -483,8 +486,9 @@ export function useUpdateFacilityServices() {
  * Fetches delivery history for a facility
  */
 export function useFacilityDeliveries(facilityId: string | undefined, page: number = 0, pageSize: number = 20) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: ['facility-deliveries', facilityId, page],
+    queryKey: ['facility-deliveries', facilityId, workspaceId, page],
     queryFn: async () => {
       if (!facilityId) throw new Error('Facility ID is required');
 
@@ -517,8 +521,9 @@ export function useFacilityDeliveries(facilityId: string | undefined, page: numb
  * Fetches stock information for a facility
  */
 export function useFacilityStock(facilityId: string | undefined) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: ['facility-stock', facilityId],
+    queryKey: ['facility-stock', facilityId, workspaceId],
     queryFn: async () => {
       if (!facilityId) throw new Error('Facility ID is required');
 
@@ -583,8 +588,9 @@ export function useUpdateStock() {
  * Fetches audit log for a facility
  */
 export function useFacilityAuditLog(facilityId: string | undefined, page: number = 0, pageSize: number = 20) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: ['facility-audit-log', facilityId, page],
+    queryKey: ['facility-audit-log', facilityId, workspaceId, page],
     queryFn: async () => {
       if (!facilityId) throw new Error('Facility ID is required');
 
