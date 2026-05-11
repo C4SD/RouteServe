@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { SchedulerBatch } from '@/types/scheduler';
 import { schedulerBatchesKeys } from './useSchedulerBatches';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface PublishResult {
   scheduler_batch_id: string;
@@ -37,6 +38,7 @@ interface PublishResponse {
  */
 export function usePublishToFleetOps() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (scheduler_batch_ids: string[]): Promise<PublishResponse> => {
@@ -47,7 +49,8 @@ export function usePublishToFleetOps() {
       const { data: schedulerBatches, error: fetchError } = await supabase
         .from('scheduler_batches')
         .select('*')
-        .in('id', scheduler_batch_ids);
+        .in('id', scheduler_batch_ids)
+        .eq('workspace_id', workspaceId!);
 
       if (fetchError) {
         throw new Error(`Failed to fetch batches: ${fetchError.message}`);
@@ -88,6 +91,7 @@ export function usePublishToFleetOps() {
             .insert([
               {
                 name: batch.name || batch.batch_code,
+                workspace_id: workspaceId,
                 warehouse_id: batch.warehouse_id,
                 scheduled_date: batch.planned_date,
                 scheduled_time: batch.time_window,
@@ -123,7 +127,8 @@ export function usePublishToFleetOps() {
               published_batch_id: deliveryBatch.id,
               published_at: new Date().toISOString(),
             })
-            .eq('id', batch.id);
+            .eq('id', batch.id)
+            .eq('workspace_id', workspaceId!);
 
           if (updateError) {
             // Rollback delivery batch creation
@@ -214,6 +219,7 @@ export function usePublishToFleetOps() {
  */
 export function usePublishPreBatchToFleetOps() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (preBatchIds: string[]): Promise<PublishResponse> => {
@@ -223,7 +229,8 @@ export function usePublishPreBatchToFleetOps() {
       const { data: preBatches, error: fetchError } = await supabase
         .from('scheduler_pre_batches')
         .select('*')
-        .in('id', preBatchIds);
+        .in('id', preBatchIds)
+        .eq('workspace_id', workspaceId!);
 
       if (fetchError) throw new Error(`Failed to fetch pre-batches: ${fetchError.message}`);
       if (!preBatches || preBatches.length === 0) throw new Error('No pre-batches found to publish');
@@ -281,7 +288,8 @@ export function usePublishPreBatchToFleetOps() {
           const { error: updateError } = await supabase
             .from('scheduler_pre_batches')
             .update({ converted_batch_id: deliveryBatch.id })
-            .eq('id', pb.id);
+            .eq('id', pb.id)
+            .eq('workspace_id', workspaceId!);
 
           if (updateError) {
             await supabase.from('delivery_batches').delete().eq('id', deliveryBatch.id);
@@ -340,6 +348,7 @@ export function usePublishPreBatchToFleetOps() {
  */
 export function useUnpublishBatch() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (scheduler_batch_id: string) => {
@@ -348,6 +357,7 @@ export function useUnpublishBatch() {
         .from('scheduler_batches')
         .select('*, published_batch_id')
         .eq('id', scheduler_batch_id)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (fetchError) {
@@ -363,6 +373,7 @@ export function useUnpublishBatch() {
         .from('delivery_batches')
         .select('status')
         .eq('id', schedulerBatch.published_batch_id)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (deliveryError) {
@@ -377,7 +388,8 @@ export function useUnpublishBatch() {
       const { error: deleteError } = await supabase
         .from('delivery_batches')
         .delete()
-        .eq('id', schedulerBatch.published_batch_id);
+        .eq('id', schedulerBatch.published_batch_id)
+        .eq('workspace_id', workspaceId!);
 
       if (deleteError) {
         throw new Error(`Failed to delete delivery batch: ${deleteError.message}`);
@@ -391,7 +403,8 @@ export function useUnpublishBatch() {
           published_batch_id: null,
           published_at: null,
         })
-        .eq('id', scheduler_batch_id);
+        .eq('id', scheduler_batch_id)
+        .eq('workspace_id', workspaceId!);
 
       if (updateError) {
         throw new Error(`Failed to update scheduler batch: ${updateError.message}`);

@@ -64,7 +64,8 @@ export function useDeliveryBatches() {
         const { data: facilitiesData, error: facilitiesError } = await supabase
           .from('facilities')
           .select('*')
-          .in('id', Array.from(allFacilityIds));
+          .in('id', Array.from(allFacilityIds))
+          .eq('workspace_id', workspaceId!);
 
         if (facilitiesError) throw facilitiesError;
 
@@ -156,6 +157,7 @@ export function useDeliveryBatches() {
 
 export function useCreateDeliveryBatch() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (batch: Omit<DeliveryBatch, 'id' | 'createdAt'>) => {
@@ -163,6 +165,7 @@ export function useCreateDeliveryBatch() {
         .from('delivery_batches')
         .insert({
           name: batch.name,
+          workspace_id: workspaceId,
           warehouse_id: batch.warehouseId,
           driver_id: batch.driverId,
           vehicle_ids: batch.vehicleIds ?? (batch.vehicleId ? [batch.vehicleId] : []),
@@ -175,8 +178,6 @@ export function useCreateDeliveryBatch() {
           estimated_duration: batch.estimatedDuration,
           actual_start_time: batch.actualStartTime,
           actual_end_time: batch.actualEndTime,
-          // NOTE: medication_type and total_quantity removed per RFC-012
-          // These are derived from requisitions, not set at batch creation
           optimized_route: batch.optimizedRoute,
           facility_ids: batch.facilities.map(f => f.id),
           notes: batch.notes
@@ -199,13 +200,15 @@ export function useCreateDeliveryBatch() {
 
 export function useDeleteDeliveryBatch() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (batchId: string) => {
       const { error } = await supabase
         .from('delivery_batches')
         .delete()
-        .eq('id', batchId);
+        .eq('id', batchId)
+        .eq('workspace_id', workspaceId!);
 
       if (error) throw error;
     },
