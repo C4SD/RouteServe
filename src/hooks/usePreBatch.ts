@@ -100,9 +100,10 @@ interface UsePreBatchOptions {
 
 export function usePreBatch(id: string | null, options: UsePreBatchOptions = {}) {
   const { enabled = true } = options;
+  const { workspaceId } = useWorkspace();
 
   return useQuery({
-    queryKey: preBatchKeys.detail(id || ''),
+    queryKey: [...preBatchKeys.detail(id || ''), workspaceId],
     queryFn: async () => {
       if (!id) return null;
 
@@ -114,12 +115,13 @@ export function usePreBatch(id: string | null, options: UsePreBatchOptions = {})
           converted_batch:delivery_batches!converted_batch_id(id, name, status)
         `)
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (error) throw error;
       return data as PreBatchWithRelations;
     },
-    enabled: enabled && !!id,
+    enabled: enabled && !!id && !!workspaceId,
     staleTime: 1000 * 60,
   });
 }
@@ -185,6 +187,7 @@ export function useCreatePreBatch() {
 
 export function useUpdatePreBatch() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: UpdatePreBatchPayload }) => {
@@ -192,6 +195,7 @@ export function useUpdatePreBatch() {
         .from('scheduler_pre_batches')
         .update(updates)
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -370,11 +374,12 @@ export function useConvertPreBatchToBatch() {
           converted_batch_id: batch.id,
           facility_packaging: payload.facilityPackaging,
         })
-        .eq('id', payload.preBatchId);
+        .eq('id', payload.preBatchId)
+        .eq('workspace_id', workspaceId!);
 
       if (preBatchUpdateError) {
         // Best-effort rollback: delete the batch we just created
-        await supabase.from('delivery_batches').delete().eq('id', batch.id);
+        await supabase.from('delivery_batches').delete().eq('id', batch.id).eq('workspace_id', workspaceId!);
         throw new Error(
           `Failed to update schedule status: ${preBatchUpdateError.message}. Batch creation rolled back.`
         );
@@ -402,11 +407,12 @@ export function useConvertPreBatchToBatch() {
         if (reqError) {
           // Rollback both batch and pre-batch update
           await Promise.all([
-            supabase.from('delivery_batches').delete().eq('id', batch.id),
+            supabase.from('delivery_batches').delete().eq('id', batch.id).eq('workspace_id', workspaceId!),
             supabase
               .from('scheduler_pre_batches')
               .update({ status: 'ready', converted_batch_id: null })
-              .eq('id', payload.preBatchId),
+              .eq('id', payload.preBatchId)
+              .eq('workspace_id', workspaceId!),
           ]);
           throw new Error(
             `Failed to assign requisitions to batch: ${reqError.message}. Batch creation rolled back.`
@@ -428,11 +434,12 @@ export function useConvertPreBatchToBatch() {
 
         if (reqError) {
           await Promise.all([
-            supabase.from('delivery_batches').delete().eq('id', batch.id),
+            supabase.from('delivery_batches').delete().eq('id', batch.id).eq('workspace_id', workspaceId!),
             supabase
               .from('scheduler_pre_batches')
               .update({ status: 'ready', converted_batch_id: null })
-              .eq('id', payload.preBatchId),
+              .eq('id', payload.preBatchId)
+              .eq('workspace_id', workspaceId!),
           ]);
           throw new Error(
             `Failed to assign requisitions to batch: ${reqError.message}. Batch creation rolled back.`

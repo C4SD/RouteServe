@@ -179,6 +179,7 @@ export function useCreateDispatchRun() {
 
 export function useTransitionDispatchRun() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({
@@ -195,6 +196,7 @@ export function useTransitionDispatchRun() {
         .from('dispatch_runs')
         .select('status, batch_id')
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (fetchError) throw fetchError;
@@ -216,6 +218,7 @@ export function useTransitionDispatchRun() {
         .from('dispatch_runs')
         .update(updates)
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -248,6 +251,7 @@ export function useTransitionDispatchRun() {
 
 export function useUpdateDispatchRunProgress() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({
@@ -266,6 +270,7 @@ export function useUpdateDispatchRunProgress() {
           estimated_arrival: estimatedArrival ?? null,
         })
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 

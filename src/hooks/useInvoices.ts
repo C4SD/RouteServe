@@ -573,7 +573,8 @@ export function useReadyRequisitions() {
       const { data: facilities } = await supabase
         .from('facilities')
         .select('id, name, address, lga')
-        .in('id', facilityIds);
+        .in('id', facilityIds)
+        .eq('workspace_id', workspaceId!);
 
       const facilitiesMap = new Map(facilities?.map(f => [f.id, f]));
 

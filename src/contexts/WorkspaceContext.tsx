@@ -96,9 +96,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setActiveWorkspaceId(wsId);
       localStorage.setItem(STORAGE_KEY_TENANT, wsId);
 
-      // Clear workflow store persisted state so previous workspace's batch planning
-      // does not bleed into the new workspace context
+      // Clear all persisted store state on workspace switch to prevent cross-workspace bleed
       localStorage.removeItem('unified-workflow-storage');
+      localStorage.removeItem('biko-filters-storage');
+      localStorage.removeItem('live-map-storage');
 
       // Invalidate permission queries first so they refetch for the new workspace
       await queryClient.invalidateQueries({ queryKey: ['workspace-role'] });

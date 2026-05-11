@@ -132,7 +132,7 @@ export function usePublishToFleetOps() {
 
           if (updateError) {
             // Rollback delivery batch creation
-            await supabase.from('delivery_batches').delete().eq('id', deliveryBatch.id);
+            await supabase.from('delivery_batches').delete().eq('id', deliveryBatch.id).eq('workspace_id', workspaceId!);
 
             errors.push({
               scheduler_batch_id: batch.id,
@@ -292,7 +292,7 @@ export function usePublishPreBatchToFleetOps() {
             .eq('workspace_id', workspaceId!);
 
           if (updateError) {
-            await supabase.from('delivery_batches').delete().eq('id', deliveryBatch.id);
+            await supabase.from('delivery_batches').delete().eq('id', deliveryBatch.id).eq('workspace_id', workspaceId!);
             errors.push({ scheduler_batch_id: pb.id, error_message: `Failed to link delivery batch: ${updateError.message}` });
             continue;
           }
