@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Loader2, CheckCircle2, MapPin, Calendar, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -24,7 +25,8 @@ import { cn } from '@/lib/utils';
 import { useReadyRequisitions, useCreateInvoice } from '@/hooks/useInvoices';
 import { useRequisition } from '@/hooks/useRequisitions';
 import { useWarehouses } from '@/hooks/useWarehouses';
-import type { InvoiceFormData } from '@/types/invoice';
+import type { Invoice, InvoiceFormData } from '@/types/invoice';
+import type { InvoiceDisplayContext } from './PackagingStep';
 
 interface EditableLineItem {
   id: string;
@@ -44,12 +46,16 @@ function generateTempId() {
 interface ReadyRequestFormProps {
   onClose: () => void;
   preSelectedRequisitionId?: string;
+  editingInvoice?: Invoice;
+  onSubmitData?: (formData: InvoiceFormData, packagingRequired: boolean, context: InvoiceDisplayContext) => void;
+  onPackagingRequiredChange?: (enabled: boolean) => void;
 }
 
-export function ReadyRequestForm({ onClose, preSelectedRequisitionId }: ReadyRequestFormProps) {
+export function ReadyRequestForm({ onClose, preSelectedRequisitionId, editingInvoice, onSubmitData, onPackagingRequiredChange }: ReadyRequestFormProps) {
   const [selectedReqId, setSelectedReqId] = useState<string | null>(preSelectedRequisitionId || null);
-  const [warehouseId, setWarehouseId] = useState('');
+  const [warehouseId, setWarehouseId] = useState(editingInvoice?.warehouse_id ?? '');
   const [editableItems, setEditableItems] = useState<EditableLineItem[]>([]);
+  const [packagingRequired, setPackagingRequired] = useState(editingInvoice?.packaging_required ?? false);
 
   const { data: requisitions, isLoading: reqLoading } = useReadyRequisitions();
   const { data: selectedReq, isLoading: detailLoading } = useRequisition(selectedReqId || '');
@@ -104,6 +110,11 @@ export function ReadyRequestForm({ onClose, preSelectedRequisitionId }: ReadyReq
   const validItems = editableItems.filter(item => item.description.trim() && item.quantity > 0);
   const totalValue = validItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
 
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSubmit();
+  };
+
   const handleSubmit = async () => {
     if (!selectedReq || !warehouseId || validItems.length === 0) return;
 
@@ -122,6 +133,20 @@ export function ReadyRequestForm({ onClose, preSelectedRequisitionId }: ReadyReq
       })),
     };
 
+    if (onSubmitData) {
+      const selectedWarehouse = warehouses.find(w => w.id === warehouseId);
+      const context: InvoiceDisplayContext = {
+        sourceWarehouseName: selectedWarehouse?.name,
+        sourceWarehouseCode: selectedWarehouse?.code,
+        destinationFacilityName: selectedReq.facility?.name,
+        destinationFacilityCode: (selectedReq.facility as any)?.code,
+        program: selectedReq.program,
+        referenceNumber: selectedReq.requisition_number,
+      };
+      onSubmitData(formData, packagingRequired, context);
+      return;
+    }
+
     try {
       await createInvoice.mutateAsync(formData);
       onClose();
@@ -131,6 +156,40 @@ export function ReadyRequestForm({ onClose, preSelectedRequisitionId }: ReadyReq
   };
 
   const canSubmit = !!selectedReqId && !!warehouseId && validItems.length > 0;
+
+  const handlePackagingToggle = (enabled: boolean) => {
+    setPackagingRequired(enabled);
+    onPackagingRequiredChange?.(enabled);
+
+    if (!enabled || !onSubmitData || !selectedReq || !warehouseId) return;
+
+    // Toggle is only rendered when selectedReqId + editableItems + warehouseId are set,
+    // so we can navigate immediately without re-checking those conditions.
+    const selectedWarehouse = warehouses.find(w => w.id === warehouseId);
+    const formData: InvoiceFormData = {
+      requisition_id: selectedReq.id,
+      warehouse_id: warehouseId,
+      facility_id: selectedReq.facility_id,
+      notes: `Created from requisition ${selectedReq.requisition_number}`,
+      items: editableItems.map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.unit_price * item.quantity,
+        weight_kg: item.weight_kg,
+        volume_m3: item.volume_m3,
+      })),
+    };
+    const context: InvoiceDisplayContext = {
+      sourceWarehouseName: selectedWarehouse?.name,
+      sourceWarehouseCode: selectedWarehouse?.code,
+      destinationFacilityName: selectedReq.facility?.name,
+      destinationFacilityCode: (selectedReq.facility as any)?.code,
+      program: selectedReq.program,
+      referenceNumber: selectedReq.requisition_number,
+    };
+    onSubmitData(formData, true, context);
+  };
 
   return (
     <div className="flex flex-col max-h-[70vh]">
@@ -336,20 +395,29 @@ export function ReadyRequestForm({ onClose, preSelectedRequisitionId }: ReadyReq
               </Select>
             </div>
           )}
+
+          {/* Packaging Required */}
+          {selectedReqId && editableItems.length > 0 && warehouseId && (
+            <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
+              <div>
+                <Label htmlFor="packaging-required" className="text-sm font-semibold cursor-pointer">
+                  Packaging Required
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Consignment needs physical packaging before dispatch
+                </p>
+              </div>
+              <Switch
+                id="packaging-required"
+                checked={packagingRequired}
+                onCheckedChange={handlePackagingToggle}
+              />
+            </div>
+          )}
         </div>
       </ScrollArea>
 
-      <div className="flex justify-end gap-2 pt-4 border-t mt-4">
-        <Button variant="outline" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          disabled={!canSubmit || createInvoice.isPending}
-        >
-          {createInvoice.isPending ? 'Creating...' : 'Create Invoice'}
-        </Button>
-      </div>
+      <form id="ready-request-form" onSubmit={handleFormSubmit} className="hidden" />
     </div>
   );
 }

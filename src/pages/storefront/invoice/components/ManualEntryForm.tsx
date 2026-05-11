@@ -20,10 +20,12 @@ import {
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useCreateInvoice } from '@/hooks/useInvoices';
+import type { Invoice } from '@/types/invoice';
 import { useItems } from '@/hooks/useItems';
 import { usePrograms } from '@/hooks/usePrograms';
 import type { ItemCategory, Item } from '@/types/items';
 import type { InvoiceFormData } from '@/types/invoice';
+import type { InvoiceDisplayContext } from './PackagingStep';
 
 const headerSchema = z.object({
   ref_number: z.string().optional(),
@@ -171,10 +173,29 @@ function ItemAutocompleteInput({
 
 interface ManualEntryFormProps {
   onClose: () => void;
+  onSubmitData?: (formData: InvoiceFormData, packagingRequired: boolean, context: InvoiceDisplayContext) => void;
+  onPackagingRequiredChange?: (enabled: boolean) => void;
+  editingInvoice?: Invoice;
 }
 
-export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
-  const [items, setItems] = useState<LineItem[]>([createEmptyItem()]);
+export function ManualEntryForm({ onClose, onSubmitData, onPackagingRequiredChange, editingInvoice }: ManualEntryFormProps) {
+  const [items, setItems] = useState<LineItem[]>(() => {
+    if (editingInvoice?.items && editingInvoice.items.length > 0) {
+      return editingInvoice.items.map(item => ({
+        item_id: item.item_id,
+        search_text: item.description,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        weight_kg: item.weight_kg,
+        volume_m3: item.volume_m3,
+        category: item.category,
+        batch_number: item.batch_number,
+        unit_pack: item.unit_pack,
+      }));
+    }
+    return [createEmptyItem()];
+  });
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const createInvoice = useCreateInvoice();
   const queryClient = useQueryClient();
@@ -198,12 +219,12 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
   const form = useForm<HeaderValues>({
     resolver: zodResolver(headerSchema),
     defaultValues: {
-      ref_number: '',
-      program: '',
-      warehouse_id: '',
-      facility_id: '',
-      packaging_required: false,
-      notes: '',
+      ref_number: editingInvoice?.ref_number ?? '',
+      program: editingInvoice?.program ?? '',
+      warehouse_id: editingInvoice?.warehouse_id ?? '',
+      facility_id: editingInvoice?.facility_id ?? '',
+      packaging_required: editingInvoice?.packaging_required ?? false,
+      notes: editingInvoice?.notes ?? '',
     },
   });
 
@@ -283,6 +304,20 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
         batch_number: item.batch_number,
       })),
     };
+
+    if (header.packaging_required && onSubmitData) {
+      const selectedWarehouse = warehouses.find(w => w.id === header.warehouse_id);
+      const selectedFacility = facilities.find(f => f.id === header.facility_id);
+      const context: InvoiceDisplayContext = {
+        sourceWarehouseName: selectedWarehouse?.name,
+        sourceWarehouseCode: selectedWarehouse?.code,
+        destinationFacilityName: selectedFacility?.name,
+        program: header.program || undefined,
+        referenceNumber: header.ref_number || undefined,
+      };
+      onSubmitData(formData, true, context);
+      return;
+    }
 
     try {
       await createInvoice.mutateAsync(formData);
@@ -384,7 +419,10 @@ export function ManualEntryForm({ onClose }: ManualEntryFormProps) {
           </div>
           <Switch
             checked={form.watch('packaging_required')}
-            onCheckedChange={(checked) => form.setValue('packaging_required', checked)}
+            onCheckedChange={(checked) => {
+              form.setValue('packaging_required', checked);
+              onPackagingRequiredChange?.(checked);
+            }}
           />
         </div>
 

@@ -2,119 +2,67 @@
  * =====================================================
  * File Upload Column (Left Column — Upload source)
  * =====================================================
- * Replaces SourceOfTruthColumn when the user picks
- * "Upload File" in Step 1.  Accepts PDF, CSV, XLSX, DOCX,
- * parses facility names, and fuzzy-matches them against the
- * facilities database so the user can review/correct before
- * adding to the working set.
+ * Accepts PDF, CSV, XLSX, DOCX, extracts facility names,
+ * then opens FacilityMatchingStep as a popup dialog for review.
+ * After confirming, closes back to the 3-column scheduler layout.
  */
 
 import * as React from 'react';
 import {
-  FileUp,
   Upload,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
   Loader2,
-  Trash2,
-  Plus,
+  XCircle,
   FileText,
   FileSpreadsheet,
+  CheckCircle2,
+  AlertTriangle,
+  SkipForward,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { FacilityMatchingStep } from '@/components/shared/FacilityMatchingStep';
+import { bestMatch } from '@/lib/facility-matcher';
 import type { ParsedFacility } from '@/types/unified-workflow';
-import type { WorkingSetItem } from '@/types/unified-workflow';
 
-// =====================================================
-// File-type icons
-// =====================================================
-
-function fileIcon(name: string) {
-  const ext = name.split('.').pop()?.toLowerCase();
-  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="h-5 w-5" />;
-  return <FileText className="h-5 w-5" />;
-}
-
-// =====================================================
-// Types
-// =====================================================
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Facility {
   id: string;
   name: string;
+  lga?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface FileUploadColumnProps {
-  /** All facilities from the database (for matching) */
   allFacilities: Facility[];
-  /** Currently parsed rows */
   parsedFacilities: ParsedFacility[] | null;
-  /** Callbacks */
   onFileParsed: (facilities: ParsedFacility[]) => void;
   onUpdateRow: (rowIndex: number, updates: Partial<ParsedFacility>) => void;
   onAddValidToWorkingSet: () => void;
   className?: string;
 }
 
-// =====================================================
-// Parsing helpers
-// =====================================================
+// ─── File-type icon ───────────────────────────────────────────────────────────
+
+function FileIcon({ name }: { name: string }) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'csv' || ext === 'xlsx')
+    return <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />;
+  return <FileText className="h-5 w-5 text-muted-foreground" />;
+}
+
+// ─── File parsers ─────────────────────────────────────────────────────────────
 
 const ACCEPTED_TYPES = '.csv,.xlsx,.pdf,.docx';
-
-/** Normalise a string for comparison */
-function norm(s: string) {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** Simple fuzzy match — returns a score from 0-1 */
-function fuzzyScore(input: string, candidate: string): number {
-  const a = norm(input);
-  const b = norm(candidate);
-  if (a === b) return 1;
-  if (b.includes(a) || a.includes(b)) return 0.9;
-
-  // Token overlap
-  const tokA = a.split(' ');
-  const tokB = new Set(b.split(' '));
-  const matched = tokA.filter((t) => tokB.has(t)).length;
-  if (tokA.length === 0) return 0;
-  return matched / Math.max(tokA.length, tokB.size);
-}
-
-/** Match a raw name against all facilities and return the best match */
-function matchFacility(
-  rawName: string,
-  facilities: Facility[],
-): { id: string | null; name: string | null; score: number } {
-  let best = { id: null as string | null, name: null as string | null, score: 0 };
-  for (const f of facilities) {
-    const score = fuzzyScore(rawName, f.name);
-    if (score > best.score) {
-      best = { id: f.id, name: f.name, score };
-    }
-  }
-  return best;
-}
-
-// =====================================================
-// File Parsers
-// =====================================================
 
 async function parseCSV(file: File): Promise<string[]> {
   const Papa = await import('papaparse');
@@ -123,19 +71,14 @@ async function parseCSV(file: File): Promise<string[]> {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        // Try common column names for facility
         const rows = results.data as Record<string, string>[];
-        const colNames = Object.keys(rows[0] || {});
-        const facilityCol = colNames.find((c) =>
-          /facility|name|site|health.?facility|location|destination/i.test(c),
-        );
-        if (facilityCol) {
-          resolve(rows.map((r) => r[facilityCol]).filter(Boolean));
-        } else {
-          // Fallback: first column
-          const firstCol = colNames[0];
-          resolve(rows.map((r) => r[firstCol]).filter(Boolean));
-        }
+        if (rows.length === 0) return resolve([]);
+        const colNames = Object.keys(rows[0]);
+        const facilityCol =
+          colNames.find((c) =>
+            /facility|name|site|health.?facility|location|destination/i.test(c),
+          ) ?? colNames[0];
+        resolve(rows.map((r) => r[facilityCol]).filter(Boolean));
       },
       error: (err: any) => reject(err),
     });
@@ -144,29 +87,25 @@ async function parseCSV(file: File): Promise<string[]> {
 
 async function parseXLSX(file: File): Promise<string[]> {
   const ExcelJS = await import('exceljs');
-  const workbook = new ExcelJS.default.Workbook();
-  const buffer = await file.arrayBuffer();
-  await workbook.xlsx.load(buffer);
-
-  const sheet = workbook.worksheets[0];
+  const wb = new ExcelJS.default.Workbook();
+  await wb.xlsx.load(await file.arrayBuffer());
+  const sheet = wb.worksheets[0];
   if (!sheet) return [];
 
-  // Find the header row (first row) and look for a facility column
-  const headerRow = sheet.getRow(1);
   const headers: string[] = [];
-  headerRow.eachCell((cell, colNumber) => {
-    headers[colNumber] = String(cell.value || '');
+  sheet.getRow(1).eachCell((cell, col) => {
+    headers[col] = String(cell.value || '');
   });
 
-  let facilityColIdx = headers.findIndex((h) =>
+  let colIdx = headers.findIndex((h) =>
     /facility|name|site|health.?facility|location|destination/i.test(h),
   );
-  if (facilityColIdx === -1) facilityColIdx = 1; // fallback to first col (1-indexed in exceljs)
+  if (colIdx === -1) colIdx = 1;
 
   const names: string[] = [];
-  sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // skip header
-    const val = row.getCell(facilityColIdx === 0 ? 1 : facilityColIdx).value;
+  sheet.eachRow((row, rowNum) => {
+    if (rowNum === 1) return;
+    const val = row.getCell(colIdx === 0 ? 1 : colIdx).value;
     if (val) names.push(String(val).trim());
   });
   return names;
@@ -174,38 +113,32 @@ async function parseXLSX(file: File): Promise<string[]> {
 
 async function parsePDF(file: File): Promise<string[]> {
   const pdfjsLib = await import('pdfjs-dist');
-  // Use the bundled worker
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/build/pdf.worker.mjs',
     import.meta.url,
   ).toString();
-
-  const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
   const lines: string[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items.map((item: any) => item.str).join(' ');
-    // Split by common delimiters and newlines
-    pageText.split(/[\n\r]+/).forEach((l: string) => {
-      const trimmed = l.trim();
-      if (trimmed.length > 2) lines.push(trimmed);
-    });
+    const content = await (await pdf.getPage(i)).getTextContent();
+    content.items
+      .map((item: any) => item.str)
+      .join(' ')
+      .split(/[\n\r]+/)
+      .forEach((l: string) => {
+        const t = l.trim();
+        if (t.length > 2) lines.push(t);
+      });
   }
   return lines;
 }
 
 async function parseDOCX(file: File): Promise<string[]> {
   const mammoth = await import('mammoth');
-  const buffer = await file.arrayBuffer();
-  const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
-  // Extract text from HTML by stripping tags
+  const result = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
   const div = document.createElement('div');
   div.innerHTML = result.value;
-  const text = div.textContent || '';
-  return text
+  return (div.textContent || '')
     .split(/[\n\r]+/)
     .map((l) => l.trim())
     .filter((l) => l.length > 2);
@@ -214,22 +147,15 @@ async function parseDOCX(file: File): Promise<string[]> {
 async function extractFacilityNames(file: File): Promise<string[]> {
   const ext = file.name.split('.').pop()?.toLowerCase();
   switch (ext) {
-    case 'csv':
-      return parseCSV(file);
-    case 'xlsx':
-      return parseXLSX(file);
-    case 'pdf':
-      return parsePDF(file);
-    case 'docx':
-      return parseDOCX(file);
-    default:
-      throw new Error(`Unsupported file type: .${ext}`);
+    case 'csv': return parseCSV(file);
+    case 'xlsx': return parseXLSX(file);
+    case 'pdf': return parsePDF(file);
+    case 'docx': return parseDOCX(file);
+    default: throw new Error(`Unsupported file type: .${ext}`);
   }
 }
 
-// =====================================================
-// Component
-// =====================================================
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function FileUploadColumn({
   allFacilities,
@@ -242,7 +168,16 @@ export function FileUploadColumn({
   const [isParsing, setIsParsing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [fileName, setFileName] = React.useState<string | null>(null);
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [matchingOpen, setMatchingOpen] = React.useState(false);
+
+  // Auto-open the matching dialog as soon as a file is freshly parsed
+  const hadParsedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (parsedFacilities && !hadParsedRef.current) {
+      setMatchingOpen(true);
+    }
+    hadParsedRef.current = !!parsedFacilities;
+  }, [parsedFacilities]);
 
   const handleFile = React.useCallback(
     async (file: File) => {
@@ -254,23 +189,23 @@ export function FileUploadColumn({
         const names = await extractFacilityNames(file);
         if (names.length === 0) {
           setError('No facility names found in the file. Please check the format.');
-          setIsParsing(false);
           return;
         }
 
-        // Deduplicate
         const unique = [...new Set(names)];
 
-        // Match against DB facilities
         const parsed: ParsedFacility[] = unique.map((rawName, idx) => {
-          const match = matchFacility(rawName, allFacilities);
+          const match = bestMatch(rawName, allFacilities, 0.5);
           return {
             row_index: idx,
             raw_name: rawName,
-            matched_facility_id: match.score >= 0.5 ? match.id : null,
-            matched_facility_name: match.score >= 0.5 ? match.name : null,
-            confidence_score: match.score,
-            is_valid: match.score >= 0.5,
+            matched_facility_id: match?.id ?? null,
+            matched_facility_name: match?.name ?? null,
+            confidence_score: match?.score ?? 0,
+            is_valid: !!match,
+            // Carry coordinates so road routing works without a second lookup
+            lat: match?.facility.lat ?? undefined,
+            lng: match?.facility.lng ?? undefined,
           };
         });
 
@@ -293,6 +228,8 @@ export function FileUploadColumn({
     [handleFile],
   );
 
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
   const handleInputChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -301,36 +238,66 @@ export function FileUploadColumn({
     [handleFile],
   );
 
-  const validCount = parsedFacilities?.filter((f) => f.is_valid).length ?? 0;
-  const invalidCount = (parsedFacilities?.length ?? 0) - validCount;
+  function handleReset() {
+    onFileParsed(null as any);
+    setFileName(null);
+    setError(null);
+    setMatchingOpen(false);
+    hadParsedRef.current = false;
+  }
+
+  function handleConfirm() {
+    onAddValidToWorkingSet();
+    setMatchingOpen(false);
+  }
+
+  // Summary stats for compact view
+  const matchedCount =
+    parsedFacilities?.filter(
+      (f) => f.is_valid && !(f.user_corrected && !f.matched_facility_id),
+    ).length ?? 0;
+  const needsReviewCount =
+    parsedFacilities?.filter(
+      (f) => !f.is_valid && !(f.user_corrected && !f.matched_facility_id),
+    ).length ?? 0;
+  const skippedCount =
+    parsedFacilities?.filter((f) => f.user_corrected && !f.matched_facility_id).length ?? 0;
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
-      {/* Upload Zone */}
+      {/* Upload zone */}
       {!parsedFacilities && !isParsing && (
-        <div
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          onClick={() => inputRef.current?.click()}
-          className={cn(
-            'flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed cursor-pointer transition-colors',
-            'hover:border-primary/50 hover:bg-accent/30',
-            'text-muted-foreground',
-          )}
-        >
-          <Upload className="h-10 w-10" />
-          <div className="text-center">
-            <p className="font-medium text-foreground">Drop file here or click to browse</p>
-            <p className="text-xs mt-1">Supports PDF, CSV, XLSX, DOCX</p>
+        <>
+          <div
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onClick={() => inputRef.current?.click()}
+            className={cn(
+              'flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed cursor-pointer transition-colors',
+              'hover:border-primary/50 hover:bg-accent/30 text-muted-foreground',
+            )}
+          >
+            <Upload className="h-10 w-10" />
+            <div className="text-center">
+              <p className="font-medium text-foreground">Drop file here or click to browse</p>
+              <p className="text-xs mt-1">Supports PDF, CSV, XLSX, DOCX</p>
+            </div>
+            <input
+              ref={inputRef}
+              type="file"
+              accept={ACCEPTED_TYPES}
+              onChange={handleInputChange}
+              className="hidden"
+            />
           </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPTED_TYPES}
-            onChange={handleInputChange}
-            className="hidden"
-          />
-        </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 mt-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <XCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </>
       )}
 
       {/* Parsing spinner */}
@@ -341,151 +308,100 @@ export function FileUploadColumn({
         </div>
       )}
 
-      {/* Error */}
-      {error && (
-        <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-          <XCircle className="h-4 w-4 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Parsed results */}
+      {/* Compact summary after file is loaded */}
       {parsedFacilities && !isParsing && (
-        <>
-          {/* Summary bar */}
-          <div className="flex items-center justify-between px-1 mb-3">
-            <div className="flex items-center gap-2 text-sm">
-              {fileIcon(fileName || '')}
-              <span className="font-medium truncate max-w-[140px]">{fileName}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="gap-1">
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
-                {validCount} matched
-              </Badge>
-              {invalidCount > 0 && (
-                <Badge variant="destructive" className="gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  {invalidCount} unmatched
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          {/* Row list */}
-          <ScrollArea className="flex-1 -mx-1">
-            <div className="space-y-2 px-1">
-              {parsedFacilities.map((row) => (
-                <ParsedRow
-                  key={row.row_index}
-                  row={row}
-                  allFacilities={allFacilities}
-                  onUpdate={(updates) => onUpdateRow(row.row_index, updates)}
-                />
-              ))}
-            </div>
-          </ScrollArea>
-
-          {/* Actions */}
-          <div className="flex items-center justify-between pt-3 mt-3 border-t">
+        <div className="flex flex-col gap-3">
+          {/* File chip */}
+          <div className="flex items-center gap-2 text-sm">
+            <FileIcon name={fileName || ''} />
+            <span className="font-medium truncate max-w-[160px]">{fileName}</span>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                onFileParsed(null as any);
-                setFileName(null);
-                setError(null);
-              }}
+              className="ml-auto text-xs text-muted-foreground h-6 px-2"
+              onClick={handleReset}
             >
-              <Trash2 className="h-4 w-4 mr-1" />
-              Clear
-            </Button>
-            <Button
-              size="sm"
-              disabled={validCount === 0}
-              onClick={onAddValidToWorkingSet}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add {validCount} to Schedule
+              Change file
             </Button>
           </div>
-        </>
-      )}
-    </div>
-  );
-}
 
-// =====================================================
-// Parsed Row Sub-component
-// =====================================================
-
-interface ParsedRowProps {
-  row: ParsedFacility;
-  allFacilities: Facility[];
-  onUpdate: (updates: Partial<ParsedFacility>) => void;
-}
-
-function ParsedRow({ row, allFacilities, onUpdate }: ParsedRowProps) {
-  return (
-    <div
-      className={cn(
-        'flex items-start gap-3 p-3 rounded-lg border text-sm',
-        row.is_valid ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-900' : 'bg-amber-50/50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900',
-      )}
-    >
-      {/* Status icon */}
-      <div className="pt-0.5">
-        {row.is_valid ? (
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-        ) : (
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-1">
-        <p className="text-xs text-muted-foreground truncate">
-          From file: <span className="font-medium text-foreground">{row.raw_name}</span>
-        </p>
-
-        {row.is_valid && row.matched_facility_name ? (
-          <p className="text-xs">
-            Matched: <span className="font-medium">{row.matched_facility_name}</span>
-            <span className="ml-1 text-muted-foreground">
-              ({Math.round(row.confidence_score * 100)}%)
-            </span>
+          {/* Stats */}
+          <p className="text-xs text-muted-foreground">
+            {parsedFacilities.length} facilities from file
           </p>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Select
-              value={row.matched_facility_id || ''}
-              onValueChange={(value) => {
-                const fac = allFacilities.find((f) => f.id === value);
-                if (fac) {
-                  onUpdate({
-                    matched_facility_id: fac.id,
-                    matched_facility_name: fac.name,
-                    confidence_score: 1,
-                    is_valid: true,
-                    user_corrected: true,
-                  });
-                }
-              }}
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue placeholder="Select facility…" />
-              </SelectTrigger>
-              <SelectContent>
-                {allFacilities.map((f) => (
-                  <SelectItem key={f.id} value={f.id} className="text-xs">
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap gap-1.5">
+            {matchedCount > 0 && (
+              <Badge variant="secondary" className="gap-1 text-[11px]">
+                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                {matchedCount} matched
+              </Badge>
+            )}
+            {needsReviewCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="gap-1 text-[11px] text-amber-700 bg-amber-50"
+              >
+                <AlertTriangle className="h-3 w-3 text-amber-600" />
+                {needsReviewCount} need review
+              </Badge>
+            )}
+            {skippedCount > 0 && (
+              <Badge variant="secondary" className="gap-1 text-[11px]">
+                <SkipForward className="h-3 w-3 text-muted-foreground" />
+                {skippedCount} skipped
+              </Badge>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* Re-open dialog */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2 mt-1"
+            onClick={() => setMatchingOpen(true)}
+          >
+            {needsReviewCount > 0 ? (
+              <>
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                Review {needsReviewCount} unmatched
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                Review matches
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Facility Matching Dialog */}
+      <Dialog open={matchingOpen} onOpenChange={setMatchingOpen}>
+        <DialogContent className="max-w-4xl w-[90vw] max-h-[85vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-5 pb-4 border-b flex-shrink-0">
+            <DialogTitle className="text-base font-semibold">
+              Review facility matches
+              {fileName && (
+                <span className="text-muted-foreground font-normal ml-2 text-sm">
+                  — {fileName}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-hidden px-6 py-5 min-h-0">
+            {parsedFacilities && (
+              <FacilityMatchingStep
+                parsedFacilities={parsedFacilities}
+                allFacilities={allFacilities}
+                onUpdate={onUpdateRow}
+                onConfirm={handleConfirm}
+                confirmLabel={`Add ${matchedCount} to schedule`}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

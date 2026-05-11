@@ -1,16 +1,5 @@
-/**
- * Phase 2: Analytics Backend - Ticket A7
- * React Query Hooks for Analytics API
- *
- * Purpose: Provide React hooks for analytics data with caching and auto-refresh
- * Performance: Leverages React Query caching + server-side pre-aggregation
- *
- * IMPORTANT: These hooks are READ-ONLY.
- * All analytics logic resides in the database.
- * NO client-side aggregation allowed.
- */
-
 import { useQuery, UseQueryOptions } from '@tanstack/react-query';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   analyticsAPI,
   type DeliveryKPIs,
@@ -25,251 +14,184 @@ import {
   type DashboardSummary,
 } from '@/integrations/supabase/analytics';
 
-// ============================================================================
-// QUERY KEY FACTORY
-// ============================================================================
-
 export const analyticsKeys = {
   all: ['analytics'] as const,
-  delivery: () => [...analyticsKeys.all, 'delivery'] as const,
-  deliveryKPIs: (startDate?: string | null, endDate?: string | null) =>
-    [...analyticsKeys.delivery(), 'kpis', { startDate, endDate }] as const,
-  topVehicles: (limit: number) =>
-    [...analyticsKeys.delivery(), 'top-vehicles', limit] as const,
+  delivery: (workspaceId: string) => [...analyticsKeys.all, workspaceId, 'delivery'] as const,
+  deliveryKPIs: (workspaceId: string, startDate?: string | null, endDate?: string | null) =>
+    [...analyticsKeys.delivery(workspaceId), 'kpis', { startDate, endDate }] as const,
+  topVehicles: (workspaceId: string, limit: number) =>
+    [...analyticsKeys.delivery(workspaceId), 'top-vehicles', limit] as const,
 
-  drivers: () => [...analyticsKeys.all, 'drivers'] as const,
-  driverKPIs: () => [...analyticsKeys.drivers(), 'kpis'] as const,
-  topDrivers: (metric: string, limit: number) =>
-    [...analyticsKeys.drivers(), 'top', metric, limit] as const,
+  drivers: (workspaceId: string) => [...analyticsKeys.all, workspaceId, 'drivers'] as const,
+  driverKPIs: (workspaceId: string) => [...analyticsKeys.drivers(workspaceId), 'kpis'] as const,
+  topDrivers: (workspaceId: string, metric: string, limit: number) =>
+    [...analyticsKeys.drivers(workspaceId), 'top', metric, limit] as const,
 
-  vehicles: () => [...analyticsKeys.all, 'vehicles'] as const,
-  vehicleKPIs: () => [...analyticsKeys.vehicles(), 'kpis'] as const,
-  vehicleMaintenance: () => [...analyticsKeys.vehicles(), 'maintenance'] as const,
+  vehicles: (workspaceId: string) => [...analyticsKeys.all, workspaceId, 'vehicles'] as const,
+  vehicleKPIs: (workspaceId: string) => [...analyticsKeys.vehicles(workspaceId), 'kpis'] as const,
+  vehicleMaintenance: (workspaceId: string) => [...analyticsKeys.vehicles(workspaceId), 'maintenance'] as const,
 
-  costs: () => [...analyticsKeys.all, 'costs'] as const,
-  costKPIs: () => [...analyticsKeys.costs(), 'kpis'] as const,
-  vehicleCosts: (limit: number) => [...analyticsKeys.costs(), 'vehicles', limit] as const,
-  driverCosts: (limit: number) => [...analyticsKeys.costs(), 'drivers', limit] as const,
+  costs: (workspaceId: string) => [...analyticsKeys.all, workspaceId, 'costs'] as const,
+  costKPIs: (workspaceId: string) => [...analyticsKeys.costs(workspaceId), 'kpis'] as const,
+  vehicleCosts: (workspaceId: string, limit: number) => [...analyticsKeys.costs(workspaceId), 'vehicles', limit] as const,
+  driverCosts: (workspaceId: string, limit: number) => [...analyticsKeys.costs(workspaceId), 'drivers', limit] as const,
 
-  dashboard: (startDate?: string | null, endDate?: string | null) =>
-    [...analyticsKeys.all, 'dashboard', { startDate, endDate }] as const,
+  dashboard: (workspaceId: string, startDate?: string | null, endDate?: string | null) =>
+    [...analyticsKeys.all, workspaceId, 'dashboard', { startDate, endDate }] as const,
 };
 
-// ============================================================================
-// DEFAULT OPTIONS
-// ============================================================================
+const DEFAULT_STALE_TIME = 5 * 60 * 1000;
+const DEFAULT_CACHE_TIME = 10 * 60 * 1000;
 
-const DEFAULT_STALE_TIME = 5 * 60 * 1000; // 5 minutes
-const DEFAULT_CACHE_TIME = 10 * 60 * 1000; // 10 minutes
-
-// ============================================================================
-// 1. DELIVERY PERFORMANCE HOOKS
-// ============================================================================
-
-/**
- * Hook to fetch delivery performance KPIs
- * @param startDate - Optional start date (YYYY-MM-DD)
- * @param endDate - Optional end date (YYYY-MM-DD)
- * @param options - React Query options
- */
 export function useDeliveryKPIs(
   startDate?: string | null,
   endDate?: string | null,
   options?: Omit<UseQueryOptions<DeliveryKPIs>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.deliveryKPIs(startDate, endDate),
-    queryFn: () => analyticsAPI.getDeliveryKPIs(startDate, endDate),
+    queryKey: analyticsKeys.deliveryKPIs(workspaceId ?? '', startDate, endDate),
+    queryFn: () => analyticsAPI.getDeliveryKPIs(workspaceId!, startDate, endDate),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-/**
- * Hook to fetch top performing vehicles by on-time rate
- * @param limit - Number of results (default: 10)
- * @param options - React Query options
- */
 export function useTopVehiclesByOnTime(
   limit: number = 10,
   options?: Omit<UseQueryOptions<TopVehiclePerformance[]>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.topVehicles(limit),
-    queryFn: () => analyticsAPI.getTopVehiclesByOnTime(limit),
+    queryKey: analyticsKeys.topVehicles(workspaceId ?? '', limit),
+    queryFn: () => analyticsAPI.getTopVehiclesByOnTime(workspaceId!, limit),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-// ============================================================================
-// 2. DRIVER EFFICIENCY HOOKS
-// ============================================================================
-
-/**
- * Hook to fetch driver efficiency KPIs
- * @param options - React Query options
- */
 export function useDriverKPIs(
   options?: Omit<UseQueryOptions<DriverKPIs>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.driverKPIs(),
-    queryFn: () => analyticsAPI.getDriverKPIs(),
+    queryKey: analyticsKeys.driverKPIs(workspaceId ?? ''),
+    queryFn: () => analyticsAPI.getDriverKPIs(workspaceId!),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-/**
- * Hook to fetch top performing drivers
- * @param metric - Metric to sort by: 'on_time_rate', 'fuel_efficiency', or 'deliveries'
- * @param limit - Number of results (default: 10)
- * @param options - React Query options
- */
 export function useTopDrivers(
   metric: 'on_time_rate' | 'fuel_efficiency' | 'deliveries' = 'on_time_rate',
   limit: number = 10,
   options?: Omit<UseQueryOptions<TopDriverPerformance[]>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.topDrivers(metric, limit),
-    queryFn: () => analyticsAPI.getTopDrivers(metric, limit),
+    queryKey: analyticsKeys.topDrivers(workspaceId ?? '', metric, limit),
+    queryFn: () => analyticsAPI.getTopDrivers(workspaceId!, metric, limit),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-// ============================================================================
-// 3. VEHICLE UTILIZATION HOOKS
-// ============================================================================
-
-/**
- * Hook to fetch vehicle utilization KPIs
- * @param options - React Query options
- */
 export function useVehicleKPIs(
   options?: Omit<UseQueryOptions<VehicleKPIs>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.vehicleKPIs(),
-    queryFn: () => analyticsAPI.getVehicleKPIs(),
+    queryKey: analyticsKeys.vehicleKPIs(workspaceId ?? ''),
+    queryFn: () => analyticsAPI.getVehicleKPIs(workspaceId!),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-/**
- * Hook to fetch vehicles needing maintenance
- * @param options - React Query options
- */
 export function useVehiclesNeedingMaintenance(
   options?: Omit<UseQueryOptions<VehicleMaintenanceNeeded[]>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.vehicleMaintenance(),
-    queryFn: () => analyticsAPI.getVehiclesNeedingMaintenance(),
+    queryKey: analyticsKeys.vehicleMaintenance(workspaceId ?? ''),
+    queryFn: () => analyticsAPI.getVehiclesNeedingMaintenance(workspaceId!),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-// ============================================================================
-// 4. COST ANALYSIS HOOKS
-// ============================================================================
-
-/**
- * Hook to fetch cost analysis KPIs
- * @param options - React Query options
- */
 export function useCostKPIs(
   options?: Omit<UseQueryOptions<CostKPIs>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.costKPIs(),
-    queryFn: () => analyticsAPI.getCostKPIs(),
+    queryKey: analyticsKeys.costKPIs(workspaceId ?? ''),
+    queryFn: () => analyticsAPI.getCostKPIs(workspaceId!),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-/**
- * Hook to fetch vehicle cost breakdown
- * @param limit - Number of results (default: 10)
- * @param options - React Query options
- */
 export function useVehicleCosts(
   limit: number = 10,
   options?: Omit<UseQueryOptions<VehicleCostBreakdown[]>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.vehicleCosts(limit),
-    queryFn: () => analyticsAPI.getVehicleCosts(limit),
+    queryKey: analyticsKeys.vehicleCosts(workspaceId ?? '', limit),
+    queryFn: () => analyticsAPI.getVehicleCosts(workspaceId!, limit),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-/**
- * Hook to fetch driver cost breakdown
- * @param limit - Number of results (default: 10)
- * @param options - React Query options
- */
 export function useDriverCosts(
   limit: number = 10,
   options?: Omit<UseQueryOptions<DriverCostBreakdown[]>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.driverCosts(limit),
-    queryFn: () => analyticsAPI.getDriverCosts(limit),
+    queryKey: analyticsKeys.driverCosts(workspaceId ?? '', limit),
+    queryFn: () => analyticsAPI.getDriverCosts(workspaceId!, limit),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-// ============================================================================
-// 5. DASHBOARD SUMMARY HOOK
-// ============================================================================
-
-/**
- * Hook to fetch complete dashboard summary (all KPIs in one call)
- * @param startDate - Optional start date for delivery metrics (YYYY-MM-DD)
- * @param endDate - Optional end date for delivery metrics (YYYY-MM-DD)
- * @param options - React Query options
- */
 export function useDashboardSummary(
   startDate?: string | null,
   endDate?: string | null,
   options?: Omit<UseQueryOptions<DashboardSummary>, 'queryKey' | 'queryFn'>
 ) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: analyticsKeys.dashboard(startDate, endDate),
-    queryFn: () => analyticsAPI.getDashboardSummary(startDate, endDate),
+    queryKey: analyticsKeys.dashboard(workspaceId ?? '', startDate, endDate),
+    queryFn: () => analyticsAPI.getDashboardSummary(workspaceId!, startDate, endDate),
+    enabled: !!workspaceId,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
     ...options,
   });
 }
 
-// ============================================================================
-// CONVENIENCE HOOK: All Analytics Data
-// ============================================================================
-
-/**
- * Hook to fetch all analytics data at once
- * Useful for dashboard pages that need multiple metrics
- * @param startDate - Optional start date for delivery metrics
- * @param endDate - Optional end date for delivery metrics
- */
 export function useAllAnalytics(
   startDate?: string | null,
   endDate?: string | null

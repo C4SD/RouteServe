@@ -50,6 +50,7 @@ export default function InvoicePage() {
 
   // Dialog state
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
   // Accordion state
   const [openAccordions, setOpenAccordions] = useState<string[]>(['draft', 'ready']);
@@ -265,14 +266,23 @@ export default function InvoicePage() {
           <InvoiceDetailPanel
             invoice={selectedInvoice}
             onClose={handleCloseDetail}
+            onEdit={() => {
+              setEditingInvoice(selectedInvoice);
+              setIsWizardOpen(true);
+            }}
           />
         )}
       </div>
 
-      {/* New Invoice Wizard */}
+      {/* New / Edit Invoice Wizard */}
       <NewInvoiceWizard
+        key={editingInvoice?.id ?? 'new'}
         open={isWizardOpen}
-        onOpenChange={setIsWizardOpen}
+        onOpenChange={(open) => {
+          setIsWizardOpen(open);
+          if (!open) setEditingInvoice(null);
+        }}
+        editingInvoice={editingInvoice ?? undefined}
       />
     </div>
   );

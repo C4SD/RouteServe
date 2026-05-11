@@ -29,12 +29,14 @@ interface InvoiceStatusActionsProps {
   invoiceId: string;
   currentStatus: string;
   invoiceNumber: string;
+  onStatusChanged?: (newStatus: string) => void;
 }
 
 export function InvoiceStatusActions({
   invoiceId,
   currentStatus,
   invoiceNumber,
+  onStatusChanged,
 }: InvoiceStatusActionsProps) {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
@@ -76,9 +78,11 @@ export function InvoiceStatusActions({
       notes: notes || undefined,
     });
 
+    const transitioned = selectedStatus;
     setShowDialog(false);
     setSelectedStatus(null);
     setNotes('');
+    onStatusChanged?.(transitioned);
   };
 
   const handleCancelDialog = () => {

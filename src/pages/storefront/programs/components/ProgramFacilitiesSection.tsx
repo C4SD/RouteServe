@@ -139,6 +139,18 @@ function AddFacilitiesToProgramDialog({
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  const toggleSelectAll = (availableIds: string[]) => {
+    setSelected((prev) => {
+      const allSelected = availableIds.every((id) => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        availableIds.forEach((id) => next.delete(id));
+        return next;
+      }
+      return new Set([...prev, ...availableIds]);
+    });
+  };
+
   // Fetch all facilities (unfiltered by programme) to let user pick
   const { data, isLoading } = useFacilities(
     search ? { search } : undefined,
@@ -186,7 +198,7 @@ function AddFacilitiesToProgramDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col" onCloseAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Add Facilities to {program.name}</DialogTitle>
           <DialogDescription>
@@ -221,7 +233,17 @@ function AddFacilitiesToProgramDialog({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[40px]" />
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={
+                        availableFacilities.length > 0 &&
+                        availableFacilities.every((f) => selected.has(f.id))
+                      }
+                      onCheckedChange={() =>
+                        toggleSelectAll(availableFacilities.map((f) => f.id))
+                      }
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Code</TableHead>
                   <TableHead>LGA</TableHead>
@@ -234,7 +256,7 @@ function AddFacilitiesToProgramDialog({
                     className="cursor-pointer"
                     onClick={() => toggleSelect(f.id)}
                   >
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={selected.has(f.id)}
                         onCheckedChange={() => toggleSelect(f.id)}

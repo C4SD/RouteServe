@@ -53,7 +53,7 @@ export function ProgramBasedForm({ onClose, onSuccess }: ProgramBasedFormProps) 
   const [requiredByDate, setRequiredByDate] = useState('');
 
   // Fetch real data
-  const { data: programsData, isLoading: programsLoading } = usePrograms({ status: 'active' });
+  const { data: programsData, isLoading: programsLoading, isError: programsError } = usePrograms({ status: 'active', skipMetrics: true });
   const { data: facilitiesData, isLoading: facilitiesLoading, error: facilitiesError } = useFacilities();
   const { data: warehousesData, isLoading: warehousesLoading, error: warehousesError } = useWarehouses();
   const { data: itemsData, isLoading: itemsLoading } = useItems();
@@ -172,6 +172,11 @@ export function ProgramBasedForm({ onClose, onSuccess }: ProgramBasedFormProps) 
                 <div className="flex items-center justify-center py-12 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
                   Loading programs...
+                </div>
+              ) : programsError ? (
+                <div className="text-center py-12 text-destructive">
+                  <p className="font-medium">Failed to load programs</p>
+                  <p className="text-xs mt-1 text-muted-foreground">Check your connection and try again.</p>
                 </div>
               ) : programs.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">

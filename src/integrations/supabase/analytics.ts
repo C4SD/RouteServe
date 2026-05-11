@@ -169,10 +169,12 @@ function handleSupabaseError(error: unknown, functionName: string): never {
  * @returns Delivery performance metrics
  */
 export async function getDeliveryKPIs(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<DeliveryKPIs> {
   const { data, error } = await supabase.rpc('get_delivery_kpis', {
+    workspace_id: workspaceId,
     start_date: startDate || null,
     end_date: endDate || null,
   });
@@ -187,13 +189,16 @@ export async function getDeliveryKPIs(
 
 /**
  * Get top performing vehicles by on-time delivery rate
+ * @param workspaceId - Workspace to filter by
  * @param limit - Number of results to return (default: 10)
  * @returns Array of top vehicles sorted by on-time rate
  */
 export async function getTopVehiclesByOnTime(
+  workspaceId: string,
   limit: number = 10
 ): Promise<TopVehiclePerformance[]> {
   const { data, error } = await supabase.rpc('get_top_vehicles_by_ontime', {
+    workspace_id: workspaceId,
     limit_count: limit,
   });
 
@@ -207,10 +212,13 @@ export async function getTopVehiclesByOnTime(
 
 /**
  * Get overall driver efficiency KPIs
+ * @param workspaceId - Workspace to filter by
  * @returns Driver efficiency metrics
  */
-export async function getDriverKPIs(): Promise<DriverKPIs> {
-  const { data, error } = await supabase.rpc('get_driver_kpis');
+export async function getDriverKPIs(workspaceId: string): Promise<DriverKPIs> {
+  const { data, error } = await supabase.rpc('get_driver_kpis', {
+    workspace_id: workspaceId,
+  });
 
   if (error) handleSupabaseError(error, 'getDriverKPIs');
   if (!data || data.length === 0) {
@@ -227,10 +235,12 @@ export async function getDriverKPIs(): Promise<DriverKPIs> {
  * @returns Array of top drivers sorted by metric
  */
 export async function getTopDrivers(
+  workspaceId: string,
   metric: 'on_time_rate' | 'fuel_efficiency' | 'deliveries' = 'on_time_rate',
   limit: number = 10
 ): Promise<TopDriverPerformance[]> {
   const { data, error } = await supabase.rpc('get_top_drivers', {
+    workspace_id: workspaceId,
     metric,
     limit_count: limit,
   });
@@ -243,12 +253,10 @@ export async function getTopDrivers(
 // 3. VEHICLE UTILIZATION API
 // ============================================================================
 
-/**
- * Get overall vehicle utilization KPIs
- * @returns Vehicle utilization metrics
- */
-export async function getVehicleKPIs(): Promise<VehicleKPIs> {
-  const { data, error } = await supabase.rpc('get_vehicle_kpis');
+export async function getVehicleKPIs(workspaceId: string): Promise<VehicleKPIs> {
+  const { data, error } = await supabase.rpc('get_vehicle_kpis', {
+    workspace_id: workspaceId,
+  });
 
   if (error) handleSupabaseError(error, 'getVehicleKPIs');
   if (!data || data.length === 0) {
@@ -258,12 +266,10 @@ export async function getVehicleKPIs(): Promise<VehicleKPIs> {
   return data[0] as VehicleKPIs;
 }
 
-/**
- * Get vehicles that need maintenance soon
- * @returns Array of vehicles needing maintenance
- */
-export async function getVehiclesNeedingMaintenance(): Promise<VehicleMaintenanceNeeded[]> {
-  const { data, error } = await supabase.rpc('get_vehicles_needing_maintenance');
+export async function getVehiclesNeedingMaintenance(workspaceId: string): Promise<VehicleMaintenanceNeeded[]> {
+  const { data, error } = await supabase.rpc('get_vehicles_needing_maintenance', {
+    workspace_id: workspaceId,
+  });
 
   if (error) handleSupabaseError(error, 'getVehiclesNeedingMaintenance');
   return (data || []) as VehicleMaintenanceNeeded[];
@@ -273,12 +279,10 @@ export async function getVehiclesNeedingMaintenance(): Promise<VehicleMaintenanc
 // 4. COST ANALYSIS API
 // ============================================================================
 
-/**
- * Get overall cost analysis KPIs
- * @returns Cost metrics
- */
-export async function getCostKPIs(): Promise<CostKPIs> {
-  const { data, error } = await supabase.rpc('get_cost_kpis');
+export async function getCostKPIs(workspaceId: string): Promise<CostKPIs> {
+  const { data, error } = await supabase.rpc('get_cost_kpis', {
+    workspace_id: workspaceId,
+  });
 
   if (error) handleSupabaseError(error, 'getCostKPIs');
   if (!data || data.length === 0) {
@@ -288,13 +292,9 @@ export async function getCostKPIs(): Promise<CostKPIs> {
   return data[0] as CostKPIs;
 }
 
-/**
- * Get vehicle cost breakdown sorted by total cost
- * @param limit - Number of results to return (default: 10)
- * @returns Array of vehicle costs
- */
-export async function getVehicleCosts(limit: number = 10): Promise<VehicleCostBreakdown[]> {
+export async function getVehicleCosts(workspaceId: string, limit: number = 10): Promise<VehicleCostBreakdown[]> {
   const { data, error } = await supabase.rpc('get_vehicle_costs', {
+    workspace_id: workspaceId,
     limit_count: limit,
   });
 
@@ -302,13 +302,9 @@ export async function getVehicleCosts(limit: number = 10): Promise<VehicleCostBr
   return (data || []) as VehicleCostBreakdown[];
 }
 
-/**
- * Get driver cost breakdown sorted by total cost
- * @param limit - Number of results to return (default: 10)
- * @returns Array of driver costs
- */
-export async function getDriverCosts(limit: number = 10): Promise<DriverCostBreakdown[]> {
+export async function getDriverCosts(workspaceId: string, limit: number = 10): Promise<DriverCostBreakdown[]> {
   const { data, error } = await supabase.rpc('get_driver_costs', {
+    workspace_id: workspaceId,
     limit_count: limit,
   });
 
@@ -327,10 +323,12 @@ export async function getDriverCosts(limit: number = 10): Promise<DriverCostBrea
  * @returns Complete dashboard summary
  */
 export async function getDashboardSummary(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<DashboardSummary> {
   const { data, error } = await supabase.rpc('get_dashboard_summary', {
+    workspace_id: workspaceId,
     start_date: startDate || null,
     end_date: endDate || null,
   });
@@ -368,8 +366,8 @@ export async function getDashboardSummary(
  * Get overall stock status metrics
  * @returns Stock status including total products, facilities, items, and alerts
  */
-export async function getStockStatus(): Promise<StockStatus> {
-  const { data, error } = await supabase.rpc('get_stock_status');
+export async function getStockStatus(workspaceId: string): Promise<StockStatus> {
+  const { data, error } = await supabase.rpc('get_stock_status', { workspace_id: workspaceId });
 
   if (error) handleSupabaseError(error, 'getStockStatus');
   if (!data || data.length === 0) {
@@ -385,9 +383,11 @@ export async function getStockStatus(): Promise<StockStatus> {
  * @returns Array of stock balance per product
  */
 export async function getStockBalance(
+  workspaceId: string,
   productName?: string | null
 ): Promise<StockBalance[]> {
   const { data, error } = await supabase.rpc('get_stock_balance', {
+    workspace_id: workspaceId,
     p_product_name: productName || null,
   });
 
@@ -402,10 +402,12 @@ export async function getStockBalance(
  * @returns Array of stock performance per product
  */
 export async function getStockPerformance(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<StockPerformance[]> {
   const { data, error } = await supabase.rpc('get_stock_performance', {
+    workspace_id: workspaceId,
     p_start_date: startDate || null,
     p_end_date: endDate || null,
   });
@@ -418,8 +420,8 @@ export async function getStockPerformance(
  * Get stock distribution by service zone
  * @returns Array of stock metrics per zone
  */
-export async function getStockByZone(): Promise<StockByZone[]> {
-  const { data, error } = await supabase.rpc('get_stock_by_zone');
+export async function getStockByZone(workspaceId: string): Promise<StockByZone[]> {
+  const { data, error } = await supabase.rpc('get_stock_by_zone', { workspace_id: workspaceId });
 
   if (error) handleSupabaseError(error, 'getStockByZone');
   return (data || []) as StockByZone[];
@@ -431,9 +433,11 @@ export async function getStockByZone(): Promise<StockByZone[]> {
  * @returns Array of facilities with low stock
  */
 export async function getLowStockAlerts(
+  workspaceId: string,
   thresholdDays: number = 7
 ): Promise<LowStockAlert[]> {
   const { data, error } = await supabase.rpc('get_low_stock_alerts', {
+    workspace_id: workspaceId,
     p_threshold_days: thresholdDays,
   });
 
@@ -453,13 +457,15 @@ export async function getLowStockAlerts(
  * @returns Array of vehicle payload and weight utilization metrics
  */
 export async function getVehiclePayloadUtilization(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null,
   vehicleId?: string | null
 ): Promise<VehiclePayloadUtilization[]> {
   const { data, error } = await supabase.rpc('get_vehicle_payload_utilization', {
-    p_start_date: startDate || null,
-    p_end_date: endDate || null,
+    workspace_id: workspaceId,
+    start_date: startDate || null,
+    end_date: endDate || null,
     p_vehicle_id: vehicleId || null,
   });
 
@@ -474,12 +480,14 @@ export async function getVehiclePayloadUtilization(
  * @returns Array of program performance metrics
  */
 export async function getProgramPerformance(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<ProgramPerformance[]> {
   const { data, error } = await supabase.rpc('get_program_performance', {
-    p_start_date: startDate || null,
-    p_end_date: endDate || null,
+    workspace_id: workspaceId,
+    start_date: startDate || null,
+    end_date: endDate || null,
   });
 
   if (error) handleSupabaseError(error, 'getProgramPerformance');
@@ -493,12 +501,14 @@ export async function getProgramPerformance(
  * @returns Array of driver utilization metrics with status
  */
 export async function getDriverUtilization(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<DriverUtilization[]> {
   const { data, error } = await supabase.rpc('get_driver_utilization', {
-    p_start_date: startDate || null,
-    p_end_date: endDate || null,
+    workspace_id: workspaceId,
+    start_date: startDate || null,
+    end_date: endDate || null,
   });
 
   if (error) handleSupabaseError(error, 'getDriverUtilization');
@@ -512,12 +522,14 @@ export async function getDriverUtilization(
  * @returns Array of route efficiency metrics with ratings
  */
 export async function getRouteEfficiency(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<RouteEfficiency[]> {
   const { data, error } = await supabase.rpc('get_route_efficiency', {
-    p_start_date: startDate || null,
-    p_end_date: endDate || null,
+    workspace_id: workspaceId,
+    start_date: startDate || null,
+    end_date: endDate || null,
   });
 
   if (error) handleSupabaseError(error, 'getRouteEfficiency');
@@ -532,13 +544,15 @@ export async function getRouteEfficiency(
  * @returns Array of facility coverage metrics
  */
 export async function getFacilityCoverage(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null,
   programme?: string | null
 ): Promise<FacilityCoverage[]> {
   const { data, error } = await supabase.rpc('get_facility_coverage', {
-    p_start_date: startDate || null,
-    p_end_date: endDate || null,
+    workspace_id: workspaceId,
+    start_date: startDate || null,
+    end_date: endDate || null,
     p_programme: programme || null,
   });
 
@@ -553,12 +567,14 @@ export async function getFacilityCoverage(
  * @returns Array of cost metrics per program
  */
 export async function getCostByProgram(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<CostByProgram[]> {
   const { data, error } = await supabase.rpc('get_cost_by_program', {
-    p_start_date: startDate || null,
-    p_end_date: endDate || null,
+    workspace_id: workspaceId,
+    start_date: startDate || null,
+    end_date: endDate || null,
   });
 
   if (error) handleSupabaseError(error, 'getCostByProgram');
@@ -648,10 +664,12 @@ export interface PackagingTypeDistribution {
  * @returns Storefront requisition analytics metrics
  */
 export async function getStorefrontRequisitionAnalytics(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<StorefrontRequisitionAnalytics> {
   const { data, error } = await supabase.rpc('get_storefront_requisition_analytics', {
+    p_workspace_id: workspaceId,
     p_start_date: startDate || null,
     p_end_date: endDate || null,
   });
@@ -667,10 +685,12 @@ export async function getStorefrontRequisitionAnalytics(
  * @returns FleetOps dispatch analytics metrics
  */
 export async function getFleetOpsDispatchAnalytics(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<FleetOpsDispatchAnalytics> {
   const { data, error } = await supabase.rpc('get_fleetops_dispatch_analytics', {
+    p_workspace_id: workspaceId,
     p_start_date: startDate || null,
     p_end_date: endDate || null,
   });
@@ -686,10 +706,12 @@ export async function getFleetOpsDispatchAnalytics(
  * @returns Array of packaging type distribution metrics
  */
 export async function getPackagingTypeDistribution(
+  workspaceId: string,
   startDate?: string | null,
   endDate?: string | null
 ): Promise<PackagingTypeDistribution[]> {
   const { data, error } = await supabase.rpc('get_packaging_type_distribution', {
+    p_workspace_id: workspaceId,
     p_start_date: startDate || null,
     p_end_date: endDate || null,
   });

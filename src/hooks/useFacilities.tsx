@@ -300,6 +300,7 @@ export function useCreateFacility() {
  */
 export function useUpdateFacility() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Facility> }) => {
@@ -309,6 +310,7 @@ export function useUpdateFacility() {
         .from('facilities')
         .update(dbUpdates)
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -356,13 +358,15 @@ export function useUpdateFacility() {
  */
 export function useDeleteFacility() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('facilities')
         .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('workspace_id', workspaceId!);
 
       if (error) throw error;
     },
@@ -381,13 +385,15 @@ export function useDeleteFacility() {
  */
 export function useBulkDeleteFacilities() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
       const { error } = await supabase
         .from('facilities')
         .update({ deleted_at: new Date().toISOString() })
-        .in('id', ids);
+        .in('id', ids)
+        .eq('workspace_id', workspaceId!);
 
       if (error) throw error;
     },

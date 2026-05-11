@@ -95,7 +95,7 @@ export function AddItemManuallyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" onCloseAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Add Item to {program.name}</DialogTitle>
           <DialogDescription>

@@ -27,9 +27,11 @@ import { cn } from '@/lib/utils';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useFacilities } from '@/hooks/useFacilities';
 import { useCreateInvoice } from '@/hooks/useInvoices';
+import { Switch } from '@/components/ui/switch';
 import type { InvoiceFormData } from '@/types/invoice';
 import { ITEM_CATEGORIES } from '@/types/items';
 import type { ItemCategory } from '@/types/items';
+import type { InvoiceDisplayContext } from './PackagingStep';
 
 type UploadStep = 'upload' | 'mapping' | 'preview';
 
@@ -107,9 +109,11 @@ function autoDetectMapping(headers: string[]): ColumnMapping {
 
 interface UploadFileFormProps {
   onClose: () => void;
+  onSubmitData?: (formData: InvoiceFormData, packagingRequired: boolean, context: InvoiceDisplayContext) => void;
+  onPackagingRequiredChange?: (enabled: boolean) => void;
 }
 
-export function UploadFileForm({ onClose }: UploadFileFormProps) {
+export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChange }: UploadFileFormProps) {
   const [step, setStep] = useState<UploadStep>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [rawData, setRawData] = useState<string[][]>([]);
@@ -122,6 +126,7 @@ export function UploadFileForm({ onClose }: UploadFileFormProps) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [warehouseId, setWarehouseId] = useState('');
   const [facilityId, setFacilityId] = useState('');
+  const [packagingRequired, setPackagingRequired] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -344,6 +349,18 @@ export function UploadFileForm({ onClose }: UploadFileFormProps) {
         expiry_date: item.expiry_date,
       })),
     };
+
+    if (packagingRequired && onSubmitData) {
+      const selectedWarehouse = warehouses.find(w => w.id === warehouseId);
+      const selectedFacility = facilities.find(f => f.id === facilityId);
+      const context: InvoiceDisplayContext = {
+        sourceWarehouseName: selectedWarehouse?.name,
+        sourceWarehouseCode: selectedWarehouse?.code,
+        destinationFacilityName: selectedFacility?.name,
+      };
+      onSubmitData(formData, true, context);
+      return;
+    }
 
     try {
       await createInvoice.mutateAsync(formData);
@@ -600,6 +617,20 @@ export function UploadFileForm({ onClose }: UploadFileFormProps) {
               </div>
             </div>
 
+            <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
+              <div>
+                <Label className="text-sm font-semibold cursor-pointer">Packaging Required</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">Needs packaging before dispatch</p>
+              </div>
+              <Switch
+                checked={packagingRequired}
+                onCheckedChange={(checked) => {
+                  setPackagingRequired(checked);
+                  onPackagingRequiredChange?.(checked);
+                }}
+              />
+            </div>
+
             <ScrollArea className="h-[35vh] border rounded-lg">
               <Table>
                 <TableHeader>
@@ -692,7 +723,11 @@ export function UploadFileForm({ onClose }: UploadFileFormProps) {
               onClick={handleSubmit}
               disabled={validItems.length === 0 || !warehouseId || !facilityId || createInvoice.isPending}
             >
-              {createInvoice.isPending ? 'Creating...' : `Create Invoice (${validItems.length} items)`}
+              {createInvoice.isPending
+                ? 'Creating...'
+                : packagingRequired
+                  ? `Next: Define Packaging →`
+                  : `Create Invoice (${validItems.length} items)`}
             </Button>
           )}
         </div>

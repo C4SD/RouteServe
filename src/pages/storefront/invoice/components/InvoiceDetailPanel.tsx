@@ -16,12 +16,19 @@ import { PackagingMenuDialog } from './PackagingMenuDialog';
 interface InvoiceDetailPanelProps {
   invoice: Invoice;
   onClose: () => void;
+  onEdit?: () => void;
 }
 
-export function InvoiceDetailPanel({ invoice, onClose }: InvoiceDetailPanelProps) {
+export function InvoiceDetailPanel({ invoice, onClose, onEdit }: InvoiceDetailPanelProps) {
   const navigate = useNavigate();
   const statusConfig = INVOICE_STATUS_CONFIG[invoice.status];
   const [packagingDialogOpen, setPackagingDialogOpen] = useState(false);
+
+  const handleStatusChanged = (newStatus: string) => {
+    if (newStatus === 'packaging_pending') {
+      setPackagingDialogOpen(true);
+    }
+  };
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
@@ -244,6 +251,7 @@ export function InvoiceDetailPanel({ invoice, onClose }: InvoiceDetailPanelProps
           invoiceId={invoice.id}
           currentStatus={invoice.status}
           invoiceNumber={invoice.invoice_number}
+          onStatusChanged={handleStatusChanged}
         />
 
         {canDispatch() && (
@@ -252,7 +260,7 @@ export function InvoiceDetailPanel({ invoice, onClose }: InvoiceDetailPanelProps
             Dispatch to FleetOps
           </Button>
         )}
-        <Button variant="outline" className="w-full">
+        <Button variant="outline" className="w-full" onClick={onEdit}>
           <Edit className="h-4 w-4 mr-2" />
           Edit Invoice
         </Button>

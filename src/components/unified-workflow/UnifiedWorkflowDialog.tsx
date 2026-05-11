@@ -27,6 +27,7 @@ import {
 // Steps
 import { Step1Source } from './steps/Step1Source';
 import { Step2Schedule } from './steps/Step2Schedule';
+import { Step3PackagingCompletion } from './steps/Step3PackagingCompletion';
 import { Step3Batch } from './steps/Step3Batch';
 import { Step4Route } from './steps/Step4Route';
 import { Step5Review } from './steps/Step5Review';
@@ -53,16 +54,17 @@ import type { FacilityCandidate } from './schedule/SourceOfTruthColumn';
 interface UnifiedWorkflowDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  startStep?: 1 | 2 | 3;
+  startStep?: 1 | 2 | 3 | 4 | 5 | 6;
   preBatchId?: string;
 }
 
 const STEP_LABELS = [
   { num: 1, label: 'Source' },
   { num: 2, label: 'Schedule' },
-  { num: 3, label: 'Batch' },
-  { num: 4, label: 'Route' },
-  { num: 5, label: 'Review' },
+  { num: 3, label: 'Packaging' },
+  { num: 4, label: 'Batch' },
+  { num: 5, label: 'Route' },
+  { num: 6, label: 'Review' },
 ];
 
 export function UnifiedWorkflowDialog({
@@ -101,6 +103,9 @@ export function UnifiedWorkflowDialog({
   const storePreBatchId = useUnifiedWorkflowStore((state) => state.pre_batch_id);
   const parsedFacilities = useUnifiedWorkflowStore((state) => state.parsed_facilities);
   const policyContext = useUnifiedWorkflowStore((state) => state.policy_context);
+  const facilityPackaging = useUnifiedWorkflowStore((state) => state.facility_packaging);
+  const routingFallbackUsed = useUnifiedWorkflowStore((state) => state.routing_fallback_used);
+  const suggestedVehicleIds = useUnifiedWorkflowStore((state) => state.suggested_vehicle_ids);
 
   // Get actions separately (memoized with shallow)
   const actions = useWorkflowActions();
@@ -268,7 +273,7 @@ export function UnifiedWorkflowDialog({
   // Handle save draft (Step 2) (memoized to prevent infinite loops)
   const handleSaveDraft = React.useCallback(async () => {
     try {
-      await createPreBatch.mutateAsync({
+      const draft = await createPreBatch.mutateAsync({
         source_method: dbSourceMethod!,
         source_sub_option: sourceSubOption,
         schedule_title: scheduleTitle!,
@@ -283,11 +288,18 @@ export function UnifiedWorkflowDialog({
         ),
         ai_optimization_options: sourceSubOption === 'ai_optimization' ? aiOptions : null,
         suggested_vehicle_id: suggestedVehicleId,
+        suggested_vehicle_ids: suggestedVehicleIds,
+        policy_context: policyContext,
+        facility_packaging: facilityPackaging,
         notes: scheduleNotes,
       });
+      actions.setLoading(false);
+      // Store the pre_batch_id so a resumed session can skip re-creation
+      useUnifiedWorkflowStore.setState({ pre_batch_id: draft.id });
       handleClose();
     } catch (error) {
       console.error('Failed to save draft:', error);
+      // toast is already fired by the mutation's onError
     }
   }, [
     createPreBatch,
@@ -301,12 +313,25 @@ export function UnifiedWorkflowDialog({
     workingSet,
     aiOptions,
     suggestedVehicleId,
+    suggestedVehicleIds,
+    policyContext,
+    facilityPackaging,
     scheduleNotes,
     handleClose,
+    actions,
   ]);
 
-  // Handle final confirm (Step 5) (memoized to prevent infinite loops)
+  // Handle final confirm (Step 6) (memoized to prevent infinite loops)
   const handleConfirm = React.useCallback(async () => {
+    // Guard: vehicle is required (defensive against auto-commit edge cases)
+    const committedVehicleIds = vehicleIds.length > 0 ? vehicleIds : (vehicleId ? [vehicleId] : []);
+    const primaryVehicleId = committedVehicleIds[0] ?? null;
+
+    if (!primaryVehicleId) {
+      actions.setError('At least one vehicle must be selected before creating a batch.');
+      return;
+    }
+
     try {
       // Ensure a pre-batch exists (create one if the user skipped "Save Draft")
       let preBatchId = storePreBatchId;
@@ -327,26 +352,36 @@ export function UnifiedWorkflowDialog({
           ),
           ai_optimization_options: sourceSubOption === 'ai_optimization' ? aiOptions : null,
           suggested_vehicle_id: suggestedVehicleId,
+          suggested_vehicle_ids: suggestedVehicleIds,
+          policy_context: policyContext,
+          facility_packaging: facilityPackaging,
           notes: scheduleNotes,
         });
         preBatchId = newPreBatch.id;
+        useUnifiedWorkflowStore.setState({ pre_batch_id: preBatchId });
       }
 
       await convertToBatch.mutateAsync({
         preBatchId: preBatchId,
         batchName: batchName!,
-        vehicleId: vehicleId!,
+        vehicleId: primaryVehicleId,
+        vehicleIds: committedVehicleIds,
         driverId: driverId,
         priority: priority,
         slotAssignments: slotAssignments,
+        facilityPackaging: facilityPackaging,
         optimizedRoute: optimizedRoute,
-        totalDistanceKm: totalDistanceKm || undefined,
-        estimatedDurationMin: estimatedDurationMin || undefined,
+        totalDistanceKm: totalDistanceKm ?? undefined,
+        estimatedDurationMin: estimatedDurationMin ?? undefined,
+        routeFallbackUsed: routingFallbackUsed,
         notes: scheduleNotes,
       });
+
       actions.resetWorkflow();
       onOpenChange(false);
     } catch (error) {
+      // Error toast is already fired by the mutation's onError handler.
+      // Do NOT close the dialog — the user needs to see the error and retry.
       console.error('Failed to create batch:', error);
     }
   }, [
@@ -363,20 +398,23 @@ export function UnifiedWorkflowDialog({
     workingSet,
     aiOptions,
     suggestedVehicleId,
+    suggestedVehicleIds,
+    policyContext,
+    facilityPackaging,
     batchName,
     vehicleId,
+    vehicleIds,
     driverId,
     priority,
     slotAssignments,
     optimizedRoute,
     totalDistanceKm,
     estimatedDurationMin,
+    routingFallbackUsed,
     scheduleNotes,
     actions,
     onOpenChange,
   ]);
-
-  const suggestedVehicleIds = useUnifiedWorkflowStore((state) => state.suggested_vehicle_ids);
 
   // Handle next step — auto-commits suggested vehicles when leaving Step 2
   const handleNextStep = React.useCallback(() => {
@@ -448,6 +486,15 @@ export function UnifiedWorkflowDialog({
 
       case 3:
         return (
+          <Step3PackagingCompletion
+            workingSet={workingSet}
+            facilityPackaging={facilityPackaging}
+            onSetFacilityPackaging={actions.setFacilityPackaging}
+          />
+        );
+
+      case 4:
+        return (
           <Step3Batch
             batchName={batchName}
             onBatchNameChange={actions.setBatchName}
@@ -474,7 +521,7 @@ export function UnifiedWorkflowDialog({
           />
         );
 
-      case 4:
+      case 5: {
         const startLocation = warehouses.find(w => w.id === startLocationId) || null;
         return (
           <Step4Route
@@ -492,8 +539,9 @@ export function UnifiedWorkflowDialog({
             onOptimize={handleOptimizeRoute}
           />
         );
+      }
 
-      case 5:
+      case 6:
         return (
           <Step5Review
             sourceMethod={sourceMethod}
@@ -551,12 +599,15 @@ export function UnifiedWorkflowDialog({
     scheduleNotes,
     parsedFacilities,
     policyContext,
+    facilityPackaging,
+    routingFallbackUsed,
+    vehicleIds,
     actions,
     handleOptimizeRoute,
   ]);
 
   // Progress percentage
-  const progressPct = (currentStep / 5) * 100;
+  const progressPct = (currentStep / 6) * 100;
 
   const handleOpenChange = React.useCallback(
     (isOpen: boolean) => {
@@ -647,7 +698,7 @@ export function UnifiedWorkflowDialog({
             )}
 
             {/* Final step: Confirm */}
-            {currentStep === 5 ? (
+            {currentStep === 6 ? (
               <Button
                 onClick={handleConfirm}
                 disabled={!canProceed || convertToBatch.isPending}
@@ -661,7 +712,7 @@ export function UnifiedWorkflowDialog({
               </Button>
             ) : (
               <Button onClick={handleNextStep} disabled={!canProceed}>
-                {currentStep === 2 ? 'Proceed to Batch' : 'Next'}
+                {currentStep === 3 ? 'Continue to Batch' : 'Next'}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             )}

@@ -158,9 +158,11 @@ export function useItems(filters?: ItemFilters, page?: number, pageSize: number 
 }
 
 export function useItem(id: string | undefined) {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['items', id],
-    enabled: !!id,
+    queryKey: ['items', id, workspaceId],
+    enabled: !!id && !!workspaceId,
     queryFn: async () => {
       if (!id) return null;
 
@@ -168,6 +170,7 @@ export function useItem(id: string | undefined) {
         .from('items')
         .select('*, warehouses(id, name, code)')
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (error) throw error;
@@ -205,6 +208,7 @@ export function useCreateItem() {
 
 export function useUpdateItem() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ItemFormData> }) => {
@@ -212,6 +216,7 @@ export function useUpdateItem() {
         .from('items')
         .update(mapItemToDb(data as ItemFormData))
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -230,10 +235,11 @@ export function useUpdateItem() {
 
 export function useDeleteItem() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('items').delete().eq('id', id);
+      const { error } = await supabase.from('items').delete().eq('id', id).eq('workspace_id', workspaceId!);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -280,9 +286,11 @@ export function useBulkCreateItems() {
 // ========================================
 
 export function useItemAnalytics(itemId: string | undefined) {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['items', itemId, 'analytics'],
-    enabled: !!itemId,
+    queryKey: ['items', itemId, 'analytics', workspaceId],
+    enabled: !!itemId && !!workspaceId,
     queryFn: async (): Promise<ItemAnalytics | null> => {
       if (!itemId) return null;
 
@@ -291,6 +299,7 @@ export function useItemAnalytics(itemId: string | undefined) {
         .from('items')
         .select('*')
         .eq('id', itemId)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (!item) return null;

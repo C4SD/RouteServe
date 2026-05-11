@@ -12,7 +12,7 @@ import type { TimeWindow, Priority, RoutePoint } from './scheduler';
 // WORKFLOW STEP TYPES
 // =====================================================
 
-export type UnifiedWorkflowStep = 1 | 2 | 3 | 4 | 5;
+export type UnifiedWorkflowStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type SourceMethod = 'ready' | 'upload' | 'manual' | 'service_policy';
 
@@ -34,6 +34,32 @@ export interface PolicyContext {
   cluster_id: string;
   cluster_code: string; // Z1, Z2, …
   cluster_name: string | null;
+}
+
+// =====================================================
+// PACKAGING TYPES (Step 3)
+// =====================================================
+
+export type FacilityPackageTypeName = 'Carton' | 'Kit / Bag' | 'Box';
+export type FacilityPackageSizeName = 'S' | 'M' | 'L' | 'XL';
+
+export interface FacilityPackagingRow {
+  id: string;
+  type: FacilityPackageTypeName;
+  size: FacilityPackageSizeName;
+  unit_weight: number;
+  quantity: number;
+}
+
+export interface FacilityPackagingData {
+  facility_id: string;
+  packages: FacilityPackagingRow[];
+  computed: {
+    total_weight: number;
+    total_volume: number;
+    total_packages: number;
+    total_slots: number;
+  };
 }
 
 // =====================================================
@@ -121,6 +147,12 @@ export interface PreBatch {
   suggested_vehicle_id: string | null; // kept for compat (first of suggested_vehicle_ids)
   suggested_vehicle_ids: string[] | null;
 
+  // Policy context (populated when source_method = 'service_policy')
+  policy_context: PolicyContext | null;
+
+  // Packaging snapshot (persisted at draft-save / confirm time)
+  facility_packaging: Record<string, FacilityPackagingData> | null;
+
   // Status
   status: PreBatchStatus;
 
@@ -182,6 +214,8 @@ export interface CreatePreBatchPayload {
   ai_optimization_options?: AiOptimizationOptions | null;
   suggested_vehicle_id?: string | null;
   suggested_vehicle_ids?: string[] | null;
+  policy_context?: PolicyContext | null;
+  facility_packaging?: Record<string, FacilityPackagingData> | null;
   notes?: string | null;
   created_by?: string | null;
 }
@@ -273,6 +307,12 @@ export interface UnifiedWorkflowState {
 
   // Policy Context (for 'service_policy' source method)
   policy_context: PolicyContext | null;
+
+  // Step 3: Packaging (per-facility packaging declarations)
+  facility_packaging: Record<string, FacilityPackagingData>;
+
+  // Routing diagnostics
+  routing_fallback_used: boolean;
 }
 
 // =====================================================
@@ -288,6 +328,9 @@ export interface ParsedFacility {
   is_valid: boolean;
   error_message?: string;
   user_corrected?: boolean;
+  // Coordinates carried from the matched DB facility — required for road routing
+  lat?: number;
+  lng?: number;
 }
 
 export interface FileUploadResult {
@@ -399,6 +442,9 @@ export interface UnifiedWorkflowActions {
   // Step 2: Policy Context (service_policy source method)
   setPolicyContext: (context: PolicyContext | null) => void;
 
+  // Step 3: Packaging
+  setFacilityPackaging: (facilityId: string, data: FacilityPackagingData | null) => void;
+
   // Step 2 -> Pre-batch
   savePreBatch: () => Promise<string>;
   loadPreBatch: (id: string) => Promise<void>;
@@ -436,3 +482,93 @@ export interface UnifiedWorkflowActions {
 }
 
 export type UnifiedWorkflowStore = UnifiedWorkflowState & UnifiedWorkflowActions;
+
+// =====================================================
+// DISPATCH RUN TYPES
+// =====================================================
+
+export type DispatchRunStatus =
+  | 'pending'
+  | 'dispatched'
+  | 'in_transit'
+  | 'completed'
+  | 'cancelled';
+
+// Legal state-machine transitions
+export const DISPATCH_RUN_TRANSITIONS: Record<DispatchRunStatus, DispatchRunStatus[]> = {
+  pending:    ['dispatched', 'cancelled'],
+  dispatched: ['in_transit', 'cancelled'],
+  in_transit: ['completed', 'cancelled'],
+  completed:  [],
+  cancelled:  [],
+};
+
+export interface DispatchRun {
+  id: string;
+  workspace_id: string;
+  batch_id: string;
+  status: DispatchRunStatus;
+
+  vehicle_id: string | null;
+  vehicle_ids: string[];
+  driver_id: string | null;
+
+  dispatched_at: string | null;
+  departed_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  estimated_arrival: string | null;
+
+  stops_total: number;
+  stops_completed: number;
+  distance_km: number | null;
+  duration_min: number | null;
+
+  notes: string | null;
+  cancel_reason: string | null;
+
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDispatchRunPayload {
+  batch_id: string;
+  vehicle_id?: string | null;
+  vehicle_ids?: string[];
+  driver_id?: string | null;
+  stops_total?: number;
+  distance_km?: number | null;
+  duration_min?: number | null;
+  notes?: string | null;
+}
+
+export interface UpdateDispatchRunPayload {
+  status?: DispatchRunStatus;
+  stops_completed?: number;
+  estimated_arrival?: string | null;
+  notes?: string | null;
+  cancel_reason?: string | null;
+}
+
+// =====================================================
+// CONVERT PRE-BATCH PAYLOAD
+// =====================================================
+
+export interface ConvertPreBatchPayload {
+  preBatchId: string;
+  batchName: string;
+  /** Primary vehicle (required). */
+  vehicleId: string;
+  /** All committed vehicles — kept in sync with vehicle_ids[]. */
+  vehicleIds: string[];
+  driverId?: string | null;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  slotAssignments: Record<string, SlotAssignment>;
+  facilityPackaging: Record<string, FacilityPackagingData>;
+  optimizedRoute?: RoutePoint[];
+  totalDistanceKm?: number;
+  estimatedDurationMin?: number;
+  routeFallbackUsed?: boolean;
+  notes?: string | null;
+}

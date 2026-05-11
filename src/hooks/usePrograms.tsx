@@ -50,9 +50,17 @@ export function usePrograms(filters?: ProgramFilters) {
 
       if (error) throw error;
 
+      const programs = data || [];
+
+      if (filters?.skipMetrics) {
+        return {
+          programs: programs.map(p => ({ ...p, metrics: EMPTY_METRICS } as Program)),
+        };
+      }
+
       // Fetch metrics for each program from DB
       const programsWithMetrics = await Promise.all(
-        (data || []).map(async (program) => {
+        programs.map(async (program) => {
           const { data: metrics, error: metricsError } = await supabase.rpc('get_program_metrics', {
             _program_code: program.code || program.name,
             _workspace_id: workspaceId!,
@@ -79,20 +87,22 @@ export function useProgram(id: string) {
   const { workspaceId } = useWorkspace();
 
   return useQuery({
-    queryKey: ['programs', id],
+    queryKey: ['programs', id, workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('programs')
         .select('*')
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (error) throw error;
 
-      // Fetch metrics from DB
+      // Fetch metrics from DB using the session-validated workspaceId, not the fetched record's
       const { data: metrics, error: metricsError } = await supabase.rpc('get_program_metrics', {
         _program_code: data.code || data.name,
-        _workspace_id: data.workspace_id,
+        _workspace_id: workspaceId!,
       });
 
       if (metricsError) {
@@ -147,6 +157,7 @@ export function useCreateProgram() {
 // Update program
 export function useUpdateProgram() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({
@@ -167,6 +178,7 @@ export function useUpdateProgram() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -183,10 +195,15 @@ export function useUpdateProgram() {
 // Delete program
 export function useDeleteProgram() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('programs').delete().eq('id', id);
+      const { error } = await supabase
+        .from('programs')
+        .delete()
+        .eq('id', id)
+        .eq('workspace_id', workspaceId!);
 
       if (error) throw error;
     },

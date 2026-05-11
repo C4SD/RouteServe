@@ -14,9 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import {
-  Package,
-  ShoppingBag,
   Truck,
   CheckCircle2,
   AlertTriangle,
@@ -24,112 +23,143 @@ import {
   Info,
   Plus,
   Minus,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Invoice, InvoiceLineItem } from '@/types/invoice';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useSaveInvoicePackaging } from '@/hooks/useInvoices';
+import {
+  SIZE_DEFS,
+  SIZES,
+  PACKAGE_TYPE_CONFIG,
+  type PackageTypeName,
+  type SizeName,
+} from './PackagingStep';
 
-// ─── Package type configuration ────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const PACKAGE_CONFIG = {
-  bag_s: {
-    label: 'Bag',
-    size: 'S',
-    dbType: 'bag',
-    dbSize: 'S',
-    slot_cost: 0.25,
-    max_weight_kg: 2,
-    max_volume_m3: 0.01,
-    icon: ShoppingBag,
-    colorClass: 'bg-green-50 border-green-200',
-    badgeClass: 'bg-green-100 text-green-800 border-green-200',
-    textClass: 'text-green-700',
-    desc: 'Max 2 kg / 0.01 m³',
-  },
-  box_m: {
-    label: 'Box',
-    size: 'M',
-    dbType: 'box',
-    dbSize: 'M',
-    slot_cost: 0.5,
-    max_weight_kg: 10,
-    max_volume_m3: 0.05,
-    icon: Package,
-    colorClass: 'bg-blue-50 border-blue-200',
-    badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
-    textClass: 'text-blue-700',
-    desc: 'Max 10 kg / 0.05 m³',
-  },
-  box_l: {
-    label: 'Box',
-    size: 'L',
-    dbType: 'box',
-    dbSize: 'L',
-    slot_cost: 1.0,
-    max_weight_kg: 25,
-    max_volume_m3: 0.1,
-    icon: Package,
-    colorClass: 'bg-indigo-50 border-indigo-200',
-    badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-    textClass: 'text-indigo-700',
-    desc: 'Max 25 kg / 0.10 m³',
-  },
-  crate_xl: {
-    label: 'Crate',
-    size: 'XL',
-    dbType: 'crate',
-    dbSize: 'XL',
-    slot_cost: 2.0,
-    max_weight_kg: 50,
-    max_volume_m3: 0.25,
-    icon: Package,
-    colorClass: 'bg-orange-50 border-orange-200',
-    badgeClass: 'bg-orange-100 text-orange-800 border-orange-200',
-    textClass: 'text-orange-700',
-    desc: 'Max 50 kg / 0.25 m³',
-  },
-} as const;
+type TypeKey = 'Carton' | 'Kit / Bag' | 'Box';
 
-type PackageType = keyof typeof PACKAGE_CONFIG;
-type PackageCounts = Record<PackageType, number>;
-
-// ─── Auto-compute helpers ───────────────────────────────────────────────────
-
-function selectPackageType(weight: number, volume: number): PackageType {
-  const { bag_s, box_m, box_l } = PACKAGE_CONFIG;
-  if (weight <= bag_s.max_weight_kg && volume <= bag_s.max_volume_m3) return 'bag_s';
-  if (weight <= box_m.max_weight_kg && volume <= box_m.max_volume_m3) return 'box_m';
-  if (weight <= box_l.max_weight_kg && volume <= box_l.max_volume_m3) return 'box_l';
-  return 'crate_xl';
+interface TypeRow {
+  typeKey: TypeKey;
+  size: SizeName;
+  count: number;
 }
 
-function autoComputeFromItems(items: InvoiceLineItem[]): PackageCounts {
-  const counts: PackageCounts = { bag_s: 0, box_m: 0, box_l: 0, crate_xl: 0 };
-  const hasData = items.some(i => (i.weight_kg || 0) > 0 || (i.volume_m3 || 0) > 0);
-  if (!hasData) return counts;
+interface CustomRow {
+  id: string;
+  count: number;
+  l: number;
+  w: number;
+  h: number;
+  maxWeight: number;
+}
+
+const TYPE_KEYS: TypeKey[] = ['Carton', 'Kit / Bag', 'Box'];
+
+// Map from TypeKey to DB key prefix
+const TYPE_DB_KEY: Record<TypeKey, string> = {
+  Carton:      'carton',
+  'Kit / Bag': 'bag',
+  Box:         'box',
+};
+
+// ─── Row style config pulled from PackagingStep ────────────────────────────────
+
+const ROW_STYLE: Record<TypeKey, {
+  colorClass: string;
+  badgeClass: string;
+  textClass: string;
+  iconBg: string;
+}> = {
+  Carton: {
+    colorClass: 'bg-amber-50 border-amber-200',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+    textClass: 'text-amber-700',
+    iconBg: 'bg-amber-100',
+  },
+  'Kit / Bag': {
+    colorClass: 'bg-rose-50 border-rose-200',
+    badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+    textClass: 'text-rose-700',
+    iconBg: 'bg-rose-100',
+  },
+  Box: {
+    colorClass: 'bg-slate-50 border-slate-200',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    textClass: 'text-slate-700',
+    iconBg: 'bg-slate-100',
+  },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function nextSize(current: SizeName): SizeName {
+  const idx = SIZES.indexOf(current);
+  return SIZES[(idx + 1) % SIZES.length];
+}
+
+function volumeFromDims(l: number, w: number, h: number): number {
+  return (l * w * h) / 1_000_000;
+}
+
+// Auto-suggest: assign each item to the most appropriate type+size combo
+function autoComputeRows(items: InvoiceLineItem[]): TypeRow[] {
+  const rows: TypeRow[] = TYPE_KEYS.map(typeKey => ({ typeKey, size: 'M', count: 0 }));
 
   for (const item of items) {
     const w = (item.weight_kg || 0) * item.quantity;
     const v = (item.volume_m3 || 0) * item.quantity;
     if (w === 0 && v === 0) continue;
-    const type = selectPackageType(w, v);
-    const cfg = PACKAGE_CONFIG[type];
-    const byWeight = w > 0 ? Math.ceil(w / cfg.max_weight_kg) : 0;
-    const byVol = v > 0 ? Math.ceil(v / cfg.max_volume_m3) : 0;
-    counts[type] += Math.max(byWeight, byVol, 1);
+
+    // Pick smallest size of Box that fits
+    let assigned = false;
+    for (const size of SIZES) {
+      const def = SIZE_DEFS['Box'][size];
+      const maxVol = volumeFromDims(def.l, def.w, def.h);
+      if (w <= def.default_unit_weight * 1.5 && v <= maxVol) {
+        const rowIdx = rows.findIndex(r => r.typeKey === 'Box');
+        rows[rowIdx].size = size;
+        rows[rowIdx].count += Math.max(1, Math.ceil(w / def.default_unit_weight));
+        assigned = true;
+        break;
+      }
+    }
+    if (!assigned) {
+      const rowIdx = rows.findIndex(r => r.typeKey === 'Box');
+      rows[rowIdx].size = 'XL';
+      rows[rowIdx].count += 1;
+    }
+  }
+
+  return rows;
+}
+
+function buildCounts(rows: TypeRow[], customRows: CustomRow[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.count > 0) {
+      const key = `${TYPE_DB_KEY[row.typeKey]}_${row.size.toLowerCase()}`;
+      counts[key] = (counts[key] || 0) + row.count;
+    }
+  }
+  for (const cr of customRows) {
+    if (cr.count > 0) {
+      counts['custom'] = (counts['custom'] || 0) + cr.count;
+    }
   }
   return counts;
 }
 
-// ─── Vehicle fit helpers ────────────────────────────────────────────────────
+// ─── Vehicle fit helpers ───────────────────────────────────────────────────────
 
 function getVehicleSlots(vehicle: any): number {
-  const tiered = vehicle.tiered_config || (vehicle as any).tiered_config;
+  const tiered = vehicle.tiered_config;
   if (tiered?.tiers && Array.isArray(tiered.tiers)) {
     return tiered.tiers.reduce((s: number, t: any) => s + (t.slot_count || 0), 0);
   }
-  // Fall back to capacity (m³) × 10 as rough slot estimate when no tiered config
   return Math.round((vehicle.capacity || 0) * 10);
 }
 
@@ -145,77 +175,104 @@ function analyzeVehicleFit(totalSlotDemand: number, vehicles: any[]): VehicleFit
   if (available.length === 0) {
     return { canFit: false, vehiclesNeeded: 1, bestVehicle: null, maxSingleVehicleSlots: 0 };
   }
-
   const withSlots = available.map(v => ({ ...v, _slots: getVehicleSlots(v) }));
   const sorted = [...withSlots].sort((a, b) => b._slots - a._slots);
   const best = sorted[0];
   const needed = Math.ceil(totalSlotDemand);
-
   if (needed <= best._slots) {
     return { canFit: true, vehiclesNeeded: 1, bestVehicle: best, maxSingleVehicleSlots: best._slots };
   }
-
-  const vehiclesNeeded = Math.ceil(needed / best._slots);
-  return { canFit: false, vehiclesNeeded, bestVehicle: best, maxSingleVehicleSlots: best._slots };
+  return {
+    canFit: false,
+    vehiclesNeeded: Math.ceil(needed / best._slots),
+    bestVehicle: best,
+    maxSingleVehicleSlots: best._slots,
+  };
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// ─── TypeRow counter component ────────────────────────────────────────────────
 
-function PackageCounter({
-  type,
-  count,
-  onChange,
+function PackageTypeRow({
+  row,
+  onCountChange,
+  onSizeClick,
 }: {
-  type: PackageType;
-  count: number;
-  onChange: (val: number) => void;
+  row: TypeRow;
+  onCountChange: (val: number) => void;
+  onSizeClick: () => void;
 }) {
-  const cfg = PACKAGE_CONFIG[type];
-  const Icon = cfg.icon;
-  const slotDemand = count * cfg.slot_cost;
+  const meta = PACKAGE_TYPE_CONFIG[row.typeKey as PackageTypeName];
+  const style = ROW_STYLE[row.typeKey];
+  const def = SIZE_DEFS[row.typeKey as PackageTypeName][row.size];
+  const slotCost = def.slot_cost;
+  const slotDemand = row.count * slotCost;
+  const Icon = meta.icon;
+  const nextSz = nextSize(row.size);
 
   return (
-    <div className={cn('rounded-lg border p-3 flex items-center gap-3', cfg.colorClass)}>
-      <div className={cn('p-2 rounded-md bg-white/60', cfg.textClass)}>
+    <div className={cn('rounded-lg border p-3 flex items-center gap-3', style.colorClass)}>
+      {/* Icon — click to cycle size */}
+      <button
+        type="button"
+        title={`Click to change size (next: ${nextSz})`}
+        onClick={onSizeClick}
+        className={cn(
+          'p-2 rounded-md transition-all hover:scale-110 active:scale-95 cursor-pointer shrink-0',
+          style.iconBg, style.textClass
+        )}
+      >
         <Icon className="h-5 w-5" />
-      </div>
+      </button>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-sm">
-            {cfg.label} <span className="font-bold">{cfg.size}</span>
-          </span>
-          <Badge variant="outline" className={cn('text-xs px-1 py-0', cfg.badgeClass)}>
-            {cfg.slot_cost} slot each
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-semibold text-sm">{meta.subtitle ? row.typeKey : row.typeKey}</span>
+          {/* Size badge — also clickable to cycle */}
+          <button
+            type="button"
+            onClick={onSizeClick}
+            title={`Click to change size (next: ${nextSz})`}
+            className={cn(
+              'inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-semibold',
+              'transition-all hover:opacity-80 cursor-pointer',
+              style.badgeClass
+            )}
+          >
+            {row.size}
+          </button>
+          <Badge variant="outline" className={cn('text-xs px-1 py-0', style.badgeClass)}>
+            {slotCost} slot each
           </Badge>
         </div>
-        <p className="text-xs text-muted-foreground">{cfg.desc}</p>
-        {count > 0 && (
-          <p className={cn('text-xs font-medium mt-0.5', cfg.textClass)}>
+        <p className="text-xs text-muted-foreground">
+          {def.l}×{def.w}×{def.h} cm · max {def.default_unit_weight} kg
+        </p>
+        {row.count > 0 && (
+          <p className={cn('text-xs font-medium mt-0.5', style.textClass)}>
             → {slotDemand.toFixed(2)} slots
           </p>
         )}
       </div>
 
-      {/* Counter control */}
+      {/* Counter */}
       <div className="flex items-center gap-1.5 shrink-0">
         <Button
           type="button"
           variant="outline"
           size="icon"
           className="h-7 w-7"
-          onClick={() => onChange(Math.max(0, count - 1))}
-          disabled={count === 0}
+          onClick={() => onCountChange(Math.max(0, row.count - 1))}
+          disabled={row.count === 0}
         >
           <Minus className="h-3 w-3" />
         </Button>
-        <span className="w-8 text-center font-bold text-sm">{count}</span>
+        <span className="w-8 text-center font-bold text-sm">{row.count}</span>
         <Button
           type="button"
           variant="outline"
           size="icon"
           className="h-7 w-7"
-          onClick={() => onChange(count + 1)}
+          onClick={() => onCountChange(row.count + 1)}
         >
           <Plus className="h-3 w-3" />
         </Button>
@@ -224,7 +281,102 @@ function PackageCounter({
   );
 }
 
-// ─── Main dialog ─────────────────────────────────────────────────────────────
+// ─── Custom row component ──────────────────────────────────────────────────────
+
+function CustomPackageRow({
+  cr,
+  onCountChange,
+  onDimChange,
+  onRemove,
+}: {
+  cr: CustomRow;
+  onCountChange: (val: number) => void;
+  onDimChange: (field: keyof Pick<CustomRow, 'l' | 'w' | 'h' | 'maxWeight'>, val: number) => void;
+  onRemove: () => void;
+}) {
+  const vol = volumeFromDims(cr.l, cr.w, cr.h);
+
+  return (
+    <div className="rounded-lg border p-3 bg-purple-50 border-purple-200 space-y-2">
+      <div className="flex items-center gap-3">
+        <div className="p-2 rounded-md bg-purple-100 text-purple-700 shrink-0">
+          <Plus className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-sm text-purple-800">Custom</span>
+            <Badge variant="outline" className="text-xs px-1 py-0 bg-purple-100 text-purple-700 border-purple-200">
+              manual size
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {cr.l}×{cr.w}×{cr.h} cm · {vol.toFixed(4)} m³
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onCountChange(Math.max(0, cr.count - 1))}
+            disabled={cr.count === 0}
+          >
+            <Minus className="h-3 w-3" />
+          </Button>
+          <span className="w-8 text-center font-bold text-sm">{cr.count}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onCountChange(cr.count + 1)}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive hover:text-destructive"
+            onClick={onRemove}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Dimension inputs */}
+      <div className="grid grid-cols-4 gap-2 pt-1">
+        {(['l', 'w', 'h'] as const).map(dim => (
+          <div key={dim} className="space-y-1">
+            <label className="text-xs text-muted-foreground uppercase">{dim} (cm)</label>
+            <Input
+              type="number"
+              min={1}
+              value={cr[dim]}
+              onChange={e => onDimChange(dim, Math.max(1, Number(e.target.value)))}
+              className="h-7 text-xs"
+            />
+          </div>
+        ))}
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Max kg</label>
+          <Input
+            type="number"
+            min={0.1}
+            step={0.5}
+            value={cr.maxWeight}
+            onChange={e => onDimChange('maxWeight', Math.max(0.1, Number(e.target.value)))}
+            className="h-7 text-xs"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main dialog ──────────────────────────────────────────────────────────────
 
 interface PackagingMenuDialogProps {
   open: boolean;
@@ -232,6 +384,8 @@ interface PackagingMenuDialogProps {
   invoice: Invoice;
   onSaved?: () => void;
 }
+
+let _customId = 0;
 
 export function PackagingMenuDialog({
   open,
@@ -243,79 +397,138 @@ export function PackagingMenuDialog({
   const savePackaging = useSaveInvoicePackaging();
 
   const [packagingRequired, setPackagingRequired] = useState(invoice.packaging_required ?? false);
-  const [counts, setCounts] = useState<PackageCounts>({
-    bag_s: 0,
-    box_m: 0,
-    box_l: 0,
-    crate_xl: 0,
-  });
+  const [rows, setRows] = useState<TypeRow[]>(
+    TYPE_KEYS.map(typeKey => ({ typeKey, size: 'M', count: 0 }))
+  );
+  const [customRows, setCustomRows] = useState<CustomRow[]>([]);
 
-  // Seed counts from existing packaging data or auto-compute from line items
+  // Seed from saved packaging or auto-compute
   useEffect(() => {
     if (!open) return;
     setPackagingRequired(invoice.packaging_required ?? false);
+    setCustomRows([]);
 
-    if (invoice.packaging) {
-      // Rebuild counts from saved package_items
-      const rebuilt: PackageCounts = { bag_s: 0, box_m: 0, box_l: 0, crate_xl: 0 };
-      (invoice.packaging.packages || []).forEach(pkg => {
-        const key = `${pkg.package_type}_${pkg.size?.toLowerCase()}` as PackageType;
-        if (key in rebuilt) rebuilt[key] += 1;
-      });
-      // If no package_items breakdown, use total_packages as box_m fallback
-      if (Object.values(rebuilt).every(v => v === 0) && invoice.packaging.total_packages > 0) {
-        rebuilt.box_m = invoice.packaging.total_packages;
+    if (invoice.packaging?.packages && invoice.packaging.packages.length > 0) {
+      // Rebuild rows from saved data
+      const rebuilt: TypeRow[] = TYPE_KEYS.map(typeKey => ({ typeKey, size: 'M' as SizeName, count: 0 }));
+      const dbToTypeKey: Record<string, TypeKey> = {
+        carton: 'Carton', bag: 'Kit / Bag', box: 'Box',
+      };
+      for (const pkg of invoice.packaging.packages) {
+        const typeKey = dbToTypeKey[pkg.package_type];
+        if (typeKey) {
+          const rowIdx = rebuilt.findIndex(r => r.typeKey === typeKey);
+          if (rowIdx >= 0) {
+            rebuilt[rowIdx].size = (pkg.size as SizeName) || 'M';
+            rebuilt[rowIdx].count += 1;
+          }
+        }
       }
-      setCounts(rebuilt);
+      // Fallback: if nothing mapped, use total_packages as Box M
+      if (rebuilt.every(r => r.count === 0) && invoice.packaging.total_packages > 0) {
+        rebuilt[2].count = invoice.packaging.total_packages; // Box row
+      }
+      setRows(rebuilt);
     } else if (invoice.items && invoice.items.length > 0) {
-      setCounts(autoComputeFromItems(invoice.items));
+      setRows(autoComputeRows(invoice.items));
     } else {
-      setCounts({ bag_s: 0, box_m: 0, box_l: 0, crate_xl: 0 });
+      setRows(TYPE_KEYS.map(typeKey => ({ typeKey, size: 'M', count: 0 })));
     }
   }, [open, invoice]);
 
   const hasItems = (invoice.items?.length || 0) > 0;
-  const hasWeightData = invoice.items?.some(i => (i.weight_kg || 0) > 0 || (i.volume_m3 || 0) > 0) ?? false;
+  const hasWeightData =
+    invoice.items?.some(i => (i.weight_kg || 0) > 0 || (i.volume_m3 || 0) > 0) ?? false;
 
-  // Totals derived from counts
+  // ── Totals ────────────────────────────────────────────────────────────────
   const totals = useMemo(() => {
     let totalSlotDemand = 0;
     let totalPackages = 0;
-    (Object.entries(counts) as [PackageType, number][]).forEach(([type, count]) => {
-      totalSlotDemand += count * PACKAGE_CONFIG[type].slot_cost;
-      totalPackages += count;
-    });
 
-    const totalWeight = invoice.items?.reduce(
-      (sum, i) => sum + (i.weight_kg || 0) * i.quantity,
-      0
-    ) ?? invoice.total_weight_kg ?? 0;
+    for (const row of rows) {
+      const slotCost = SIZE_DEFS[row.typeKey as PackageTypeName][row.size].slot_cost;
+      totalSlotDemand += row.count * slotCost;
+      totalPackages += row.count;
+    }
+    for (const cr of customRows) {
+      // Custom: assume 0.5 slots (medium) unless big
+      const vol = volumeFromDims(cr.l, cr.w, cr.h);
+      const slotCost = vol > 0.3 ? 2 : vol > 0.1 ? 1 : vol > 0.05 ? 0.5 : 0.25;
+      totalSlotDemand += cr.count * slotCost;
+      totalPackages += cr.count;
+    }
 
-    const totalVolume = invoice.items?.reduce(
-      (sum, i) => sum + (i.volume_m3 || 0) * i.quantity,
-      0
-    ) ?? invoice.total_volume_m3 ?? 0;
+    const itemWeight =
+      invoice.items?.reduce((sum, i) => sum + (i.weight_kg || 0) * i.quantity, 0) ||
+      invoice.total_weight_kg ||
+      0;
+    const packageWeight =
+      rows.reduce((sum, row) => {
+        const def = SIZE_DEFS[row.typeKey as PackageTypeName][row.size];
+        return sum + row.count * def.default_unit_weight;
+      }, 0) +
+      customRows.reduce((sum, cr) => sum + cr.count * cr.maxWeight, 0);
+    const totalWeight = itemWeight > 0 ? itemWeight : packageWeight;
 
-    return { totalSlotDemand, totalPackages, totalWeight, totalVolume };
-  }, [counts, invoice]);
+    const totalVolume =
+      invoice.items?.reduce((sum, i) => sum + (i.volume_m3 || 0) * i.quantity, 0) ??
+      invoice.total_volume_m3 ??
+      0;
 
-  // Vehicle fit analysis
+    return { totalSlotDemand, totalPackages, totalWeight, totalVolume, weightIsEstimated: itemWeight === 0 && packageWeight > 0 };
+  }, [rows, customRows, invoice]);
+
   const vehicleFit = useMemo(() => {
     if (totals.totalSlotDemand === 0) return null;
     return analyzeVehicleFit(totals.totalSlotDemand, vehicles);
   }, [totals.totalSlotDemand, vehicles]);
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleSizeClick = (typeKey: TypeKey) => {
+    setRows(prev =>
+      prev.map(r => r.typeKey === typeKey ? { ...r, size: nextSize(r.size) } : r)
+    );
+  };
+
+  const handleCountChange = (typeKey: TypeKey, val: number) => {
+    setRows(prev => prev.map(r => r.typeKey === typeKey ? { ...r, count: val } : r));
+  };
+
   const handleAutoSuggest = () => {
     if (invoice.items && invoice.items.length > 0) {
-      setCounts(autoComputeFromItems(invoice.items));
+      setRows(autoComputeRows(invoice.items));
     }
+  };
+
+  const handleAddCustom = () => {
+    setCustomRows(prev => [
+      ...prev,
+      { id: `custom-${++_customId}`, count: 1, l: 60, w: 40, h: 30, maxWeight: 10 },
+    ]);
+  };
+
+  const handleCustomCountChange = (id: string, val: number) => {
+    setCustomRows(prev => prev.map(cr => cr.id === id ? { ...cr, count: val } : cr));
+  };
+
+  const handleCustomDimChange = (
+    id: string,
+    field: keyof Pick<CustomRow, 'l' | 'w' | 'h' | 'maxWeight'>,
+    val: number
+  ) => {
+    setCustomRows(prev => prev.map(cr => cr.id === id ? { ...cr, [field]: val } : cr));
+  };
+
+  const handleRemoveCustom = (id: string) => {
+    setCustomRows(prev => prev.filter(cr => cr.id !== id));
   };
 
   const handleSave = async () => {
     await savePackaging.mutateAsync({
       invoiceId: invoice.id,
       packagingRequired,
-      counts,
+      counts: buildCounts(rows, customRows),
       totalWeight: totals.totalWeight,
       totalVolume: totals.totalVolume,
     });
@@ -325,21 +538,21 @@ export function PackagingMenuDialog({
 
   const totalPackagesLabel = useMemo(() => {
     const parts: string[] = [];
-    (Object.entries(counts) as [PackageType, number][]).forEach(([type, count]) => {
-      if (count > 0) {
-        const cfg = PACKAGE_CONFIG[type];
-        parts.push(`${count}× ${cfg.label} ${cfg.size}`);
-      }
-    });
+    for (const row of rows) {
+      if (row.count > 0) parts.push(`${row.count}× ${row.typeKey} ${row.size}`);
+    }
+    for (const cr of customRows) {
+      if (cr.count > 0) parts.push(`${cr.count}× Custom (${cr.l}×${cr.w}×${cr.h})`);
+    }
     return parts.length > 0 ? parts.join(', ') : 'No packages configured';
-  }, [counts]);
+  }, [rows, customRows]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-primary" />
+            <span className="text-primary">📦</span>
             Packaging Configuration
           </DialogTitle>
           <DialogDescription>
@@ -349,10 +562,10 @@ export function PackagingMenuDialog({
         </DialogHeader>
 
         <ScrollArea className="flex-1 -mx-6 px-6">
-          <div className="space-y-5 py-2">
+          <div className="py-2">
 
             {/* ── Toggle ── */}
-            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30 mb-4">
               <div className="space-y-0.5">
                 <Label htmlFor="pkg-required" className="text-sm font-semibold cursor-pointer">
                   Packaging Required
@@ -368,100 +581,143 @@ export function PackagingMenuDialog({
               />
             </div>
 
-            {packagingRequired && (
-              <>
-                <Separator />
-
-                {/* ── Auto-suggest banner ── */}
-                {hasItems && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 border border-blue-200">
-                    <div className="flex items-center gap-2 text-sm text-blue-700">
-                      <Info className="h-4 w-4 shrink-0" />
-                      {hasWeightData
-                        ? 'Counts auto-suggested from item weight/volume data.'
-                        : 'No weight/volume data on items — set counts manually.'}
-                    </div>
-                    {hasWeightData && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs border-blue-300 text-blue-700 hover:bg-blue-100 shrink-0 ml-2"
-                        onClick={handleAutoSuggest}
-                      >
-                        Re-suggest
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {/* ── Package counters ── */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Packages</Label>
-                  <div className="space-y-2">
-                    {(Object.keys(PACKAGE_CONFIG) as PackageType[]).map(type => (
-                      <PackageCounter
-                        key={type}
-                        type={type}
-                        count={counts[type]}
-                        onChange={val => setCounts(prev => ({ ...prev, [type]: val }))}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* ── Payload summary ── */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Payload Summary</Label>
-                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                    <div className="flex flex-wrap gap-1.5">
-                      {(Object.entries(counts) as [PackageType, number][])
-                        .filter(([, count]) => count > 0)
-                        .map(([type, count]) => {
-                          const cfg = PACKAGE_CONFIG[type];
-                          return (
-                            <Badge
-                              key={type}
-                              variant="outline"
-                              className={cn('text-xs font-medium', cfg.badgeClass)}
-                            >
-                              {count}× {cfg.label} {cfg.size}
-                            </Badge>
-                          );
-                        })}
-                      {totals.totalPackages === 0 && (
-                        <span className="text-xs text-muted-foreground">No packages configured</span>
+            {packagingRequired ? (
+              <div className="grid grid-cols-2 gap-6">
+                {/* ── LEFT COLUMN: Package config ── */}
+                <div className="space-y-4">
+                  {/* Auto-suggest banner */}
+                  {hasItems && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 border border-blue-200">
+                      <div className="flex items-center gap-2 text-sm text-blue-700">
+                        <Info className="h-4 w-4 shrink-0" />
+                        {hasWeightData
+                          ? 'Counts auto-suggested from item weight/volume data.'
+                          : 'No weight/volume data — set counts manually.'}
+                      </div>
+                      {hasWeightData && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs border-blue-300 text-blue-700 hover:bg-blue-100 shrink-0 ml-2"
+                          onClick={handleAutoSuggest}
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Re-suggest
+                        </Button>
                       )}
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-3 gap-2 pt-1">
-                      <div className="text-center">
-                        <p className="text-lg font-bold">{totals.totalPackages}</p>
-                        <p className="text-xs text-muted-foreground">Packages</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold">
-                          {totals.totalSlotDemand.toFixed(2)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Slot demand</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold">
-                          {totals.totalWeight > 0 ? `${totals.totalWeight.toFixed(1)} kg` : '—'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Weight</p>
-                      </div>
+                  {/* Package rows */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold">Packages</Label>
+                      <p className="text-xs text-muted-foreground">Click icon or size badge to cycle size</p>
+                    </div>
+                    <div className="space-y-2">
+                      {rows.map(row => (
+                        <PackageTypeRow
+                          key={row.typeKey}
+                          row={row}
+                          onCountChange={val => handleCountChange(row.typeKey, val)}
+                          onSizeClick={() => handleSizeClick(row.typeKey)}
+                        />
+                      ))}
+
+                      {customRows.map(cr => (
+                        <CustomPackageRow
+                          key={cr.id}
+                          cr={cr}
+                          onCountChange={val => handleCustomCountChange(cr.id, val)}
+                          onDimChange={(field, val) => handleCustomDimChange(cr.id, field, val)}
+                          onRemove={() => handleRemoveCustom(cr.id)}
+                        />
+                      ))}
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs border-dashed text-muted-foreground hover:text-foreground"
+                        onClick={handleAddCustom}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        + Custom Size
+                      </Button>
                     </div>
                   </div>
                 </div>
 
-                {/* ── Vehicle fit analysis ── */}
-                {totals.totalPackages > 0 && (
+                {/* ── RIGHT COLUMN: Payload summary + Vehicle fit ── */}
+                <div className="space-y-4">
+                  {/* Payload Summary */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Payload Summary</Label>
+                    <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                      <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                        {rows
+                          .filter(r => r.count > 0)
+                          .map(r => {
+                            const style = ROW_STYLE[r.typeKey];
+                            return (
+                              <Badge
+                                key={r.typeKey}
+                                variant="outline"
+                                className={cn('text-xs font-medium', style.badgeClass)}
+                              >
+                                {r.count}× {r.typeKey} {r.size}
+                              </Badge>
+                            );
+                          })}
+                        {customRows
+                          .filter(cr => cr.count > 0)
+                          .map(cr => (
+                            <Badge
+                              key={cr.id}
+                              variant="outline"
+                              className="text-xs font-medium bg-purple-100 text-purple-700 border-purple-200"
+                            >
+                              {cr.count}× Custom
+                            </Badge>
+                          ))}
+                        {totals.totalPackages === 0 && (
+                          <span className="text-xs text-muted-foreground">No packages configured</span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 pt-1">
+                        <div className="text-center">
+                          <p className="text-lg font-bold">{totals.totalPackages}</p>
+                          <p className="text-xs text-muted-foreground">Packages</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-bold">{totals.totalSlotDemand.toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">Slot demand</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-bold">
+                            {totals.totalWeight > 0 ? `${totals.totalWeight.toFixed(1)} kg` : '—'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Weight{totals.weightIsEstimated ? ' (est.)' : ''}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vehicle Fit */}
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Vehicle Fit</Label>
 
-                    {vehicles.length === 0 ? (
+                    {totals.totalPackages === 0 ? (
+                      <Alert className="bg-muted/20">
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                        <AlertDescription className="text-xs text-muted-foreground">
+                          Configure packages above to see vehicle fit analysis.
+                        </AlertDescription>
+                      </Alert>
+                    ) : vehicles.length === 0 ? (
                       <Alert>
                         <Info className="h-4 w-4" />
                         <AlertDescription className="text-xs">
@@ -494,22 +750,17 @@ export function PackagingMenuDialog({
                           — consignment exceeds single vehicle capacity
                           {vehicleFit.bestVehicle && (
                             <span className="text-amber-600">
-                              {' '}({vehicleFit.maxSingleVehicleSlots} slots max per vehicle,{' '}
-                              {Math.ceil(totals.totalSlotDemand)} slots needed)
+                              {' '}({vehicleFit.maxSingleVehicleSlots} slots max,{' '}
+                              {Math.ceil(totals.totalSlotDemand)} needed)
                             </span>
                           )}
-                          <p className="mt-1 font-normal text-xs text-amber-600">
-                            Scheduler will split into {vehicleFit.vehiclesNeeded} batches within the same schedule.
-                          </p>
                         </AlertDescription>
                       </Alert>
                     ) : null}
                   </div>
-                )}
-              </>
-            )}
-
-            {!packagingRequired && (
+                </div>
+              </div>
+            ) : (
               <Alert className="bg-muted/30">
                 <Truck className="h-4 w-4 text-muted-foreground" />
                 <AlertDescription className="text-muted-foreground text-sm">

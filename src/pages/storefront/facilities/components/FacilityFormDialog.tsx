@@ -52,12 +52,16 @@ interface FacilityFormDialogProps {
   facility?: Facility;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  prefillName?: string;
+  onCreated?: (facility: Facility) => void;
 }
 
 export function FacilityFormDialog({
   facility,
   open,
   onOpenChange,
+  prefillName,
+  onCreated,
 }: FacilityFormDialogProps) {
   const isEdit = !!facility;
   const createMutation = useCreateFacility();
@@ -131,6 +135,13 @@ export function FacilityFormDialog({
     }
   }, [open, form]);
 
+  // Pre-fill name when opening in create mode (e.g. from facility matching)
+  useEffect(() => {
+    if (open && !facility && prefillName) {
+      form.setValue('name', prefillName);
+    }
+  }, [open, facility, prefillName, form]);
+
   // Populate form when editing a facility
   useEffect(() => {
     if (facility && open) {
@@ -188,7 +199,8 @@ export function FacilityFormDialog({
           updates: data as Partial<Facility>,
         });
       } else {
-        await createMutation.mutateAsync(data as Partial<Facility>);
+        const created = await createMutation.mutateAsync(data as Partial<Facility>);
+        onCreated?.(created);
       }
       onOpenChange(false);
       form.reset();

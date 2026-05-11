@@ -40,4 +40,5 @@ export interface ProgramFilters {
   status?: string;
   funding_source?: string;
   priority_tier?: string;
+  skipMetrics?: boolean;
 }

@@ -117,17 +117,20 @@ export function useInvoices(filters?: InvoiceFilters, page?: number, pageSize: n
 }
 
 export function useInvoice(id: string | undefined) {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['invoices', id],
-    enabled: !!id,
+    queryKey: ['invoices', id, workspaceId],
+    enabled: !!id && !!workspaceId,
     queryFn: async () => {
-      if (!id) return null;
+      if (!id || !workspaceId) return null;
 
       const [invoiceData, itemsData] = await Promise.all([
         supabase
           .from('invoices')
           .select('*, warehouses(id, name), facilities(id, name, address, lga)')
           .eq('id', id)
+          .eq('workspace_id', workspaceId)
           .single(),
         supabase
           .from('invoice_line_items')
@@ -211,6 +214,7 @@ export function useCreateInvoice() {
 
 export function useUpdateInvoice() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Invoice> }) => {
@@ -227,6 +231,7 @@ export function useUpdateInvoice() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -243,8 +248,80 @@ export function useUpdateInvoice() {
   });
 }
 
+export function useFullUpdateInvoice() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
+
+  return useMutation({
+    mutationFn: async ({ id, formData }: { id: string; formData: InvoiceFormData }) => {
+      const totalPrice = formData.items.reduce((sum, item) => sum + item.total_price, 0);
+      const totalWeight = formData.items.reduce((sum, item) => sum + (item.weight_kg || 0), 0) || null;
+      const totalVolume = formData.items.reduce((sum, item) => sum + (item.volume_m3 || 0), 0) || null;
+
+      const { data: invoice, error } = await supabase
+        .from('invoices')
+        .update({
+          ref_number: formData.ref_number || null,
+          program: formData.program || null,
+          warehouse_id: formData.warehouse_id,
+          facility_id: formData.facility_id,
+          notes: formData.notes || null,
+          total_price: totalPrice,
+          total_weight_kg: totalWeight,
+          total_volume_m3: totalVolume,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('workspace_id', workspaceId!)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const { error: deleteError } = await supabase
+        .from('invoice_line_items')
+        .delete()
+        .eq('invoice_id', id);
+
+      if (deleteError) throw deleteError;
+
+      if (formData.items.length > 0) {
+        const lineItems = formData.items.map(item => ({
+          invoice_id: id,
+          item_id: item.item_id || null,
+          serial_number: item.serial_number || null,
+          description: item.description,
+          unit_pack: item.unit_pack || null,
+          category: item.category || null,
+          weight_kg: item.weight_kg || null,
+          volume_m3: item.volume_m3 || null,
+          batch_number: item.batch_number || null,
+          mfg_date: item.mfg_date || null,
+          expiry_date: item.expiry_date || null,
+          unit_price: item.unit_price,
+          quantity: item.quantity,
+          total_price: item.total_price,
+        }));
+
+        const { error: itemsError } = await supabase.from('invoice_line_items').insert(lineItems);
+        if (itemsError) throw itemsError;
+      }
+
+      return mapDbToInvoice(invoice);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Invoice updated successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update invoice: ${error.message}`);
+    },
+  });
+}
+
 export function useUpdateInvoiceStatus() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: InvoiceStatus }) => {
@@ -255,6 +332,7 @@ export function useUpdateInvoiceStatus() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -273,6 +351,7 @@ export function useUpdateInvoiceStatus() {
 
 export function useSaveInvoicePackaging() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({
@@ -303,7 +382,8 @@ export function useSaveInvoicePackaging() {
       const { error: invoiceErr } = await supabase
         .from('invoices')
         .update(invoiceUpdate)
-        .eq('id', invoiceId);
+        .eq('id', invoiceId)
+        .eq('workspace_id', workspaceId!);
       if (invoiceErr) throw invoiceErr;
 
       if (!packagingRequired || totalPackages === 0) return;
@@ -316,9 +396,9 @@ export function useSaveInvoicePackaging() {
         .from('invoice_packaging')
         .insert({
           invoice_id: invoiceId,
-          packaging_mode: counts.box_m > 0 || counts.box_l > 0 || counts.crate_xl > 0
-            ? 'box'
-            : 'bag',
+          packaging_mode: Object.entries(counts).some(
+            ([k, v]) => v > 0 && (k.startsWith('box') || k.startsWith('carton') || k.startsWith('crate'))
+          ) ? 'box' : 'bag',
           total_packages: totalPackages,
         })
         .select()
@@ -326,11 +406,26 @@ export function useSaveInvoicePackaging() {
       if (pkgErr) throw pkgErr;
 
       // 3. Insert package_items rows (one row per package unit)
-      const TYPE_MAP: Record<string, { package_type: string; size: string }> = {
-        bag_s:    { package_type: 'bag',   size: 'S' },
-        box_m:    { package_type: 'box',   size: 'M' },
-        box_l:    { package_type: 'box',   size: 'L' },
-        crate_xl: { package_type: 'crate', size: 'XL' },
+      // DB check constraint: package_type IN ('box', 'bag') only
+      const TYPE_MAP: Record<string, { package_type: 'box' | 'bag'; size: string }> = {
+        // Bag matrix
+        bag_s:     { package_type: 'bag', size: 'S'      },
+        bag_m:     { package_type: 'bag', size: 'M'      },
+        bag_l:     { package_type: 'bag', size: 'L'      },
+        bag_xl:    { package_type: 'bag', size: 'XL'     },
+        // Box matrix
+        box_s:     { package_type: 'box', size: 'S'      },
+        box_m:     { package_type: 'box', size: 'M'      },
+        box_l:     { package_type: 'box', size: 'L'      },
+        box_xl:    { package_type: 'box', size: 'XL'     },
+        // Carton maps to box (rigid container)
+        carton_s:  { package_type: 'box', size: 'S'      },
+        carton_m:  { package_type: 'box', size: 'M'      },
+        carton_l:  { package_type: 'box', size: 'L'      },
+        carton_xl: { package_type: 'box', size: 'XL'     },
+        // Legacy / other
+        crate_xl:  { package_type: 'box', size: 'XL'     },
+        custom:    { package_type: 'box', size: 'custom' },
       };
 
       const packageRows: any[] = [];
@@ -369,10 +464,15 @@ export function useSaveInvoicePackaging() {
 
 export function useDeleteInvoice() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('invoices').delete().eq('id', id);
+      const { error } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', id)
+        .eq('workspace_id', workspaceId!);
       if (error) throw error;
     },
     onSuccess: () => {

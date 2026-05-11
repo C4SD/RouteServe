@@ -24,6 +24,7 @@ import type {
   SlotAssignmentMap,
   ParsedFacility,
   PolicyContext,
+  FacilityPackagingData,
 } from '@/types/unified-workflow';
 import type { TimeWindow, Priority, RoutePoint } from '@/types/scheduler';
 import { calculateDistance, calculateRouteDistance } from '@/lib/routeOptimization';
@@ -154,6 +155,12 @@ const initialState: UnifiedWorkflowState = {
 
   // Policy Context
   policy_context: null,
+
+  // Step 3: Packaging
+  facility_packaging: {},
+
+  // Routing diagnostics
+  routing_fallback_used: false,
 };
 
 // =====================================================
@@ -172,7 +179,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
 
         nextStep: () => {
           const { current_step, canProceedToNextStep } = get();
-          if (canProceedToNextStep() && current_step < 5) {
+          if (canProceedToNextStep() && current_step < 6) {
             set(
               { current_step: (current_step + 1) as UnifiedWorkflowStep },
               false,
@@ -410,52 +417,41 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         },
 
         // =====================================================
+        // STEP 3: FACILITY PACKAGING
+        // =====================================================
+
+        setFacilityPackaging: (facilityId: string, data: FacilityPackagingData | null) => {
+          const { facility_packaging } = get();
+          if (data === null) {
+            const { [facilityId]: _, ...rest } = facility_packaging;
+            set({ facility_packaging: rest }, false, 'unified/setFacilityPackaging/clear');
+          } else {
+            set(
+              { facility_packaging: { ...facility_packaging, [facilityId]: data } },
+              false,
+              'unified/setFacilityPackaging'
+            );
+          }
+        },
+
+        // =====================================================
         // STEP 2 -> PRE-BATCH OPERATIONS
         // =====================================================
 
         savePreBatch: async (): Promise<string> => {
-          // This will be implemented with the actual API hook
-          // For now, return a placeholder
-          const state = get();
-
-          // Build facility_order and facility_requisition_map
-          const facility_order = state.working_set.map((ws) => ws.facility_id);
-          const facility_requisition_map: Record<string, string[]> = {};
-          state.working_set.forEach((ws) => {
-            facility_requisition_map[ws.facility_id] = ws.requisition_ids;
-          });
-
-          // The actual save will be done via the useCreatePreBatch hook
-          // This method prepares the data and updates the store
-          set({ is_loading: true, error: null }, false, 'unified/savePreBatch/start');
-
-          // Placeholder - actual implementation will use the hook
-          const preBatchId = crypto.randomUUID();
-          set(
-            {
-              pre_batch_id: preBatchId,
-              is_loading: false,
-            },
-            false,
-            'unified/savePreBatch/success'
+          // Actual persistence is handled by the useCreatePreBatch mutation in
+          // UnifiedWorkflowDialog. This store method exists only to allow external
+          // callers to signal that a pre-batch save should happen; the dialog wires
+          // up the real mutation and calls actions.set({ pre_batch_id }) on success.
+          throw new Error(
+            'savePreBatch must be called via useCreatePreBatch in UnifiedWorkflowDialog, not directly from the store.'
           );
-
-          return preBatchId;
         },
 
         loadPreBatch: async (id: string): Promise<void> => {
-          // This will be implemented with the actual API hook
-          set({ is_loading: true, error: null }, false, 'unified/loadPreBatch/start');
-
-          // Placeholder - actual implementation will use the hook
-          set(
-            {
-              pre_batch_id: id,
-              is_loading: false,
-            },
-            false,
-            'unified/loadPreBatch/success'
-          );
+          // Loading a pre-batch hydrates the store from DB data. Callers should
+          // use usePreBatch(id) query and map fields into the store manually.
+          set({ pre_batch_id: id }, false, 'unified/loadPreBatch/setRef');
         },
 
         // =====================================================
@@ -543,21 +539,26 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         },
 
         autoAssignSlots: () => {
-          // Auto-assign facilities to slots in sequence
-          // This will be enhanced with the actual slot assignment engine
-          const { working_set } = get();
+          const { working_set, vehicle_ids, vehicle_id } = get();
+
+          // Determine primary vehicle for slot key generation
+          const primaryVehicleId = vehicle_ids[0] ?? vehicle_id ?? 'vehicle';
 
           const newAssignments: SlotAssignmentMap = {};
           working_set.forEach((ws, index) => {
-            const slotKey = `slot_${index + 1}`;
+            // slot_key format matches DB constraint: "{vehicleId}-standard-{n}"
+            const slotKey = `${primaryVehicleId}-standard-${index + 1}`;
             newAssignments[slotKey] = {
-              slot_key: slotKey,
-              facility_id: ws.facility_id,
-              facility_name: ws.facility_name,
+              slot_key:        slotKey,
+              facility_id:     ws.facility_id,
+              facility_name:   ws.facility_name,
               requisition_ids: ws.requisition_ids,
-              slot_demand: ws.slot_demand,
-              weight_kg: ws.weight_kg,
-              volume_m3: ws.volume_m3,
+              slot_demand:     ws.slot_demand,
+              weight_kg:       ws.weight_kg,
+              volume_m3:       ws.volume_m3,
+              tier_name:       'standard',
+              tier_order:      1,
+              slot_number:     index + 1,
             };
           });
 
@@ -658,15 +659,17 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             ? await getRoadRoute(waypoints, ai_optimization_options.fastest_route ? 'balanced' : 'short')
             : null;
 
+          let routeFallbackUsed = false;
+
           if (roadResult) {
             roadGeometry = roadResult.geometry;
             totalDistance = roadResult.roadDistanceKm;
-            // Use road travel time + 20 min per stop + 15 min loading
             const serviceTimeMin = optimizedFacilities.length * 20;
             estimatedDuration = Math.round(roadResult.roadTimeMinutes + serviceTimeMin + 15);
           } else {
-            // Fallback to straight-line calculation
-            const straightCoords: [number, number][] = waypoints.map(w => [w.lat, w.lng]);
+            // Straight-line fallback — coordinates must be [lng, lat] for GeoJSON convention
+            routeFallbackUsed = true;
+            const straightCoords: [number, number][] = waypoints.map(w => [w.lng, w.lat]);
             if (straightCoords.length >= 2) {
               totalDistance = calculateRouteDistance(straightCoords);
             }
@@ -680,7 +683,12 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               route_geometry: roadGeometry,
               total_distance_km: Math.round(totalDistance * 100) / 100,
               estimated_duration_min: estimatedDuration,
+              routing_fallback_used: routeFallbackUsed,
               is_loading: false,
+              // Warn user if routing API was unavailable
+              error: routeFallbackUsed
+                ? 'Road routing unavailable — distances estimated using straight-line calculation. ETAs may be inaccurate.'
+                : null,
             },
             false,
             'unified/optimizeRoute/success'
@@ -704,26 +712,12 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         // =====================================================
 
         confirmAndCreateBatch: async (): Promise<string> => {
-          set({ is_loading: true, error: null }, false, 'unified/confirmAndCreateBatch/start');
-
-          // This will be implemented with the actual API hook
-          // Placeholder - actual implementation will:
-          // 1. Create delivery_batch
-          // 2. Update pre_batch status to 'converted'
-          // 3. Link pre_batch to delivery_batch
-
-          const batchId = crypto.randomUUID();
-
-          set(
-            {
-              final_batch_id: batchId,
-              is_loading: false,
-            },
-            false,
-            'unified/confirmAndCreateBatch/success'
+          // Actual batch creation is handled by useConvertPreBatchToBatch in
+          // UnifiedWorkflowDialog which has access to React Query context.
+          // This stub exists only to satisfy the interface contract.
+          throw new Error(
+            'confirmAndCreateBatch must be called via useConvertPreBatchToBatch in UnifiedWorkflowDialog, not directly from the store.'
           );
-
-          return batchId;
         },
 
         // =====================================================
@@ -773,20 +767,30 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               return hasScheduleDetails && state.working_set.length > 0;
             }
 
-            case 3:
-              // Step 3: Must have batch name and at least one vehicle committed
+            case 3: {
+              // Step 3: All facilities in working_set must have packaging defined
+              if (state.working_set.length === 0) return false;
+              return state.working_set.every(
+                (ws) =>
+                  state.facility_packaging[ws.facility_id] !== undefined &&
+                  state.facility_packaging[ws.facility_id].packages.length > 0
+              );
+            }
+
+            case 4:
+              // Step 4: Must have batch name and at least one vehicle committed
               return (
                 state.batch_name !== null &&
                 state.batch_name.trim() !== '' &&
                 (state.vehicle_ids.length > 0 || state.vehicle_id !== null)
               );
 
-            case 4:
-              // Step 4: Must have optimized route
+            case 5:
+              // Step 5: Must have optimized route
               return state.optimized_route.length > 0;
 
-            case 5:
-              // Step 5: Review step - always can proceed (to submit)
+            case 6:
+              // Step 6: Review step - always can proceed (to submit)
               return true;
 
             default:
@@ -830,7 +834,21 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               }
               break;
 
-            case 3:
+            case 3: {
+              const pendingFacilities = state.working_set.filter(
+                (ws) =>
+                  !state.facility_packaging[ws.facility_id] ||
+                  state.facility_packaging[ws.facility_id].packages.length === 0
+              );
+              if (pendingFacilities.length > 0) {
+                errors.push(
+                  `${pendingFacilities.length} ${pendingFacilities.length === 1 ? 'facility' : 'facilities'} still need packaging defined`
+                );
+              }
+              break;
+            }
+
+            case 4:
               if (!state.batch_name || state.batch_name.trim() === '') {
                 errors.push('Batch name is required');
               }
@@ -839,7 +857,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               }
               break;
 
-            case 4:
+            case 5:
               if (state.optimized_route.length === 0) {
                 errors.push('Route optimization is required');
               }
@@ -889,6 +907,8 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
           estimated_duration_min: state.estimated_duration_min,
           pre_batch_id: state.pre_batch_id,
           final_batch_id: state.final_batch_id,
+          facility_packaging: state.facility_packaging,
+          routing_fallback_used: state.routing_fallback_used,
         }),
       }
     ),
@@ -991,16 +1011,24 @@ export const useCanProceed = () =>
       }
 
       case 3:
+        if (state.working_set.length === 0) return false;
+        return state.working_set.every(
+          (ws) =>
+            state.facility_packaging[ws.facility_id] !== undefined &&
+            state.facility_packaging[ws.facility_id].packages.length > 0
+        );
+
+      case 4:
         return (
           state.batch_name !== null &&
           state.batch_name.trim() !== '' &&
           state.vehicle_id !== null
         );
 
-      case 4:
+      case 5:
         return state.optimized_route.length > 0;
 
-      case 5:
+      case 6:
         return true;
 
       default:
@@ -1043,7 +1071,19 @@ export const useValidationErrors = () =>
         }
         break;
 
-      case 3:
+      case 3: {
+        const pending = state.working_set.filter(
+          (ws) =>
+            !state.facility_packaging[ws.facility_id] ||
+            state.facility_packaging[ws.facility_id].packages.length === 0
+        );
+        if (pending.length > 0) {
+          errors.push(`${pending.length} ${pending.length === 1 ? 'facility' : 'facilities'} still need packaging defined`);
+        }
+        break;
+      }
+
+      case 4:
         if (!state.batch_name || state.batch_name.trim() === '') {
           errors.push('Batch name is required');
         }
@@ -1052,7 +1092,7 @@ export const useValidationErrors = () =>
         }
         break;
 
-      case 4:
+      case 5:
         if (state.optimized_route.length === 0) {
           errors.push('Route optimization is required');
         }
@@ -1099,6 +1139,7 @@ export const useWorkflowActions = () => {
       setParsedFacilities: state.setParsedFacilities,
       updateParsedFacility: state.updateParsedFacility,
       setPolicyContext: state.setPolicyContext,
+      setFacilityPackaging: state.setFacilityPackaging,
       savePreBatch: state.savePreBatch,
       loadPreBatch: state.loadPreBatch,
       // Step 3
