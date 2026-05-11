@@ -70,12 +70,14 @@ export function useNotifications() {
 
   const markAsRead = useMutation({
     mutationFn: async (notificationId: string) => {
-      const { error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      let query = supabase
         .from('notifications')
         .update({ read: true })
         .eq('id', notificationId)
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id ?? '');
-
+        .eq('user_id', user?.id ?? '');
+      if (workspaceId) query = query.or(`workspace_id.eq.${workspaceId},workspace_id.is.null`);
+      const { error } = await query;
       if (error) throw error;
     },
     onSuccess: () => {

@@ -245,6 +245,7 @@ export function useDeletePreBatch() {
 
 export function useUpdatePreBatchStatus() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async ({
@@ -265,6 +266,7 @@ export function useUpdatePreBatchStatus() {
         .from('scheduler_pre_batches')
         .update(updates)
         .eq('id', id)
+        .eq('workspace_id', workspaceId!)
         .select()
         .single();
 
@@ -296,6 +298,7 @@ export function useUpdatePreBatchStatus() {
 
 export function useConvertPreBatchToBatch() {
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   return useMutation({
     mutationFn: async (payload: ConvertPreBatchPayload) => {
@@ -304,6 +307,7 @@ export function useConvertPreBatchToBatch() {
         .from('scheduler_pre_batches')
         .select('*')
         .eq('id', payload.preBatchId)
+        .eq('workspace_id', workspaceId!)
         .single();
 
       if (fetchError) throw fetchError;
@@ -392,7 +396,8 @@ export function useConvertPreBatchToBatch() {
             assigned_to_batch_at: new Date().toISOString(),
             updated_at:           new Date().toISOString(),
           })
-          .in('id', allRequisitionIds);
+          .in('id', allRequisitionIds)
+          .eq('workspace_id', preBatch.workspace_id);
 
         if (reqError) {
           // Rollback both batch and pre-batch update
@@ -418,7 +423,8 @@ export function useConvertPreBatchToBatch() {
             updated_at:           new Date().toISOString(),
           })
           .in('facility_id', facilityIds)
-          .eq('status', 'ready_for_dispatch');
+          .eq('status', 'ready_for_dispatch')
+          .eq('workspace_id', preBatch.workspace_id);
 
         if (reqError) {
           await Promise.all([
@@ -441,6 +447,7 @@ export function useConvertPreBatchToBatch() {
           .from('invoices')
           .select('id')
           .in('requisition_id', allRequisitionIds)
+          .eq('workspace_id', preBatch.workspace_id)
           .not('status', 'in', '("completed","cancelled")');
 
         if (!invFetchError && linkedInvoices && linkedInvoices.length > 0) {
@@ -450,7 +457,8 @@ export function useConvertPreBatchToBatch() {
           const { error: invUpdateError } = await supabase
             .from('invoices')
             .update({ status: 'dispatched', updated_at: new Date().toISOString() })
-            .in('id', invoiceIds);
+            .in('id', invoiceIds)
+            .eq('workspace_id', preBatch.workspace_id);
 
           if (invUpdateError) {
             // Non-fatal: batch and requisitions are committed; log and surface warning

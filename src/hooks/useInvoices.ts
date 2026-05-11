@@ -529,15 +529,17 @@ export function useInvoicesStats() {
 // ========================================
 
 export function useInvoiceByRequisitionId(requisitionId: string | undefined) {
+  const { workspaceId } = useWorkspace();
   return useQuery({
-    queryKey: ['invoices', 'by-requisition', requisitionId],
-    enabled: !!requisitionId,
+    queryKey: ['invoices', 'by-requisition', workspaceId, requisitionId],
+    enabled: !!requisitionId && !!workspaceId,
     queryFn: async () => {
-      if (!requisitionId) return null;
+      if (!requisitionId || !workspaceId) return null;
       const { data, error } = await supabase
         .from('invoices')
         .select('id, invoice_number, status')
         .eq('requisition_id', requisitionId)
+        .eq('workspace_id', workspaceId)
         .maybeSingle();
       if (error) throw error;
       return data;
