@@ -127,7 +127,7 @@ export function useMyInvitations() {
       if (!user?.email) return [];
 
       const { data, error } = await supabase
-        .from('user_invitations')
+        .from('user_invitations') // isolation-ok — intentionally cross-workspace: fetches invites sent to this email before workspace membership exists
         .select('*')
         .eq('email', user.email)
         .eq('status', 'pending')
