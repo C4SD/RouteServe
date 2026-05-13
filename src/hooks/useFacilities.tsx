@@ -255,7 +255,7 @@ export function useCreateFacility() {
       const dbFacility = mapFacilityToDb(facility, workspaceId);
 
       const { data, error } = await supabase
-        .from('facilities')
+        .from('facilities') // isolation-ok — workspace_id set inside mapFacilityToDb()
         .insert(dbFacility)
         .select()
         .single();
