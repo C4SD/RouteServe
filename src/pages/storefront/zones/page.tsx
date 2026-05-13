@@ -1,15 +1,20 @@
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Bot } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { ZoneTabContent } from './components/ZoneTabContent';
 import { ServiceAreaTabContent } from './components/ServiceAreaTabContent';
 import { RouteManagementTabContent } from './components/RouteManagementTabContent';
 import { FacilityTableView } from './components/FacilityTableView';
+import { OperationsCopilotWizard } from './components/copilot/OperationsCopilotWizard';
 
 const VALID_TABS = ['zones', 'service-areas', 'routes', 'facility-audit'] as const;
 type TabValue = (typeof VALID_TABS)[number];
 
 export default function ZonesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const tabParam = searchParams.get('tab') as TabValue | null;
   const activeTab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'zones';
 
@@ -24,12 +29,20 @@ export default function ZonesPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Zones & Logistics</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage zones, service areas, and delivery routes
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Zones & Logistics</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage zones, service areas, and delivery routes
+          </p>
+        </div>
+        <Button onClick={() => setCopilotOpen(true)} className="gap-2 shrink-0">
+          <Bot className="h-4 w-4" />
+          Operations Copilot
+        </Button>
       </div>
+
+      <OperationsCopilotWizard open={copilotOpen} onOpenChange={setCopilotOpen} />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-4">

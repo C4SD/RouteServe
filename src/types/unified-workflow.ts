@@ -12,7 +12,9 @@ import type { TimeWindow, Priority, RoutePoint } from './scheduler';
 // WORKFLOW STEP TYPES
 // =====================================================
 
-export type UnifiedWorkflowStep = 1 | 2 | 3 | 4 | 5 | 6;
+export type UnifiedWorkflowStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export type ScheduleMode = 'manual' | 'copilot';
 
 export type SourceMethod = 'ready' | 'upload' | 'manual' | 'service_policy';
 
@@ -259,7 +261,10 @@ export interface UnifiedWorkflowState {
   is_loading: boolean;
   error: string | null;
 
-  // Step 1: Source Selection
+  // Step 1: Schedule Mode Selection
+  schedule_mode: ScheduleMode | null;
+
+  // Step 2: Source Selection
   source_method: SourceMethod | null;
   source_sub_option: SourceSubOption | null;
 
@@ -408,7 +413,10 @@ export interface UnifiedWorkflowActions {
   goToStep: (step: UnifiedWorkflowStep) => void;
   resetWorkflow: () => void;
 
-  // Step 1: Source
+  // Step 1: Schedule Mode
+  setScheduleMode: (mode: ScheduleMode) => void;
+
+  // Step 2: Source
   setSourceMethod: (method: SourceMethod) => void;
   setSourceSubOption: (option: SourceSubOption | null) => void;
 

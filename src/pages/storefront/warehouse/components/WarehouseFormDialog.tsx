@@ -17,11 +17,14 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Package, Zap, ZapOff, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Package, Zap, ZapOff, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import type { Warehouse, WarehouseFormData } from '@/types/warehouse';
 import { STORAGE_CONDITIONS, WAREHOUSE_CAPABILITIES } from '@/types/warehouse';
 import { useCreateWarehouse, useUpdateWarehouse, useWarehouses } from '@/hooks/useWarehouses';
+import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 // ─── Warehouse schema (root node) ────────────────────────────────────────────
 const warehouseSchema = z.object({
@@ -80,6 +83,8 @@ interface WarehouseFormDialogProps {
 export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultParentId }: WarehouseFormDialogProps) {
   const createWarehouse = useCreateWarehouse();
   const updateWarehouse = useUpdateWarehouse();
+  const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
   const isEditing = !!warehouse;
   const isStoreMode = !!defaultParentId || (isEditing && !!warehouse?.parent_id);
 
@@ -100,6 +105,8 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
 
   // Inline add-store state
   const [showAddStore, setShowAddStore] = useState(false);
+  // Stores staged for creation (create mode only — flushed after warehouse is saved)
+  const [pendingStores, setPendingStores] = useState<InlineStoreValues[]>([]);
 
   // ─── Warehouse form ──────────────────────────────────────────────────────
   const warehouseForm = useForm<WarehouseFormValues>({
@@ -196,6 +203,7 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
       }
     }
     setShowAddStore(false);
+    setPendingStores([]);
   }, [open, warehouse, isStoreMode]);
 
   // ─── Total capacity (warehouse form) ────────────────────────────────────
@@ -229,7 +237,29 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
       if (isEditing && warehouse) {
         await updateWarehouse.mutateAsync({ id: warehouse.id, data: formData });
       } else {
-        await createWarehouse.mutateAsync(formData);
+        const newWarehouse = await createWarehouse.mutateAsync(formData);
+        // Flush any stores staged during create mode
+        if (pendingStores.length > 0 && newWarehouse?.id && workspaceId) {
+          for (const store of pendingStores) {
+            await supabase.from('warehouses').insert({
+              name: store.name,
+              code: store.code,
+              parent_id: newWarehouse.id,
+              storage_mode: store.storage_mode,
+              capabilities: {
+                can_receive: store.can_receive,
+                can_dispatch: store.can_dispatch,
+                can_store: store.can_store,
+              },
+              storage_conditions: store.storage_conditions,
+              total_capacity_m3: store.total_capacity_m3 || null,
+              workspace_id: workspaceId,
+              warehouse_type: 'zonal',
+              is_active: true,
+            });
+          }
+          queryClient.invalidateQueries({ queryKey: ['warehouses'] });
+        }
       }
       onOpenChange(false);
     } catch {
@@ -266,27 +296,32 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
 
   // ─── Submit: inline add-store ─────────────────────────────────────────────
   const onSubmitInlineStore = async (values: InlineStoreValues) => {
-    if (!warehouse) return;
-    const formData: WarehouseFormData = {
-      name: values.name,
-      code: values.code,
-      parent_id: warehouse.id,
-      storage_mode: values.storage_mode,
-      capabilities: {
-        can_receive: values.can_receive,
-        can_dispatch: values.can_dispatch,
-        can_store: values.can_store,
-      },
-      storage_conditions: values.storage_conditions,
-      total_capacity_m3: values.total_capacity_m3,
-    };
-    try {
-      await createWarehouse.mutateAsync(formData);
-      inlineStoreForm.reset();
-      setShowAddStore(false);
-    } catch {
-      // Error handled by mutation
+    if (isEditing && warehouse) {
+      // Edit mode: save immediately as a child warehouse
+      const formData: WarehouseFormData = {
+        name: values.name,
+        code: values.code,
+        parent_id: warehouse.id,
+        storage_mode: values.storage_mode,
+        capabilities: {
+          can_receive: values.can_receive,
+          can_dispatch: values.can_dispatch,
+          can_store: values.can_store,
+        },
+        storage_conditions: values.storage_conditions,
+        total_capacity_m3: values.total_capacity_m3,
+      };
+      try {
+        await createWarehouse.mutateAsync(formData);
+      } catch {
+        return;
+      }
+    } else {
+      // Create mode: stage for later — flush after parent warehouse is saved
+      setPendingStores(prev => [...prev, values]);
     }
+    inlineStoreForm.reset();
+    setShowAddStore(false);
   };
 
   const isPending = createWarehouse.isPending || updateWarehouse.isPending;
@@ -601,96 +636,136 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
 
               <Separator />
 
-              {/* Stores section (edit only) */}
-              {isEditing && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+              {/* Stores section (create + edit) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
                     <h3 className="text-sm font-semibold text-muted-foreground">Stores</h3>
+                    {!isEditing && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Stores are sub-nodes of this warehouse. You can add them now or after saving.
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setShowAddStore(v => !v)}
+                  >
+                    {showAddStore ? (
+                      <><ChevronDown className="h-3.5 w-3.5 mr-1" />Cancel</>
+                    ) : (
+                      <><Plus className="h-3.5 w-3.5 mr-1" />Add Store</>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Existing stores (edit mode) */}
+                {isEditing && existingStores.length > 0 && (
+                  <div className="space-y-1.5">
+                    {existingStores.map(store => (
+                      <div
+                        key={store.id}
+                        className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 border text-sm"
+                      >
+                        <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="font-medium truncate flex-1">{store.name}</span>
+                        <Badge variant="outline" className="font-mono text-[10px]">{store.code}</Badge>
+                        {store.storage_mode === 'active' ? (
+                          <Badge className="text-[10px] px-1.5 bg-green-100 text-green-800 gap-1">
+                            <Zap className="h-2.5 w-2.5" />Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 gap-1">
+                            <ZapOff className="h-2.5 w-2.5" />Passive
+                          </Badge>
+                        )}
+                        {store.total_capacity_m3 && (
+                          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                            {store.total_capacity_m3.toLocaleString()} m³
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pending stores (create mode) */}
+                {!isEditing && pendingStores.length > 0 && (
+                  <div className="space-y-1.5">
+                    {pendingStores.map((store, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 border text-sm"
+                      >
+                        <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="font-medium truncate flex-1">{store.name}</span>
+                        <Badge variant="outline" className="font-mono text-[10px]">{store.code}</Badge>
+                        {store.storage_mode === 'active' ? (
+                          <Badge className="text-[10px] px-1.5 bg-green-100 text-green-800 gap-1">
+                            <Zap className="h-2.5 w-2.5" />Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 gap-1">
+                            <ZapOff className="h-2.5 w-2.5" />Passive
+                          </Badge>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPendingStores(prev => prev.filter((_, j) => j !== i))}
+                          className="ml-auto text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Inline add-store form */}
+                {showAddStore && (
+                  <div className="rounded-lg border-2 border-dashed p-4 space-y-5 bg-muted/20">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">New Store</p>
+
+                    <StoreFields
+                      nameReg={inlineStoreForm.register('name')}
+                      codeReg={inlineStoreForm.register('code')}
+                      canReceive={inlineStoreForm.watch('can_receive')}
+                      setCanReceive={v => inlineStoreForm.setValue('can_receive', v)}
+                      canDispatch={inlineStoreForm.watch('can_dispatch')}
+                      setCanDispatch={v => inlineStoreForm.setValue('can_dispatch', v)}
+                      canStore={inlineStoreForm.watch('can_store')}
+                      setCanStore={v => inlineStoreForm.setValue('can_store', v)}
+                      conditions={inlineStoreForm.watch('storage_conditions') || []}
+                      setConditions={v => inlineStoreForm.setValue('storage_conditions', v)}
+                      storageMode={inlineStoreForm.watch('storage_mode')}
+                      setStorageMode={v => inlineStoreForm.setValue('storage_mode', v)}
+                      capacityReg={inlineStoreForm.register('total_capacity_m3')}
+                      errors={inlineStoreForm.formState.errors}
+                      idPrefix="inline-"
+                    />
+
                     <Button
                       type="button"
-                      variant="outline"
                       size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setShowAddStore(v => !v)}
+                      onClick={inlineStoreForm.handleSubmit(onSubmitInlineStore)}
+                      disabled={isEditing && createWarehouse.isPending}
+                      className="w-full"
                     >
-                      {showAddStore ? (
-                        <><ChevronDown className="h-3.5 w-3.5 mr-1" />Cancel</>
-                      ) : (
-                        <><Plus className="h-3.5 w-3.5 mr-1" />Add Store</>
-                      )}
+                      {isEditing && createWarehouse.isPending ? 'Adding...' : 'Add Store'}
                     </Button>
                   </div>
+                )}
 
-                  {/* Existing stores */}
-                  {existingStores.length > 0 && (
-                    <div className="space-y-1.5">
-                      {existingStores.map(store => (
-                        <div
-                          key={store.id}
-                          className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 border text-sm"
-                        >
-                          <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="font-medium truncate flex-1">{store.name}</span>
-                          <Badge variant="outline" className="font-mono text-[10px]">{store.code}</Badge>
-                          {store.storage_mode === 'active' ? (
-                            <Badge className="text-[10px] px-1.5 bg-green-100 text-green-800 gap-1">
-                              <Zap className="h-2.5 w-2.5" />Active
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 gap-1">
-                              <ZapOff className="h-2.5 w-2.5" />Passive
-                            </Badge>
-                          )}
-                          {store.total_capacity_m3 && (
-                            <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                              {store.total_capacity_m3.toLocaleString()} m³
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Inline add-store form */}
-                  {showAddStore && (
-                    <div className="rounded-lg border-2 border-dashed p-4 space-y-5 bg-muted/20">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">New Store</p>
-
-                      <StoreFields
-                        nameReg={inlineStoreForm.register('name')}
-                        codeReg={inlineStoreForm.register('code')}
-                        canReceive={inlineStoreForm.watch('can_receive')}
-                        setCanReceive={v => inlineStoreForm.setValue('can_receive', v)}
-                        canDispatch={inlineStoreForm.watch('can_dispatch')}
-                        setCanDispatch={v => inlineStoreForm.setValue('can_dispatch', v)}
-                        canStore={inlineStoreForm.watch('can_store')}
-                        setCanStore={v => inlineStoreForm.setValue('can_store', v)}
-                        conditions={inlineStoreForm.watch('storage_conditions') || []}
-                        setConditions={v => inlineStoreForm.setValue('storage_conditions', v)}
-                        storageMode={inlineStoreForm.watch('storage_mode')}
-                        setStorageMode={v => inlineStoreForm.setValue('storage_mode', v)}
-                        capacityReg={inlineStoreForm.register('total_capacity_m3')}
-                        errors={inlineStoreForm.formState.errors}
-                        idPrefix="inline-"
-                      />
-
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={inlineStoreForm.handleSubmit(onSubmitInlineStore)}
-                        disabled={createWarehouse.isPending}
-                        className="w-full"
-                      >
-                        {createWarehouse.isPending ? 'Adding...' : 'Add Store'}
-                      </Button>
-                    </div>
-                  )}
-
-                  {existingStores.length === 0 && !showAddStore && (
-                    <p className="text-sm text-muted-foreground italic">No stores added yet</p>
-                  )}
-                </div>
-              )}
+                {isEditing && existingStores.length === 0 && !showAddStore && (
+                  <p className="text-sm text-muted-foreground italic">No stores added yet</p>
+                )}
+                {!isEditing && pendingStores.length === 0 && !showAddStore && (
+                  <p className="text-sm text-muted-foreground italic">No stores added — optional</p>
+                )}
+              </div>
 
               <Separator />
 

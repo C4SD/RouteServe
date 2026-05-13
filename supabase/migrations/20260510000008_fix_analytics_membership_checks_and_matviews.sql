@@ -6,6 +6,25 @@
 -- STEP 1: Add membership checks to existing public analytics wrapper functions
 -- ===========================================================================
 
+-- Drop existing functions whose return types may differ from those defined below.
+DROP FUNCTION IF EXISTS public.get_delivery_kpis(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_top_vehicles_by_ontime(UUID, INTEGER);
+DROP FUNCTION IF EXISTS public.get_driver_kpis(UUID);
+DROP FUNCTION IF EXISTS public.get_top_drivers(UUID, INTEGER);
+DROP FUNCTION IF EXISTS public.get_vehicle_kpis(UUID);
+DROP FUNCTION IF EXISTS public.get_vehicles_needing_maintenance(UUID);
+DROP FUNCTION IF EXISTS public.get_cost_kpis(UUID);
+DROP FUNCTION IF EXISTS public.get_vehicle_costs(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_driver_costs(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_dashboard_summary(UUID);
+DROP FUNCTION IF EXISTS public.get_vehicle_payload_utilization(UUID, DATE, DATE, UUID);
+DROP FUNCTION IF EXISTS public.get_driver_utilization(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_route_efficiency(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_program_performance(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_facility_coverage(UUID, DATE, DATE, TEXT);
+DROP FUNCTION IF EXISTS public.get_facility_coverage(UUID, DATE, DATE);
+DROP FUNCTION IF EXISTS public.get_cost_by_program(UUID, DATE, DATE);
+
 CREATE OR REPLACE FUNCTION public.get_delivery_kpis(
   workspace_id UUID,
   start_date DATE DEFAULT NULL,

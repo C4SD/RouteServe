@@ -15,6 +15,7 @@ import type {
   UnifiedWorkflowState,
   UnifiedWorkflowActions,
   UnifiedWorkflowStore,
+  ScheduleMode,
   SourceMethod,
   SourceSubOption,
   StartLocationType,
@@ -107,7 +108,10 @@ const initialState: UnifiedWorkflowState = {
   is_loading: false,
   error: null,
 
-  // Step 1: Source
+  // Step 1: Schedule Mode
+  schedule_mode: null,
+
+  // Step 2: Source
   source_method: null,
   source_sub_option: null,
 
@@ -179,7 +183,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
 
         nextStep: () => {
           const { current_step, canProceedToNextStep } = get();
-          if (canProceedToNextStep() && current_step < 6) {
+          if (canProceedToNextStep() && current_step < 7) {
             set(
               { current_step: (current_step + 1) as UnifiedWorkflowStep },
               false,
@@ -208,7 +212,15 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         },
 
         // =====================================================
-        // STEP 1: SOURCE SELECTION
+        // STEP 1: SCHEDULE MODE SELECTION
+        // =====================================================
+
+        setScheduleMode: (mode: ScheduleMode) => {
+          set({ schedule_mode: mode }, false, 'unified/setScheduleMode');
+        },
+
+        // =====================================================
+        // STEP 2: SOURCE SELECTION
         // =====================================================
 
         setSourceMethod: (method: SourceMethod) => {
@@ -729,24 +741,27 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
 
           switch (state.current_step) {
             case 1:
-              // Step 1: Must have source method selected
+              // Step 1: Must have schedule mode selected
+              return state.schedule_mode !== null;
+
+            case 2:
+              // Step 2: Must have source method selected
               if (!state.source_method) return false;
-              // If 'ready' source, must have sub-option
               if (state.source_method === 'ready' && !state.source_sub_option) {
                 return false;
               }
-              // service_policy needs no sub-option — proceed directly
               return true;
 
-            case 2: {
-              // Step 2: Must have schedule details and working set
+            case 3: {
+              // Step 3: Copilot path has no further steps (Coming Soon)
+              if (state.schedule_mode === 'copilot') return false;
+              // Manual: Must have schedule details and working set
               const hasScheduleDetails =
                 state.schedule_title !== null &&
                 state.schedule_title.trim() !== '' &&
                 state.start_location_id !== null &&
                 state.planned_date !== null;
 
-              // For service_policy: also require cluster selection
               if (state.source_method === 'service_policy') {
                 return (
                   hasScheduleDetails &&
@@ -754,21 +769,14 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
                   state.working_set.length > 0
                 );
               }
-
-              // For upload method, check parsed facilities AND working set
               if (state.source_method === 'upload') {
-                return (
-                  hasScheduleDetails &&
-                  state.working_set.length > 0
-                );
+                return hasScheduleDetails && state.working_set.length > 0;
               }
-
-              // For ready/manual, check working set
               return hasScheduleDetails && state.working_set.length > 0;
             }
 
-            case 3: {
-              // Step 3: All facilities in working_set must have packaging defined
+            case 4: {
+              // Step 4: All facilities must have packaging defined
               if (state.working_set.length === 0) return false;
               return state.working_set.every(
                 (ws) =>
@@ -777,20 +785,20 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               );
             }
 
-            case 4:
-              // Step 4: Must have batch name and at least one vehicle committed
+            case 5:
+              // Step 5: Must have batch name and at least one vehicle committed
               return (
                 state.batch_name !== null &&
                 state.batch_name.trim() !== '' &&
                 (state.vehicle_ids.length > 0 || state.vehicle_id !== null)
               );
 
-            case 5:
-              // Step 5: Must have optimized route
+            case 6:
+              // Step 6: Must have optimized route
               return state.optimized_route.length > 0;
 
-            case 6:
-              // Step 6: Review step - always can proceed (to submit)
+            case 7:
+              // Step 7: Review — always can proceed (to submit)
               return true;
 
             default:
@@ -804,6 +812,12 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
 
           switch (state.current_step) {
             case 1:
+              if (!state.schedule_mode) {
+                errors.push('Please select a scheduling mode');
+              }
+              break;
+
+            case 2:
               if (!state.source_method) {
                 errors.push('Please select a source method');
               }
@@ -812,7 +826,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               }
               break;
 
-            case 2:
+            case 3:
               if (!state.schedule_title || state.schedule_title.trim() === '') {
                 errors.push('Schedule title is required');
               }
@@ -834,7 +848,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               }
               break;
 
-            case 3: {
+            case 4: {
               const pendingFacilities = state.working_set.filter(
                 (ws) =>
                   !state.facility_packaging[ws.facility_id] ||
@@ -848,7 +862,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               break;
             }
 
-            case 4:
+            case 5:
               if (!state.batch_name || state.batch_name.trim() === '') {
                 errors.push('Batch name is required');
               }
@@ -857,7 +871,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               }
               break;
 
-            case 5:
+            case 6:
               if (state.optimized_route.length === 0) {
                 errors.push('Route optimization is required');
               }
@@ -884,6 +898,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         // Selectively persist (exclude files and loading state)
         partialize: (state) => ({
           current_step: state.current_step,
+          schedule_mode: state.schedule_mode,
           source_method: state.source_method,
           source_sub_option: state.source_sub_option,
           schedule_title: state.schedule_title,
@@ -986,13 +1001,17 @@ export const useCanProceed = () =>
     // Inline validation logic to avoid calling get() which can cause loops
     switch (state.current_step) {
       case 1:
+        return state.schedule_mode !== null;
+
+      case 2:
         if (!state.source_method) return false;
         if (state.source_method === 'ready' && !state.source_sub_option) {
           return false;
         }
         return true;
 
-      case 2: {
+      case 3: {
+        if (state.schedule_mode === 'copilot') return false;
         const hasScheduleDetails =
           state.schedule_title !== null &&
           state.schedule_title.trim() !== '' &&
@@ -1010,7 +1029,7 @@ export const useCanProceed = () =>
         return hasScheduleDetails && state.working_set.length > 0;
       }
 
-      case 3:
+      case 4:
         if (state.working_set.length === 0) return false;
         return state.working_set.every(
           (ws) =>
@@ -1018,17 +1037,17 @@ export const useCanProceed = () =>
             state.facility_packaging[ws.facility_id].packages.length > 0
         );
 
-      case 4:
+      case 5:
         return (
           state.batch_name !== null &&
           state.batch_name.trim() !== '' &&
-          state.vehicle_id !== null
+          (state.vehicle_ids.length > 0 || state.vehicle_id !== null)
         );
 
-      case 5:
+      case 6:
         return state.optimized_route.length > 0;
 
-      case 6:
+      case 7:
         return true;
 
       default:
@@ -1044,6 +1063,12 @@ export const useValidationErrors = () =>
 
     switch (state.current_step) {
       case 1:
+        if (!state.schedule_mode) {
+          errors.push('Please select a scheduling mode');
+        }
+        break;
+
+      case 2:
         if (!state.source_method) {
           errors.push('Please select a source method');
         }
@@ -1052,26 +1077,28 @@ export const useValidationErrors = () =>
         }
         break;
 
-      case 2:
-        if (!state.schedule_title || state.schedule_title.trim() === '') {
-          errors.push('Schedule title is required');
-        }
-        if (!state.start_location_id) {
-          errors.push('Start location is required');
-        }
-        if (!state.planned_date) {
-          errors.push('Planned date is required');
-        }
-        if (state.working_set.length === 0) {
-          if (state.source_method === 'upload') {
-            errors.push('Please upload a file and add matched facilities to the schedule');
-          } else {
-            errors.push('Please add at least one facility to the schedule');
+      case 3:
+        if (state.schedule_mode !== 'copilot') {
+          if (!state.schedule_title || state.schedule_title.trim() === '') {
+            errors.push('Schedule title is required');
+          }
+          if (!state.start_location_id) {
+            errors.push('Start location is required');
+          }
+          if (!state.planned_date) {
+            errors.push('Planned date is required');
+          }
+          if (state.working_set.length === 0) {
+            if (state.source_method === 'upload') {
+              errors.push('Please upload a file and add matched facilities to the schedule');
+            } else {
+              errors.push('Please add at least one facility to the schedule');
+            }
           }
         }
         break;
 
-      case 3: {
+      case 4: {
         const pending = state.working_set.filter(
           (ws) =>
             !state.facility_packaging[ws.facility_id] ||
@@ -1083,7 +1110,7 @@ export const useValidationErrors = () =>
         break;
       }
 
-      case 4:
+      case 5:
         if (!state.batch_name || state.batch_name.trim() === '') {
           errors.push('Batch name is required');
         }
@@ -1092,7 +1119,7 @@ export const useValidationErrors = () =>
         }
         break;
 
-      case 5:
+      case 6:
         if (state.optimized_route.length === 0) {
           errors.push('Route optimization is required');
         }
@@ -1118,6 +1145,8 @@ export const useWorkflowActions = () => {
       goToStep: state.goToStep,
       resetWorkflow: state.resetWorkflow,
       // Step 1
+      setScheduleMode: state.setScheduleMode,
+      // Step 2
       setSourceMethod: state.setSourceMethod,
       setSourceSubOption: state.setSourceSubOption,
       // Step 2

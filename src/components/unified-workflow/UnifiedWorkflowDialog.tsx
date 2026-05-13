@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog';
 
 // Steps
+import { StepScheduleMode } from './steps/StepScheduleMode';
 import { Step1Source } from './steps/Step1Source';
 import { Step2Schedule } from './steps/Step2Schedule';
 import { Step3PackagingCompletion } from './steps/Step3PackagingCompletion';
@@ -54,17 +55,24 @@ import type { FacilityCandidate } from './schedule/SourceOfTruthColumn';
 interface UnifiedWorkflowDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  startStep?: 1 | 2 | 3 | 4 | 5 | 6;
+  startStep?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   preBatchId?: string;
 }
 
-const STEP_LABELS = [
-  { num: 1, label: 'Source' },
-  { num: 2, label: 'Schedule' },
-  { num: 3, label: 'Packaging' },
-  { num: 4, label: 'Batch' },
-  { num: 5, label: 'Route' },
-  { num: 6, label: 'Review' },
+const MANUAL_STEP_LABELS = [
+  { num: 1, label: 'Mode' },
+  { num: 2, label: 'Source' },
+  { num: 3, label: 'Schedule' },
+  { num: 4, label: 'Packaging' },
+  { num: 5, label: 'Batch' },
+  { num: 6, label: 'Route' },
+  { num: 7, label: 'Review' },
+];
+
+const COPILOT_STEP_LABELS = [
+  { num: 1, label: 'Mode' },
+  { num: 2, label: 'Source' },
+  { num: 3, label: 'Copilot' },
 ];
 
 export function UnifiedWorkflowDialog({
@@ -79,6 +87,7 @@ export function UnifiedWorkflowDialog({
   const isLoading = useWorkflowLoading();
 
   // Get specific state slices with shallow comparison
+  const scheduleMode = useUnifiedWorkflowStore((state) => state.schedule_mode);
   const sourceMethod = useUnifiedWorkflowStore((state) => state.source_method);
   const sourceSubOption = useUnifiedWorkflowStore((state) => state.source_sub_option);
   const scheduleTitle = useUnifiedWorkflowStore((state) => state.schedule_title);
@@ -416,9 +425,9 @@ export function UnifiedWorkflowDialog({
     onOpenChange,
   ]);
 
-  // Handle next step — auto-commits suggested vehicles when leaving Step 2
+  // Handle next step — auto-commits suggested vehicles when leaving Schedule step (step 3 manual)
   const handleNextStep = React.useCallback(() => {
-    if (currentStep === 2 && vehicleIds.length === 0) {
+    if (currentStep === 3 && vehicleIds.length === 0) {
       if (suggestedVehicleIds.length > 0) {
         actions.commitVehicles(suggestedVehicleIds);
       } else if (suggestedVehicleId) {
@@ -439,6 +448,14 @@ export function UnifiedWorkflowDialog({
     switch (currentStep) {
       case 1:
         return (
+          <StepScheduleMode
+            scheduleMode={scheduleMode}
+            onScheduleModeChange={actions.setScheduleMode}
+          />
+        );
+
+      case 2:
+        return (
           <Step1Source
             sourceMethod={sourceMethod}
             sourceSubOption={sourceSubOption}
@@ -447,7 +464,22 @@ export function UnifiedWorkflowDialog({
           />
         );
 
-      case 2:
+      case 3:
+        if (scheduleMode === 'copilot') {
+          return (
+            <div className="flex flex-col items-center justify-center gap-4 p-12 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <span className="text-3xl">🚀</span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Scheduling Copilot — Coming Soon</h3>
+                <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+                  The AI copilot for automated dispatch scheduling is under development. Stay tuned for updates.
+                </p>
+              </div>
+            </div>
+          );
+        }
         return (
           <Step2Schedule
             title={scheduleTitle}
@@ -484,7 +516,7 @@ export function UnifiedWorkflowDialog({
           />
         );
 
-      case 3:
+      case 4:
         return (
           <Step3PackagingCompletion
             workingSet={workingSet}
@@ -493,7 +525,7 @@ export function UnifiedWorkflowDialog({
           />
         );
 
-      case 4:
+      case 5:
         return (
           <Step3Batch
             batchName={batchName}
@@ -521,7 +553,7 @@ export function UnifiedWorkflowDialog({
           />
         );
 
-      case 5: {
+      case 6: {
         const startLocation = warehouses.find(w => w.id === startLocationId) || null;
         return (
           <Step4Route
@@ -541,7 +573,7 @@ export function UnifiedWorkflowDialog({
         );
       }
 
-      case 6:
+      case 7:
         return (
           <Step5Review
             sourceMethod={sourceMethod}
@@ -568,6 +600,7 @@ export function UnifiedWorkflowDialog({
     }
   }, [
     currentStep,
+    scheduleMode,
     sourceMethod,
     sourceSubOption,
     scheduleTitle,
@@ -606,8 +639,12 @@ export function UnifiedWorkflowDialog({
     handleOptimizeRoute,
   ]);
 
+  // Dynamic step labels based on schedule mode
+  const stepLabels = scheduleMode === 'copilot' ? COPILOT_STEP_LABELS : MANUAL_STEP_LABELS;
+  const totalSteps = stepLabels.length;
+
   // Progress percentage
-  const progressPct = (currentStep / 6) * 100;
+  const progressPct = (currentStep / totalSteps) * 100;
 
   const handleOpenChange = React.useCallback(
     (isOpen: boolean) => {
@@ -628,7 +665,7 @@ export function UnifiedWorkflowDialog({
 
           {/* Step Indicator */}
           <div className="flex items-center gap-2 mt-4">
-            {STEP_LABELS.map((step, idx) => (
+            {stepLabels.map((step, idx) => (
               <React.Fragment key={step.num}>
                 <div
                   className={cn(
@@ -647,7 +684,7 @@ export function UnifiedWorkflowDialog({
                   )}
                   <span className="hidden sm:inline">{step.label}</span>
                 </div>
-                {idx < STEP_LABELS.length - 1 && (
+                {idx < stepLabels.length - 1 && (
                   <div
                     className={cn(
                       'flex-1 h-0.5 rounded',
@@ -681,8 +718,8 @@ export function UnifiedWorkflowDialog({
               Cancel
             </Button>
 
-            {/* Step 2: Save Draft option */}
-            {currentStep === 2 && (
+            {/* Step 3 (manual): Save Draft option */}
+            {currentStep === 3 && scheduleMode === 'manual' && (
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
@@ -697,8 +734,8 @@ export function UnifiedWorkflowDialog({
               </Button>
             )}
 
-            {/* Final step: Confirm */}
-            {currentStep === 6 ? (
+            {/* Copilot Coming Soon step — no navigation forward */}
+            {currentStep === 3 && scheduleMode === 'copilot' ? null : currentStep === 7 ? (
               <Button
                 onClick={handleConfirm}
                 disabled={!canProceed || convertToBatch.isPending}
@@ -712,7 +749,7 @@ export function UnifiedWorkflowDialog({
               </Button>
             ) : (
               <Button onClick={handleNextStep} disabled={!canProceed}>
-                {currentStep === 3 ? 'Continue to Batch' : 'Next'}
+                {currentStep === 4 ? 'Continue to Batch' : 'Next'}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             )}

@@ -276,7 +276,7 @@ export function useAcceptInvitation() {
 }
 
 /**
- * Resend an invitation (revoke and create new)
+ * Resend an invitation (revoke old, create new, send email)
  */
 export function useResendInvitation() {
   const queryClient = useQueryClient();
@@ -288,29 +288,50 @@ export function useResendInvitation() {
       email,
       appRole,
       workspaceRole,
+      workspaceName,
     }: {
       invitationId: string;
       workspaceId: string;
       email: string;
       appRole: string;
       workspaceRole: WorkspaceRole;
+      workspaceName?: string;
     }): Promise<string> => {
-      // First revoke the old invitation
-      await supabase.rpc('revoke_invitation', {
+      // Revoke the old invitation — throw if it fails
+      const { error: revokeError } = await supabase.rpc('revoke_invitation', {
         p_invitation_id: invitationId,
       });
+      if (revokeError) throw revokeError;
 
-      // Then create a new one
+      // Create a fresh invitation
       const { data, error } = await supabase.rpc('invite_user', {
         p_email: email,
         p_workspace_id: workspaceId,
-        p_app_role: appRole,
+        p_role_code: appRole,
         p_workspace_role: workspaceRole,
         p_personal_message: null,
       });
 
-      if (error) {
-        throw error;
+      if (error) throw error;
+
+      // Fetch the new token so we can send the email
+      const { data: invitation } = await supabase
+        .from('pending_invitations_view')
+        .select('invitation_token')
+        .eq('workspace_id', workspaceId)
+        .eq('email', email.toLowerCase())
+        .order('invited_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (invitation?.invitation_token) {
+        await supabase.functions.invoke('invite-user', {
+          body: {
+            email,
+            invitation_token: invitation.invitation_token,
+            workspace_name: workspaceName,
+          },
+        });
       }
 
       return data as string;

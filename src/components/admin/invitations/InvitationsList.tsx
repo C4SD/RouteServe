@@ -90,8 +90,9 @@ export function InvitationsList({ workspaceId }: InvitationsListProps) {
       invitationId: invitation.id,
       workspaceId: invitation.workspace_id,
       email: invitation.email,
-      appRole: invitation.pre_assigned_role,
+      appRole: invitation.role_code,
       workspaceRole: invitation.workspace_role as WorkspaceRole,
+      workspaceName: invitation.workspace_name,
     });
   };
 

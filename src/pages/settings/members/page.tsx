@@ -15,7 +15,7 @@ import {
 } from '@/hooks/settings/useWorkspaceMembers';
 import { useInviteUser, useWorkspaceInvitations, useRevokeInvitation } from '@/hooks/useInvitations';
 import { supabase } from '@/integrations/supabase/client';
-import type { UserInvitation } from '@/types/onboarding';
+import type { UserInvitation, WorkspaceRole } from '@/types/onboarding';
 import {
   Table,
   TableBody,
@@ -60,7 +60,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, ChevronDown, MoreHorizontal, Trash2, UserPlus, Search, ShieldOff, ShieldCheck, Crown, Mail, CheckCircle2, Clock, XCircle, RotateCcw } from 'lucide-react';
+import { Loader2, ChevronDown, MoreHorizontal, Trash2, UserPlus, Search, ShieldOff, ShieldCheck, Crown, Mail, CheckCircle2, Clock, XCircle, RotateCcw, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -78,6 +78,7 @@ export default function SettingsMembersPage() {
   const [memberToRemove, setMemberToRemove] = useState<WorkspaceMemberV2 | null>(null);
   const [memberToToggle, setMemberToToggle] = useState<WorkspaceMemberV2 | null>(null);
   const [invitationToRevoke, setInvitationToRevoke] = useState<UserInvitation | null>(null);
+  const inviteUser = useInviteUser();
 
   const canManageMembers = ability.can('workspace.manage');
   const isOwnerOrAdmin = role === 'owner' || role === 'admin';
@@ -106,6 +107,39 @@ export default function SettingsMembersPage() {
     if (!invitationToRevoke || !workspaceId) return;
     revokeInvitation.mutate({ invitationId: invitationToRevoke.id, workspaceId });
     setInvitationToRevoke(null);
+  };
+
+  const handleReinvite = async (inv: UserInvitation) => {
+    if (!workspaceId) return;
+    try {
+      await inviteUser.mutateAsync({
+        email: inv.email,
+        workspace_id: workspaceId,
+        role_code: inv.role_code,
+        workspace_role: inv.workspace_role as WorkspaceRole,
+      });
+      // Fetch the new token and send the email
+      const { data: pending } = await supabase
+        .from('pending_invitations_view')
+        .select('invitation_token')
+        .eq('workspace_id', workspaceId)
+        .eq('email', inv.email.toLowerCase())
+        .order('invited_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (pending?.invitation_token) {
+        await supabase.functions.invoke('invite-user', {
+          body: {
+            email: inv.email,
+            invitation_token: pending.invitation_token,
+            workspace_name: workspaceName,
+          },
+        });
+      }
+    } catch {
+      // Error toast handled by mutation
+    }
   };
 
   return (
@@ -286,6 +320,8 @@ export default function SettingsMembersPage() {
                       key={inv.id}
                       invitation={inv}
                       onRevoke={() => setInvitationToRevoke(inv)}
+                      onReinvite={canManageMembers ? () => handleReinvite(inv) : undefined}
+                      isReinviting={inviteUser.isPending}
                     />
                   ))}
                 </TableBody>
@@ -398,16 +434,21 @@ const INVITATION_STATUS_CONFIG: Record<string, { label: string; className: strin
 function InvitationRow({
   invitation,
   onRevoke,
+  onReinvite,
+  isReinviting,
 }: {
   invitation: UserInvitation;
   onRevoke: () => void;
+  onReinvite?: () => void;
+  isReinviting?: boolean;
 }) {
   const cfg = INVITATION_STATUS_CONFIG[invitation.status] ?? INVITATION_STATUS_CONFIG.pending;
   const isPending = invitation.status === 'pending';
   const isExpired = isPending && new Date(invitation.expires_at) < new Date();
+  const canReinvite = !isPending || isExpired; // expired or revoked
 
   return (
-    <TableRow className={invitation.status !== 'pending' ? 'opacity-60' : ''}>
+    <TableRow className={!isPending || isExpired ? 'opacity-60' : ''}>
       <TableCell className="font-medium">{invitation.email}</TableCell>
       <TableCell>
         <Badge variant="secondary" className={ROLE_COLORS[invitation.role_code] || ROLE_COLORS.viewer}>
@@ -429,7 +470,7 @@ function InvitationRow({
           : '—'}
       </TableCell>
       <TableCell>
-        {isPending && !isExpired && (
+        {(isPending && !isExpired) || (canReinvite && onReinvite) ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -437,16 +478,25 @@ function InvitationRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={onRevoke}
-              >
-                <XCircle className="h-4 w-4 mr-2" />
-                Revoke
-              </DropdownMenuItem>
+              {canReinvite && onReinvite && (
+                <DropdownMenuItem onClick={onReinvite} disabled={isReinviting}>
+                  {isReinviting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Re-invite
+                </DropdownMenuItem>
+              )}
+              {isPending && !isExpired && (
+                <DropdownMenuItem className="text-destructive" onClick={onRevoke}>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Revoke
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
-        )}
+        ) : null}
       </TableCell>
     </TableRow>
   );
