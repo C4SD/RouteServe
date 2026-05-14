@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   CheckCircle2, XCircle, Clock, ChevronRight, ChevronDown,
   Building2, Layers, MapPin, AlertTriangle, Edit2, Check,
-  RotateCcw, Shield, Route, TrendingUp,
+  RotateCcw, Shield, Route, TrendingUp, ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import type {
   AcceptanceStatus,
   InspectorSelection,
   ConfidenceLevel,
+  SuggestedRouteGroup,
 } from '@/types/operations-copilot';
 
 // ─── Palette (mirrors CopilotReviewMap) ──────────────────────────────────────
@@ -119,12 +120,12 @@ function StructureList({
   const totalZones = result.structures.flatMap(s => s.zones).length;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       {/* Header */}
-      <div className="px-3 py-3 border-b space-y-2">
+      <div className="px-3 py-3 border-b space-y-2 shrink-0">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Structures</span>
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-xs shrink-0">
             {totalAccepted}/{totalZones} accepted
           </Badge>
         </div>
@@ -148,17 +149,13 @@ function StructureList({
 
             return (
               <div key={structure.warehouse.id}>
-                {/* Warehouse row */}
                 <button
                   onClick={() => toggleExpand(structure.warehouse.id)}
                   className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
                 >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ background: color }}
-                  />
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
                   <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-xs font-medium text-left truncate">
+                  <span className="flex-1 text-xs font-medium text-left truncate min-w-0">
                     {structure.warehouse.name}
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0">
@@ -170,7 +167,6 @@ function StructureList({
                   }
                 </button>
 
-                {/* Zones */}
                 {isExpanded && structure.zones.map((zone, zi) => {
                   const isSelected = zone.id === selectedZoneId;
                   return (
@@ -183,7 +179,7 @@ function StructureList({
                     >
                       {acceptanceIcon(zone.acceptance)}
                       <Layers className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <span className="flex-1 text-xs truncate">
+                      <span className="flex-1 text-xs truncate min-w-0">
                         {zone.user_name ?? zone.name}
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
@@ -203,7 +199,6 @@ function StructureList({
                   );
                 })}
 
-                {/* Out of coverage */}
                 {isExpanded && structure.out_of_coverage.length > 0 && (
                   <div className="pl-7 pr-3 py-1.5 flex items-center gap-2">
                     <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
@@ -216,7 +211,6 @@ function StructureList({
             );
           })}
 
-          {/* Global out of coverage */}
           {result.global_out_of_coverage.length > 0 && (
             <div className="px-3 py-2 mt-1 border-t">
               <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
@@ -241,10 +235,13 @@ interface InspectorPanelProps {
   onRenameZone: (zoneId: string, name: string) => void;
   onToggleZoneAcceptance: (zoneId: string) => void;
   onResetZone: (zoneId: string) => void;
+  onRouteGroupSelect: (rg: SuggestedRouteGroup | null) => void;
+  selectedRouteGroupId: string | null;
 }
 
 function InspectorPanel({
   selection, result, onRenameZone, onToggleZoneAcceptance, onResetZone,
+  onRouteGroupSelect, selectedRouteGroupId,
 }: InspectorPanelProps) {
   if (!selection) {
     return (
@@ -344,6 +341,8 @@ function InspectorPanel({
     .find(s => s.warehouse.id === warehouse.id)
     ?.service_areas.find(s => s.zone_id === zone.id);
 
+  const activeRouteGroup = sa?.route_groups.find(rg => rg.id === selectedRouteGroupId) ?? null;
+
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
@@ -354,9 +353,7 @@ function InspectorPanel({
             value={zone.user_name ?? zone.name}
             onChange={name => onRenameZone(zone.id, name)}
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            In {warehouse.name}
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">In {warehouse.name}</p>
         </div>
 
         {/* Acceptance controls */}
@@ -427,7 +424,7 @@ function InspectorPanel({
           </>
         )}
 
-        {/* Route groups */}
+        {/* Route groups — interactive */}
         {sa && sa.route_groups.length > 0 && (
           <>
             <Separator />
@@ -437,12 +434,42 @@ function InspectorPanel({
                 Route Groups
               </p>
               <div className="space-y-1.5">
-                {sa.route_groups.map(rg => (
-                  <div key={rg.id} className="flex justify-between items-center rounded-md border px-2.5 py-2">
-                    <span className="text-xs font-medium">{rg.name}</span>
-                    <span className="text-xs text-muted-foreground">{rg.facilities.length} facilities</span>
-                  </div>
-                ))}
+                {sa.route_groups.map(rg => {
+                  const isExpanded = rg.id === selectedRouteGroupId;
+                  return (
+                    <div key={rg.id} className="rounded-md border overflow-hidden">
+                      <button
+                        className={`w-full flex justify-between items-center px-2.5 py-2 text-left transition-colors ${
+                          isExpanded ? 'bg-primary/8' : 'hover:bg-muted/40'
+                        }`}
+                        onClick={() => onRouteGroupSelect(isExpanded ? null : rg)}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Route className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-xs font-medium">{rg.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-xs text-muted-foreground">{rg.facilities.length} facilities</span>
+                          {isExpanded
+                            ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                            : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          }
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="border-t bg-muted/20 px-2 py-1.5 space-y-0.5">
+                          {rg.facilities.map(f => (
+                            <div key={f.id} className="flex items-center gap-2 py-0.5">
+                              <div className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                              <span className="text-xs truncate flex-1 min-w-0">{f.name}</span>
+                              {f.lga && <span className="text-xs text-muted-foreground shrink-0">{f.lga}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </>
@@ -453,10 +480,13 @@ function InspectorPanel({
         <div>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5" />
-            Facilities ({zone.facilities.length})
+            {activeRouteGroup
+              ? `${activeRouteGroup.name} — Facilities (${activeRouteGroup.facilities.length})`
+              : `Facilities (${zone.facilities.length})`
+            }
           </p>
           <div className="space-y-1">
-            {zone.facilities.map(f => (
+            {(activeRouteGroup ? activeRouteGroup.facilities : zone.facilities).map(f => (
               <div key={f.id} className="flex items-center gap-2 text-xs py-1 border-b last:border-0">
                 <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
                 <span className="flex-1 truncate">{f.name}</span>
@@ -485,6 +515,8 @@ export function Step5Review({
 }: Step5ReviewProps) {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [inspection, setInspection] = useState<InspectorSelection>(null);
+  const [selectedRouteGroupId, setSelectedRouteGroupId] = useState<string | null>(null);
+  const [highlightedFacilityIds, setHighlightedFacilityIds] = useState<string[] | null>(null);
 
   const totalAccepted = result.structures.flatMap(s => s.zones).filter(z => z.acceptance === 'accepted').length;
 
@@ -570,7 +602,8 @@ export function Step5Review({
 
   function selectZone(zone: SuggestedZone, warehouse: CopilotWarehouse) {
     setSelectedZoneId(zone.id);
-    // Get fresh zone from result
+    setSelectedRouteGroupId(null);
+    setHighlightedFacilityIds(null);
     const freshZone = result.structures
       .find(s => s.warehouse.id === warehouse.id)
       ?.zones.find(z => z.id === zone.id) ?? zone;
@@ -579,6 +612,16 @@ export function Step5Review({
 
   function handleFacilityClick(facility: CopilotFacility, zone?: SuggestedZone) {
     setInspection({ type: 'facility', facility, zone });
+  }
+
+  function handleRouteGroupSelect(rg: SuggestedRouteGroup | null) {
+    if (!rg) {
+      setSelectedRouteGroupId(null);
+      setHighlightedFacilityIds(null);
+    } else {
+      setSelectedRouteGroupId(rg.id);
+      setHighlightedFacilityIds(rg.facilities.map(f => f.id));
+    }
   }
 
   return (
@@ -613,8 +656,8 @@ export function Step5Review({
 
       {/* 3-column layout */}
       <div className="flex gap-0 flex-1 min-h-0 border rounded-lg overflow-hidden">
-        {/* Left — structure list */}
-        <div className="w-60 shrink-0 border-r bg-background flex flex-col">
+        {/* Left — structure list (fixed width, never overlaps map) */}
+        <div className="w-56 min-w-[180px] shrink-0 border-r bg-background flex flex-col overflow-hidden">
           <StructureList
             result={result}
             selectedZoneId={selectedZoneId}
@@ -625,19 +668,20 @@ export function Step5Review({
           />
         </div>
 
-        {/* Center — map */}
-        <div className="flex-1 min-w-0 bg-muted/10">
+        {/* Center — map (takes remaining space) */}
+        <div className="flex-1 min-w-0 bg-muted/10 overflow-hidden">
           <CopilotReviewMap
             result={result}
             selectedZoneId={selectedZoneId}
+            highlightedFacilityIds={highlightedFacilityIds}
             onZoneClick={selectZone}
             onFacilityClick={handleFacilityClick}
           />
         </div>
 
-        {/* Right — inspector */}
-        <div className="w-72 shrink-0 border-l bg-background flex flex-col">
-          <div className="px-4 py-2.5 border-b">
+        {/* Right — inspector (fixed width) */}
+        <div className="w-72 min-w-[240px] shrink-0 border-l bg-background flex flex-col overflow-hidden">
+          <div className="px-4 py-2.5 border-b shrink-0">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Inspector</span>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
@@ -647,6 +691,8 @@ export function Step5Review({
               onRenameZone={renameZone}
               onToggleZoneAcceptance={toggleZoneAcceptance}
               onResetZone={rejectZone}
+              onRouteGroupSelect={handleRouteGroupSelect}
+              selectedRouteGroupId={selectedRouteGroupId}
             />
           </div>
         </div>

@@ -112,7 +112,10 @@ export function LoadingPlannerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[90vw] max-h-[90vh] p-0">
+      <DialogContent
+        className="max-w-[90vw] max-h-[90vh] p-0"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="p-6 pb-4 border-b">
           <DialogTitle>Cargo Loading Planner</DialogTitle>
         </DialogHeader>

@@ -41,7 +41,6 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
       code: w.code,
       state: w.state,
     };
-
     if (selectedIds.has(w.id)) {
       onSelectionChange(selected.filter(s => s.id !== w.id));
     } else {
@@ -58,7 +57,6 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
       code: w.code,
       state: w.state,
     }));
-    // Merge without duplicates
     const existing = selected.filter(s => !newWarehouses.find(n => n.id === s.id));
     onSelectionChange([...existing, ...newWarehouses]);
   }
@@ -72,17 +70,11 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
             Warehouses are the fixed operational anchors. Select all that should serve the target region.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {selected.length > 0 && (
-            <Badge variant="secondary" className="text-sm px-3 py-1">
-              {selected.length} selected
-            </Badge>
-          )}
-          <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Create Warehouse
-          </Button>
-        </div>
+        {selected.length > 0 && (
+          <Badge variant="secondary" className="text-sm px-3 py-1">
+            {selected.length} selected
+          </Badge>
+        )}
       </div>
 
       <WarehouseFormDialog open={createOpen} onOpenChange={setCreateOpen} />
@@ -112,21 +104,10 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
             <Skeleton key={i} className="h-28 rounded-lg" />
           ))}
         </div>
-      ) : warehouses.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg bg-muted/20">
-          <Building2 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-medium">No warehouses found</p>
-          <p className="text-xs text-muted-foreground mt-1 mb-4">
-            Create a warehouse to get started with Copilot.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Create Warehouse
-          </Button>
-        </div>
       ) : (
         <div className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {/* Existing warehouse cards */}
             {validWarehouses.map(w => {
               const isSelected = selectedIds.has(w.id);
               return (
@@ -163,6 +144,15 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
                 </button>
               );
             })}
+
+            {/* + Create Warehouse dashed card — always last in grid */}
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="text-left rounded-lg border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-muted/20 transition-all min-h-[96px]"
+            >
+              <Plus className="h-5 w-5" />
+              <span className="text-sm font-medium">Create Warehouse</span>
+            </button>
           </div>
 
           {invalidWarehouses.length > 0 && (
@@ -180,10 +170,7 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
       )}
 
       <div className="flex justify-end pt-2">
-        <Button
-          onClick={onNext}
-          disabled={selected.length === 0}
-        >
+        <Button onClick={onNext} disabled={selected.length === 0}>
           Continue with {selected.length} warehouse{selected.length !== 1 ? 's' : ''}
         </Button>
       </div>

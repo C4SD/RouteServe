@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Card, CardContent } from '@/components/ui/card';
-import { Info, Ruler, Building2, Layers } from 'lucide-react';
-import type { CopilotConstraints } from '@/types/operations-copilot';
+import { Info, Ruler, Building2, Layers, Sparkles, X, CheckCircle2 } from 'lucide-react';
+import { haversineKm } from '@/lib/operations-copilot-engine';
+import type { CopilotConstraints, CopilotWarehouse, CopilotFacility } from '@/types/operations-copilot';
 
 interface Step3ConstraintsProps {
   constraints: CopilotConstraints;
@@ -12,6 +14,40 @@ interface Step3ConstraintsProps {
   onBack: () => void;
   warehouseCount: number;
   facilityCount: number;
+  warehouses: CopilotWarehouse[];
+  facilities: CopilotFacility[];
+}
+
+function computeAIOptimal(
+  warehouses: CopilotWarehouse[],
+  facilities: CopilotFacility[],
+): { constraints: CopilotConstraints; rationale: string[] } {
+  if (warehouses.length === 0 || facilities.length === 0) {
+    return {
+      constraints: { max_radius_km: 30, max_facilities_per_zone: 12, max_service_areas_per_warehouse: 5 },
+      rationale: ['Using defaults — no facility/warehouse data available.'],
+    };
+  }
+
+  const dists = facilities
+    .map(f => warehouses.reduce((best, w) => Math.min(best, haversineKm(f.lat, f.lng, w.lat, w.lng)), Infinity))
+    .sort((a, b) => a - b);
+
+  const p90 = dists[Math.floor(dists.length * 0.9)] ?? 30;
+  const max_radius_km = Math.min(100, Math.max(10, Math.ceil((p90 * 1.15) / 5) * 5));
+
+  const facilsPerWh = facilities.length / warehouses.length;
+  const targetZones = Math.max(2, Math.round(Math.sqrt(facilsPerWh)));
+  const max_facilities_per_zone = Math.min(30, Math.max(3, Math.round(facilsPerWh / targetZones)));
+  const max_service_areas_per_warehouse = Math.min(20, Math.max(2, targetZones));
+
+  const rationale = [
+    `Max radius set to ${max_radius_km} km — covers 90% of facilities from their nearest warehouse.`,
+    `Max ${max_facilities_per_zone} facilities/zone — optimal cluster density for ${Math.round(facilsPerWh)} avg facilities per warehouse.`,
+    `${max_service_areas_per_warehouse} service areas/warehouse — aligns with estimated ${targetZones} natural zone groups.`,
+  ];
+
+  return { constraints: { max_radius_km, max_facilities_per_zone, max_service_areas_per_warehouse }, rationale };
 }
 
 function ConstraintCard({
@@ -77,20 +113,91 @@ export function Step3Constraints({
   onBack,
   warehouseCount,
   facilityCount,
+  warehouses,
+  facilities,
 }: Step3ConstraintsProps) {
   const estimatedZones = Math.ceil(facilityCount / constraints.max_facilities_per_zone);
   const avgPerWarehouse = warehouseCount > 0
     ? Math.round(facilityCount / warehouseCount)
     : facilityCount;
 
+  const [aiPanel, setAiPanel] = useState<{ constraints: CopilotConstraints; rationale: string[] } | null>(null);
+  const [aiApplied, setAiApplied] = useState(false);
+
+  function handleAIOptimize() {
+    const result = computeAIOptimal(warehouses, facilities);
+    setAiPanel(result);
+    setAiApplied(false);
+  }
+
+  function applyAISettings() {
+    if (aiPanel) {
+      onConstraintsChange(aiPanel.constraints);
+      setAiApplied(true);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold">Configure Constraints</h3>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          These parameters control how Copilot groups facilities into zones. Defaults work well for most regions.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold">Configure Constraints</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Manually tune parameters below, or let AI determine the optimal configuration.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 border-violet-300 text-violet-700 hover:bg-violet-50 hover:text-violet-800 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950"
+          onClick={handleAIOptimize}
+        >
+          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+          AI Optimization
+        </Button>
       </div>
+
+      {/* AI optimization panel */}
+      {aiPanel && (
+        <div className="rounded-lg border border-violet-200 bg-violet-50/60 dark:border-violet-800 dark:bg-violet-950/30 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400 shrink-0" />
+              <span className="text-sm font-medium text-violet-800 dark:text-violet-300">
+                AI-Recommended Configuration
+              </span>
+            </div>
+            <button onClick={() => setAiPanel(null)} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <ul className="space-y-1">
+            {aiPanel.rationale.map((r, i) => (
+              <li key={i} className="text-xs text-violet-700 dark:text-violet-300 flex gap-1.5">
+                <span className="text-violet-400 shrink-0">·</span>
+                {r}
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2 pt-1">
+            {aiApplied ? (
+              <div className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Settings applied — sliders updated below
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-violet-600 hover:bg-violet-700 text-white"
+                onClick={applyAISettings}
+              >
+                Apply These Settings
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
 
       {/* Summary */}
       <div className="flex gap-3 flex-wrap">

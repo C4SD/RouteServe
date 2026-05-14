@@ -87,7 +87,10 @@ export function CreateRouteWizard({ open, onOpenChange, onSandboxSelect }: Creat
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-xl">
+      <DialogContent
+        className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-xl"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         {/* Header Section */}
         <div className="px-8 pt-8 pb-6 border-b">
           <DialogHeader className="flex flex-col gap-2 pb-0">

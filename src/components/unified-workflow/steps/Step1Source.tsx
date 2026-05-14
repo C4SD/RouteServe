@@ -1,33 +1,19 @@
-/**
- * =====================================================
- * Step 1: Source Selection
- * =====================================================
- * User selects the source method for the schedule:
- * - Ready Consignments (with sub-options: Manual/AI)
- * - Upload File
- * - Manual Entry
- */
-
 import * as React from 'react';
 import {
   ListChecks,
   FileUp,
   PlusCircle,
-  Hand,
-  Brain,
   ChevronRight,
   Check,
   Network,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import type { SourceMethod, SourceSubOption } from '@/types/unified-workflow';
+import type { SourceMethod } from '@/types/unified-workflow';
 
 interface Step1SourceProps {
   sourceMethod: SourceMethod | null;
-  sourceSubOption: SourceSubOption | null;
   onSourceMethodChange: (method: SourceMethod) => void;
-  onSourceSubOptionChange: (option: SourceSubOption) => void;
 }
 
 interface SourceOption {
@@ -36,7 +22,6 @@ interface SourceOption {
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
-  hasSubOptions?: boolean;
 }
 
 const sourceOptions: SourceOption[] = [
@@ -52,7 +37,6 @@ const sourceOptions: SourceOption[] = [
     title: 'Ready Consignments',
     description: 'Select from confirmed facility orders ready for dispatch',
     icon: ListChecks,
-    hasSubOptions: true,
   },
   {
     id: 'upload',
@@ -68,47 +52,11 @@ const sourceOptions: SourceOption[] = [
   },
 ];
 
-interface SubOption {
-  id: SourceSubOption;
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  features: string[];
-}
-
-const subOptions: SubOption[] = [
-  {
-    id: 'manual_scheduling',
-    title: 'Manual Scheduling',
-    description: 'Manually select and order facilities',
-    icon: Hand,
-    features: [
-      'Full control over facility selection',
-      'Drag-and-drop reordering',
-      'Vehicle suggestion (optional)',
-    ],
-  },
-  {
-    id: 'ai_optimization',
-    title: 'AI Optimization',
-    description: 'Let AI optimize your route and schedule',
-    icon: Brain,
-    features: [
-      'Automatic route optimization',
-      'Smart facility grouping',
-      'Constraint-based planning',
-    ],
-  },
-];
-
 export function Step1Source({
   sourceMethod,
-  sourceSubOption,
   onSourceMethodChange,
-  onSourceSubOptionChange,
 }: Step1SourceProps) {
   const selectedSource = sourceOptions.find((opt) => opt.id === sourceMethod);
-  const showSubOptions = sourceMethod === 'ready';
   const showPolicyNote = sourceMethod === 'service_policy';
 
   return (
@@ -135,23 +83,6 @@ export function Step1Source({
             />
           ))}
         </div>
-
-        {/* Sub-options (only for Ready Consignments) */}
-        {showSubOptions && (
-          <div className="flex-1 space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">
-              Scheduling Method
-            </h3>
-            {subOptions.map((option) => (
-              <SubOptionCard
-                key={option.id}
-                option={option}
-                isSelected={sourceSubOption === option.id}
-                onClick={() => onSourceSubOptionChange(option.id)}
-              />
-            ))}
-          </div>
-        )}
 
         {/* Policy note panel */}
         {showPolicyNote && (
@@ -185,12 +116,10 @@ export function Step1Source({
             <Check className="h-4 w-4 text-primary" />
             <span className="font-medium">Selected:</span>
             <span>{selectedSource?.title}</span>
-            {sourceSubOption && (
+            {sourceMethod === 'ready' && (
               <>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                <span>
-                  {subOptions.find((o) => o.id === sourceSubOption)?.title}
-                </span>
+                <span>Manual Scheduling</span>
               </>
             )}
           </div>
@@ -265,85 +194,6 @@ function SourceCard({ option, isSelected, onClick }: SourceCardProps) {
         </p>
       </div>
 
-      {/* Arrow for sub-options */}
-      {option.hasSubOptions && isSelected && (
-        <ChevronRight className="h-5 w-5 text-muted-foreground" />
-      )}
-    </div>
-  );
-}
-
-// =====================================================
-// Sub-option Card Sub-component
-// =====================================================
-
-interface SubOptionCardProps {
-  option: SubOption;
-  isSelected: boolean;
-  onClick: () => void;
-}
-
-function SubOptionCard({ option, isSelected, onClick }: SubOptionCardProps) {
-  const Icon = option.icon;
-
-  return (
-    <div
-      onClick={onClick}
-      className={cn(
-        'relative flex flex-col gap-3 p-4 rounded-lg border cursor-pointer transition-all',
-        isSelected
-          ? 'border-primary bg-primary/5 ring-1 ring-primary'
-          : 'hover:border-primary/50 hover:bg-accent/50'
-      )}
-    >
-      <div className="flex items-start gap-4">
-        {/* Selection Indicator */}
-        <div
-          className={cn(
-            'flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center',
-            isSelected
-              ? 'border-primary bg-primary'
-              : 'border-muted-foreground/30'
-          )}
-        >
-          {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
-        </div>
-
-        {/* Icon */}
-        <div
-          className={cn(
-            'flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center',
-            isSelected ? 'bg-primary/10' : 'bg-muted'
-          )}
-        >
-          <Icon
-            className={cn(
-              'h-5 w-5',
-              isSelected ? 'text-primary' : 'text-muted-foreground'
-            )}
-          />
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <p className="font-medium">{option.title}</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {option.description}
-          </p>
-        </div>
-      </div>
-
-      {/* Features List */}
-      {isSelected && (
-        <div className="ml-9 pl-4 border-l-2 border-primary/30 space-y-1">
-          {option.features.map((feature, idx) => (
-            <div key={idx} className="flex items-center gap-2 text-sm">
-              <Check className="h-3 w-3 text-primary" />
-              <span className="text-muted-foreground">{feature}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -108,7 +108,10 @@ export function CreateInspectionDialog({ open, onClose, defaultVehicleId }: Crea
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Create Vehicle Inspection</DialogTitle>
           <DialogDescription>

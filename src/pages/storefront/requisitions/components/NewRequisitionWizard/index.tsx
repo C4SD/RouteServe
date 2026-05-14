@@ -47,7 +47,10 @@ export function NewRequisitionWizard({ open, onOpenChange }: NewRequisitionWizar
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col rounded-xl">
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] flex flex-col rounded-xl"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="px-8 pt-8 pb-6 border-b">
           <div className="flex justify-between items-center">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">

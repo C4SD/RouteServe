@@ -32,10 +32,10 @@ const modeOptions: ModeOption[] = [
     id: 'copilot',
     title: 'Scheduling Copilot',
     description:
-      'Let the AI copilot analyse demand, constraints, and route efficiency to draft an optimised dispatch schedule for you.',
+      'Define what needs to happen — the copilot analyses demand, constraints, and resource availability to generate a feasible execution plan for your review.',
     icon: Bot,
-    badge: 'Coming Soon',
-    badgeVariant: 'outline',
+    badge: 'Beta',
+    badgeVariant: 'default',
   },
 ];
 
@@ -56,20 +56,17 @@ export function StepScheduleMode({
         {modeOptions.map((option) => {
           const Icon = option.icon;
           const isSelected = scheduleMode === option.id;
-          const isDisabled = option.id === 'copilot';
 
           return (
             <button
               key={option.id}
               type="button"
-              disabled={isDisabled}
-              onClick={() => !isDisabled && onScheduleModeChange(option.id)}
+              onClick={() => onScheduleModeChange(option.id)}
               className={cn(
                 'relative flex flex-col gap-3 rounded-lg border-2 p-5 text-left transition-all',
                 isSelected
                   ? 'border-primary bg-primary/5'
-                  : 'border-border bg-card hover:border-primary/40 hover:bg-accent/30',
-                isDisabled && 'cursor-not-allowed opacity-60'
+                  : 'border-border bg-card hover:border-primary/40 hover:bg-accent/30'
               )}
             >
               <div className="flex items-start justify-between gap-2">

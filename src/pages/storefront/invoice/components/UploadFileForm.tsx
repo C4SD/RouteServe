@@ -1,9 +1,14 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Upload, FileText, Check, AlertTriangle, ChevronLeft, ArrowRight, Download, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { Upload, FileText, Check, AlertTriangle, ChevronLeft, ArrowRight, Download, FileSpreadsheet, Trash2, ImageIcon, Pencil, X } from 'lucide-react';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
+import { ocrInvoiceImage, parseInvoiceText, preloadOCRWorker } from '@/lib/parseInvoiceImage';
+import { fuzzyMatch, normalizeName } from '@/lib/fuzzy-match';
+import { useItems } from '@/hooks/useItems';
+import type { Item } from '@/types/items';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -33,7 +38,7 @@ import { ITEM_CATEGORIES } from '@/types/items';
 import type { ItemCategory } from '@/types/items';
 import type { InvoiceDisplayContext } from './PackagingStep';
 
-type UploadStep = 'upload' | 'mapping' | 'preview';
+type UploadStep = 'upload' | 'ai_parsing' | 'mapping' | 'preview';
 
 interface ParsedInvoiceItem {
   row: number;
@@ -41,6 +46,7 @@ interface ParsedInvoiceItem {
   quantity: number;
   unit_price: number;
   total_price: number;
+  unit_pack?: string;
   serial_number?: string;
   category?: string;
   weight_kg?: number;
@@ -50,6 +56,8 @@ interface ParsedInvoiceItem {
   expiry_date?: string;
   isValid: boolean;
   errors: string[];
+  matchedItem?: Item;
+  matchScore?: number;
 }
 
 interface ColumnMapping {
@@ -127,6 +135,15 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
   const [warehouseId, setWarehouseId] = useState('');
   const [facilityId, setFacilityId] = useState('');
   const [packagingRequired, setPackagingRequired] = useState(false);
+  const [isOCRMode, setIsOCRMode] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [ocrStatus, setOcrStatus] = useState<string>('');
+  const [extractedInvoiceNumber, setExtractedInvoiceNumber] = useState<string | null>(null);
+  const [extractedRefNumber, setExtractedRefNumber] = useState<string | null>(null);
+  const [editingRow, setEditingRow] = useState<number | null>(null);
+  const [editValues, setEditValues] = useState<Partial<ParsedInvoiceItem>>({});
+  const imagePreviewRef = useRef<string | null>(null);
+  const catalogItemsRef = useRef<Item[]>([]);
 
   const queryClient = useQueryClient();
 
@@ -138,7 +155,16 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
 
   const { data: warehousesData, isLoading: warehousesLoading } = useWarehouses();
   const { data: facilitiesData, isLoading: facilitiesLoading } = useFacilities();
+  const { data: itemsData } = useItems();
   const createInvoice = useCreateInvoice();
+
+  // Keep catalog ref current so OCR callback always has the latest items list.
+  useEffect(() => {
+    catalogItemsRef.current = itemsData?.items ?? [];
+  }, [itemsData]);
+
+  // Warm up the Tesseract worker in the background as soon as this form mounts.
+  useEffect(() => { preloadOCRWorker(); }, []);
 
   const warehouses = warehousesData?.warehouses || [];
   const facilities = facilitiesData?.facilities || [];
@@ -167,6 +193,79 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
       data.push(values);
     });
     return data;
+  };
+
+  const startOCRParsing = async (uploadedFile: File) => {
+    setIsProcessing(true);
+    setUploadProgress(0);
+    setOcrStatus('Loading OCR engine…');
+    setParseError(null);
+
+    const previewUrl = URL.createObjectURL(uploadedFile);
+    imagePreviewRef.current = previewUrl;
+    setImagePreviewUrl(previewUrl);
+
+    try {
+      setOcrStatus('Recognising text…');
+      const text = await ocrInvoiceImage(uploadedFile, (pct) => {
+        setUploadProgress(pct);
+        setOcrStatus(`Recognising text… ${pct}%`);
+      });
+
+      setOcrStatus('Extracting line items…');
+      const { invoiceNumber, refNumber, items } = parseInvoiceText(text);
+
+      if (items.length === 0) {
+        setParseError('Could not extract line items from this image. Try a higher-quality scan or use manual entry.');
+        setStep('upload');
+        return;
+      }
+
+      setExtractedInvoiceNumber(invoiceNumber);
+      setExtractedRefNumber(refNumber);
+
+      const catalog = catalogItemsRef.current;
+      setParsedItems(items.map(item => {
+        const errors: string[] = [];
+        if (!item.description) errors.push('Missing description');
+        if (item.quantity <= 0) errors.push('Invalid quantity');
+
+        let matchedItem: Item | undefined;
+        let matchScore: number | undefined;
+        if (catalog.length > 0) {
+          const result = fuzzyMatch(
+            normalizeName(item.description),
+            catalog,
+            0.65,
+            (dbItem) => normalizeName(dbItem.item_name),
+          );
+          if (result) {
+            matchedItem = result.match;
+            matchScore = result.score;
+          }
+        }
+
+        return {
+          ...item,
+          // Auto-fill enriched fields from matched catalog item
+          category: matchedItem?.category ?? item.category,
+          weight_kg: matchedItem?.weight_kg ?? item.weight_kg,
+          volume_m3: matchedItem?.volume_m3 ?? item.volume_m3,
+          unit_pack: item.unit_pack ?? matchedItem?.unit_pack,
+          matchedItem,
+          matchScore,
+          isValid: errors.length === 0,
+          errors,
+        };
+      }));
+      setStep('preview');
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : 'OCR failed. Please try a clearer image.');
+      setStep('upload');
+    } finally {
+      setIsProcessing(false);
+      setOcrStatus('');
+    }
   };
 
   const processFile = async (uploadedFile: File) => {
@@ -216,11 +315,17 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
 
   const handleFile = useCallback((uploadedFile: File) => {
     const ext = uploadedFile.name.split('.').pop()?.toLowerCase();
-    if (['csv', 'xlsx', 'xls'].includes(ext || '')) {
-      setFile(uploadedFile);
+    const isImage = uploadedFile.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'heic'].includes(ext || '');
+    setFile(uploadedFile);
+    if (isImage) {
+      setIsOCRMode(true);
+      setStep('ai_parsing');
+      startOCRParsing(uploadedFile);
+    } else if (['csv', 'xlsx', 'xls'].includes(ext || '')) {
+      setIsOCRMode(false);
       processFile(uploadedFile);
     } else {
-      setParseError('Unsupported file format. Please use CSV or Excel.');
+      setParseError('Unsupported file format. Use CSV, Excel, or an invoice image (PNG, JPG).');
     }
   }, []);
 
@@ -308,6 +413,40 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
     setParsedItems(prev => prev.filter(item => item.row !== row));
   };
 
+  const startEdit = (item: ParsedInvoiceItem) => {
+    setEditingRow(item.row);
+    setEditValues({ ...item });
+  };
+
+  const saveEdit = () => {
+    if (editingRow === null) return;
+    setParsedItems(prev => prev.map(item => {
+      if (item.row !== editingRow) return item;
+      const qty = Number(editValues.quantity) || 0;
+      const price = Number(editValues.unit_price) || 0;
+      const desc = editValues.description ?? '';
+      const errors: string[] = [];
+      if (!desc) errors.push('Missing description');
+      if (qty <= 0) errors.push('Invalid quantity');
+      return {
+        ...item,
+        ...editValues,
+        quantity: qty,
+        unit_price: price,
+        total_price: qty * price,
+        isValid: errors.length === 0,
+        errors,
+      };
+    }));
+    setEditingRow(null);
+    setEditValues({});
+  };
+
+  const cancelEdit = () => {
+    setEditingRow(null);
+    setEditValues({});
+  };
+
   const handleReset = () => {
     setStep('upload');
     setFile(null);
@@ -317,6 +456,17 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
     setParsedItems([]);
     setUploadProgress(0);
     setParseError(null);
+    setIsOCRMode(false);
+    setOcrStatus('');
+    setExtractedInvoiceNumber(null);
+    setExtractedRefNumber(null);
+    setEditingRow(null);
+    setEditValues({});
+    if (imagePreviewRef.current) {
+      URL.revokeObjectURL(imagePreviewRef.current);
+      imagePreviewRef.current = null;
+    }
+    setImagePreviewUrl(null);
   };
 
   const requiredFieldsMapped = useMemo(() => {
@@ -334,12 +484,15 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
     const formData: InvoiceFormData = {
       warehouse_id: warehouseId,
       facility_id: facilityId,
+      ...(extractedInvoiceNumber ? { invoice_number: extractedInvoiceNumber } : {}),
+      ...(extractedRefNumber ? { ref_number: extractedRefNumber } : {}),
       notes: `Imported from ${file?.name || 'uploaded file'}`,
       items: validItems.map(item => ({
         description: item.description,
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.total_price,
+        unit_pack: item.unit_pack,
         serial_number: item.serial_number,
         category: item.category as ItemCategory | undefined,
         weight_kg: item.weight_kg,
@@ -347,6 +500,7 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
         batch_number: item.batch_number,
         mfg_date: item.mfg_date,
         expiry_date: item.expiry_date,
+        item_id: item.matchedItem?.id,
       })),
     };
 
@@ -394,7 +548,7 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
         {step === 'upload' && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Upload a CSV or Excel file containing invoice line items.
+              Upload a CSV/Excel file or an invoice image (PNG, JPG) — images are parsed automatically with OCR.
             </p>
 
             <div className="flex items-center gap-2">
@@ -421,7 +575,7 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
               <input
                 id="invoice-file-upload"
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv,.xlsx,.xls,.png,.jpg,.jpeg,.webp"
                 onChange={handleFileInput}
                 className="hidden"
               />
@@ -432,7 +586,14 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
                 <>
                   <p className="font-medium">Drag and drop a file here</p>
                   <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
-                  <p className="text-xs text-muted-foreground mt-2">Supports CSV, XLS, XLSX</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-xs text-muted-foreground">CSV, XLS, XLSX</span>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ImageIcon className="h-3 w-3" />
+                      PNG, JPG (OCR)
+                    </span>
+                  </div>
                 </>
               )}
             </div>
@@ -453,6 +614,29 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
                 <Progress value={uploadProgress} />
               </div>
             )}
+          </div>
+        )}
+
+        {/* Step 1b: OCR Parsing */}
+        {step === 'ai_parsing' && (
+          <div className="space-y-4 flex flex-col items-center justify-center min-h-[200px]">
+            {imagePreviewUrl && (
+              <img
+                src={imagePreviewUrl}
+                alt="Invoice preview"
+                className="max-h-32 max-w-full object-contain rounded border"
+              />
+            )}
+            <div className="w-full space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{ocrStatus || 'Reading invoice…'}</span>
+                <span className="tabular-nums">{uploadProgress}%</span>
+              </div>
+              <Progress value={uploadProgress} />
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              First run may take a moment while the OCR engine loads.
+            </p>
           </div>
         )}
 
@@ -563,9 +747,15 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-muted-foreground" />
+                {isOCRMode ? <ImageIcon className="h-5 w-5 text-muted-foreground" /> : <FileText className="h-5 w-5 text-muted-foreground" />}
                 <span className="font-medium text-sm">{file?.name}</span>
                 <Badge variant="secondary">{parsedItems.length} items</Badge>
+                {isOCRMode && extractedInvoiceNumber && (
+                  <Badge variant="outline" className="text-xs">Inv# {extractedInvoiceNumber}</Badge>
+                )}
+                {isOCRMode && extractedRefNumber && (
+                  <Badge variant="outline" className="text-xs">Ref: {extractedRefNumber}</Badge>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {validItems.length > 0 && (
@@ -635,45 +825,141 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">Status</TableHead>
+                    <TableHead className="w-8">Status</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className="w-[70px] text-right">Qty</TableHead>
-                    <TableHead className="w-[90px] text-right">Unit Price</TableHead>
-                    <TableHead className="w-[90px] text-right">Total</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-[60px] text-right">Qty</TableHead>
+                    <TableHead className="w-[88px] text-right">Unit Price</TableHead>
+                    <TableHead className="w-[88px] text-right">Total</TableHead>
+                    <TableHead className="w-16"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {parsedItems.map((item) => (
-                    <TableRow key={item.row} className={!item.isValid ? 'bg-red-50' : ''}>
-                      <TableCell>
-                        {item.isValid ? (
-                          <Check className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <AlertTriangle className="h-4 w-4 text-red-600" />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <span className="font-medium text-sm">{item.description || '-'}</span>
-                          {item.errors.length > 0 && (
-                            <p className="text-xs text-red-600 mt-0.5">{item.errors.join(', ')}</p>
+                    <React.Fragment key={item.row}>
+                      <TableRow className={!item.isValid ? 'bg-red-50' : ''}>
+                        <TableCell>
+                          {item.isValid ? (
+                            <Check className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {item.unit_price.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {item.total_price.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeItem(item.row)}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                        <TableCell>
+                          {editingRow === item.row ? (
+                            <Input
+                              className="h-7 text-sm"
+                              value={editValues.description ?? ''}
+                              onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
+                              autoFocus
+                            />
+                          ) : (
+                            <div>
+                              <span className="font-medium text-sm">{item.description || '-'}</span>
+                              {item.matchedItem && (
+                                <p className="text-[10px] text-green-700 mt-0.5 leading-none">
+                                  ✓ {item.matchedItem.item_name}
+                                  {item.matchScore !== undefined && (
+                                    <span className="text-muted-foreground ml-1">
+                                      ({Math.round(item.matchScore * 100)}%)
+                                    </span>
+                                  )}
+                                </p>
+                              )}
+                              {!item.matchedItem && isOCRMode && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">Not in catalog</p>
+                              )}
+                              {item.errors.length > 0 && (
+                                <p className="text-xs text-red-600 mt-0.5">{item.errors.join(', ')}</p>
+                              )}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {editingRow === item.row ? (
+                            <Input
+                              type="number"
+                              className="h-7 text-sm text-right w-16"
+                              value={editValues.quantity ?? ''}
+                              onChange={e => setEditValues(v => ({ ...v, quantity: Number(e.target.value) }))}
+                            />
+                          ) : item.quantity}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {editingRow === item.row ? (
+                            <Input
+                              type="number"
+                              className="h-7 text-sm text-right w-20"
+                              value={editValues.unit_price ?? ''}
+                              onChange={e => setEditValues(v => ({ ...v, unit_price: Number(e.target.value) }))}
+                            />
+                          ) : item.unit_price.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {editingRow === item.row
+                            ? ((Number(editValues.quantity) || 0) * (Number(editValues.unit_price) || 0)).toLocaleString()
+                            : item.total_price.toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-0.5">
+                            {editingRow === item.row ? (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={saveEdit}>
+                                  <Check className="h-3.5 w-3.5 text-green-600" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelEdit}>
+                                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(item)}>
+                                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeItem(item.row)}>
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {editingRow === item.row && (
+                        <TableRow className="bg-muted/30">
+                          <TableCell />
+                          <TableCell colSpan={5}>
+                            <div className="grid grid-cols-3 gap-2 py-1">
+                              <div className="space-y-1">
+                                <Label className="text-[10px] text-muted-foreground">Batch Number</Label>
+                                <Input
+                                  className="h-7 text-xs"
+                                  placeholder="e.g. N-3334"
+                                  value={editValues.batch_number ?? ''}
+                                  onChange={e => setEditValues(v => ({ ...v, batch_number: e.target.value }))}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] text-muted-foreground">Expiry Date</Label>
+                                <Input
+                                  className="h-7 text-xs"
+                                  placeholder="YYYY-MM-DD"
+                                  value={editValues.expiry_date ?? ''}
+                                  onChange={e => setEditValues(v => ({ ...v, expiry_date: e.target.value }))}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] text-muted-foreground">Pack Size</Label>
+                                <Input
+                                  className="h-7 text-xs"
+                                  placeholder="e.g. 100"
+                                  value={editValues.unit_pack ?? ''}
+                                  onChange={e => setEditValues(v => ({ ...v, unit_pack: e.target.value }))}
+                                />
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                   ))}
                 </TableBody>
               </Table>
@@ -699,9 +985,9 @@ export function UploadFileForm({ onClose, onSubmitData, onPackagingRequiredChang
             </Button>
           )}
           {step === 'preview' && (
-            <Button variant="outline" size="sm" onClick={() => setStep('mapping')}>
+            <Button variant="outline" size="sm" onClick={isOCRMode ? handleReset : () => setStep('mapping')}>
               <ChevronLeft className="h-4 w-4 mr-1" />
-              Back to Mapping
+              {isOCRMode ? 'Back' : 'Back to Mapping'}
             </Button>
           )}
         </div>

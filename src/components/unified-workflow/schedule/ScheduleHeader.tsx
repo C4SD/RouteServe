@@ -3,12 +3,13 @@
  * Schedule Header
  * =====================================================
  * Header component for Step 2 (Schedule) containing
- * title, start location, and planned date inputs.
+ * title, start location, and planning window inputs.
  */
 
 import * as React from 'react';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { CalendarIcon, MapPin, Building2 } from 'lucide-react';
+import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,8 +36,11 @@ interface ScheduleHeaderProps {
   startLocationId: string | null;
   startLocationType: StartLocationType;
   onStartLocationChange: (id: string, type: StartLocationType) => void;
-  plannedDate: string | null;
-  onPlannedDateChange: (date: string) => void;
+  /** Planning window start date (ISO YYYY-MM-DD) */
+  planningWindowStart: string | null;
+  /** Planning window end date (ISO YYYY-MM-DD), null = single-day or open-ended */
+  planningWindowEnd: string | null;
+  onPlanningWindowChange: (start: string, end: string | null) => void;
   timeWindow: TimeWindow | null;
   onTimeWindowChange: (window: TimeWindow | null) => void;
   warehouses: Array<{ id: string; name: string }>;
@@ -52,8 +56,9 @@ export function ScheduleHeader({
   startLocationId,
   startLocationType,
   onStartLocationChange,
-  plannedDate,
-  onPlannedDateChange,
+  planningWindowStart,
+  planningWindowEnd,
+  onPlanningWindowChange,
   timeWindow,
   onTimeWindowChange,
   warehouses,
@@ -62,13 +67,24 @@ export function ScheduleHeader({
   startLocationAutoSet = false,
 }: ScheduleHeaderProps) {
   const [locationTab, setLocationTab] = React.useState<StartLocationType>(startLocationType);
+  const [calendarOpen, setCalendarOpen] = React.useState(false);
 
-  const selectedDate = plannedDate ? new Date(plannedDate) : undefined;
+  // Build DateRange from planning window strings
+  const dateRange: DateRange | undefined = React.useMemo(() => {
+    if (!planningWindowStart) return undefined;
+    return {
+      from: new Date(planningWindowStart),
+      to: planningWindowEnd ? new Date(planningWindowEnd) : undefined,
+    };
+  }, [planningWindowStart, planningWindowEnd]);
 
-  const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      onPlannedDateChange(format(date, 'yyyy-MM-dd'));
-    }
+  const handleRangeSelect = (range: DateRange | undefined) => {
+    if (!range?.from) return;
+    const start = format(range.from, 'yyyy-MM-dd');
+    const end = range.to ? format(range.to, 'yyyy-MM-dd') : null;
+    onPlanningWindowChange(start, end);
+    // Close popover only when both ends are selected (or after first pick if single-day)
+    if (range.to) setCalendarOpen(false);
   };
 
   const handleLocationChange = (id: string) => {
@@ -77,6 +93,18 @@ export function ScheduleHeader({
 
   const locationOptions = locationTab === 'warehouse' ? warehouses : facilities;
   const selectedLocation = locationOptions.find((loc) => loc.id === startLocationId);
+
+  // Display label for planning window
+  const windowLabel = React.useMemo(() => {
+    if (!planningWindowStart) return 'Select window';
+    const start = new Date(planningWindowStart);
+    if (!planningWindowEnd) return format(start, 'MMM d');
+    const end = new Date(planningWindowEnd);
+    if (format(start, 'MMM') === format(end, 'MMM')) {
+      return `${format(start, 'MMM d')} – ${format(end, 'd')}`;
+    }
+    return `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
+  }, [planningWindowStart, planningWindowEnd]);
 
   return (
     <div className={cn('space-y-4 p-4 border-b bg-muted/30', className)}>
@@ -149,30 +177,48 @@ export function ScheduleHeader({
           )}
         </div>
 
-        {/* Planned Date */}
+        {/* Planning Window (replaces Planned Date) */}
         <div className="md:col-span-1">
-          <Label className="text-xs font-medium">Planned Date</Label>
-          <Popover modal={false}>
+          <Label className="text-xs font-medium">Planning Window</Label>
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={false}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 className={cn(
                   'w-full justify-start text-left font-normal mt-1',
-                  !selectedDate && 'text-muted-foreground'
+                  !planningWindowStart && 'text-muted-foreground'
                 )}
               >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {selectedDate ? format(selectedDate, 'PPP') : 'Pick a date'}
+                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                <span className="truncate">{windowLabel}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 z-[10000]" align="start">
               <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={handleDateSelect}
+                mode="range"
+                numberOfMonths={2}
+                selected={dateRange}
+                onSelect={handleRangeSelect}
                 disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                defaultMonth={dateRange?.from ?? new Date()}
                 initialFocus
               />
+              <div className="border-t px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Select start then end date</span>
+                {planningWindowStart && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      // Single-day shortcut: close with just start
+                      setCalendarOpen(false);
+                    }}
+                  >
+                    Single day
+                  </Button>
+                )}
+              </div>
             </PopoverContent>
           </Popover>
         </div>
@@ -188,28 +234,42 @@ export function ScheduleHeader({
               <SelectValue placeholder="Select time window..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="morning">Morning (6am - 12pm)</SelectItem>
-              <SelectItem value="afternoon">Afternoon (12pm - 6pm)</SelectItem>
-              <SelectItem value="evening">Evening (6pm - 10pm)</SelectItem>
+              <SelectItem value="morning">Morning (6am – 12pm)</SelectItem>
+              <SelectItem value="afternoon">Afternoon (12pm – 6pm)</SelectItem>
+              <SelectItem value="evening">Evening (6pm – 10pm)</SelectItem>
               <SelectItem value="all_day">All Day</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Selected Location Display */}
-      {selectedLocation && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {locationTab === 'warehouse' ? (
-            <Building2 className="h-4 w-4" />
-          ) : (
-            <MapPin className="h-4 w-4" />
-          )}
-          <span>
-            Starting from: <span className="font-medium text-foreground">{selectedLocation.name}</span>
-          </span>
-        </div>
-      )}
+      {/* Selected Location + window summary */}
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        {selectedLocation ? (
+          <div className="flex items-center gap-2">
+            {locationTab === 'warehouse' ? (
+              <Building2 className="h-4 w-4" />
+            ) : (
+              <MapPin className="h-4 w-4" />
+            )}
+            <span>
+              Starting from: <span className="font-medium text-foreground">{selectedLocation.name}</span>
+            </span>
+          </div>
+        ) : (
+          <span />
+        )}
+        {planningWindowStart && (
+          <div className="flex items-center gap-1.5">
+            <CalendarIcon className="h-3.5 w-3.5" />
+            <span className="text-xs">
+              {planningWindowEnd && planningWindowEnd !== planningWindowStart
+                ? `Execution horizon: ${windowLabel}`
+                : `Dispatch day: ${windowLabel}`}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

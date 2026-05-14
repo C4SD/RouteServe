@@ -168,7 +168,10 @@ export function ItemFormDialog({ open, onOpenChange, item }: ItemFormDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden rounded-xl shadow-lg flex flex-col">
+      <DialogContent
+        className="max-w-3xl max-h-[85vh] overflow-hidden rounded-xl shadow-lg flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         {/* Sticky Header */}
         <div className="sticky top-0 bg-background px-8 py-6 border-b">
           <DialogHeader>

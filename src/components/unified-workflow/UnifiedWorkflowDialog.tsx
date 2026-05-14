@@ -33,6 +33,12 @@ import { Step3Batch } from './steps/Step3Batch';
 import { Step4Route } from './steps/Step4Route';
 import { Step5Review } from './steps/Step5Review';
 
+// Copilot Steps
+import { CopilotStep3Intent } from './copilot/CopilotStep3Intent';
+import { CopilotStep4Candidates } from './copilot/CopilotStep4Candidates';
+import { CopilotStep5Timeline } from './copilot/CopilotStep5Timeline';
+import { CopilotStep6Approve } from './copilot/CopilotStep6Approve';
+
 // Store
 import {
   useUnifiedWorkflowStore,
@@ -72,7 +78,10 @@ const MANUAL_STEP_LABELS = [
 const COPILOT_STEP_LABELS = [
   { num: 1, label: 'Mode' },
   { num: 2, label: 'Source' },
-  { num: 3, label: 'Copilot' },
+  { num: 3, label: 'Intent' },
+  { num: 4, label: 'Demand' },
+  { num: 5, label: 'Timeline' },
+  { num: 6, label: 'Approve' },
 ];
 
 export function UnifiedWorkflowDialog({
@@ -94,6 +103,8 @@ export function UnifiedWorkflowDialog({
   const startLocationId = useUnifiedWorkflowStore((state) => state.start_location_id);
   const startLocationType = useUnifiedWorkflowStore((state) => state.start_location_type);
   const plannedDate = useUnifiedWorkflowStore((state) => state.planned_date);
+  const planningWindowStart = useUnifiedWorkflowStore((state) => state.planning_window_start);
+  const planningWindowEnd = useUnifiedWorkflowStore((state) => state.planning_window_end);
   const timeWindow = useUnifiedWorkflowStore((state) => state.time_window);
   const workingSet = useUnifiedWorkflowStore((state) => state.working_set);
   const aiOptions = useUnifiedWorkflowStore((state) => state.ai_optimization_options);
@@ -115,6 +126,11 @@ export function UnifiedWorkflowDialog({
   const facilityPackaging = useUnifiedWorkflowStore((state) => state.facility_packaging);
   const routingFallbackUsed = useUnifiedWorkflowStore((state) => state.routing_fallback_used);
   const suggestedVehicleIds = useUnifiedWorkflowStore((state) => state.suggested_vehicle_ids);
+
+  // Copilot state
+  const planningIntent = useUnifiedWorkflowStore((state) => state.planning_intent);
+  const planningCandidates = useUnifiedWorkflowStore((state) => state.planning_candidates);
+  const copilotPlan = useUnifiedWorkflowStore((state) => state.copilot_plan);
 
   // Get actions separately (memoized with shallow)
   const actions = useWorkflowActions();
@@ -194,6 +210,29 @@ export function UnifiedWorkflowDialog({
       licenseType: d.licenseType || d.license_type,
     }));
   }, [driversData]);
+
+  // Operational snapshot for Step 2 awareness panel
+  const operationalSnapshot = React.useMemo(() => {
+    const totalVehicles = vehicles.length;
+    const availableVehicles = vehicles.filter((v) => v.status === 'available').length;
+    const maintenanceVehicles = vehicles.filter((v) => v.status === 'maintenance').length;
+    const totalDrivers = drivers.length;
+    const activeDrivers = drivers.filter((d) => d.status === 'available').length;
+
+    return {
+      ready_requisitions: facilityCandidates.reduce(
+        (sum, c) => sum + ((c as any).requisition_ids?.length ?? 1),
+        0
+      ),
+      ready_facilities: facilityCandidates.length,
+      vehicles_available: availableVehicles,
+      vehicles_total: totalVehicles,
+      vehicles_maintenance: maintenanceVehicles,
+      drivers_active: activeDrivers,
+      drivers_total: totalDrivers,
+      drivers_overlap_warnings: 0,
+    };
+  }, [vehicles, drivers, facilityCandidates]);
 
   // Calculate vehicle suggestions based on working set demand
   const vehicleSuggestions = React.useMemo(() => {
@@ -288,7 +327,9 @@ export function UnifiedWorkflowDialog({
         schedule_title: scheduleTitle!,
         start_location_id: startLocationId!,
         start_location_type: startLocationType,
-        planned_date: plannedDate!,
+        planned_date: (planningWindowStart ?? plannedDate)!,
+        planning_window_start: planningWindowStart ?? plannedDate ?? undefined,
+        planning_window_end: planningWindowEnd ?? undefined,
         time_window: timeWindow,
         facility_order: workingSet.map((w) => w.facility_id),
         facility_requisition_map: workingSet.reduce(
@@ -318,6 +359,8 @@ export function UnifiedWorkflowDialog({
     startLocationId,
     startLocationType,
     plannedDate,
+    planningWindowStart,
+    planningWindowEnd,
     timeWindow,
     workingSet,
     aiOptions,
@@ -352,7 +395,9 @@ export function UnifiedWorkflowDialog({
           schedule_title: scheduleTitle!,
           start_location_id: startLocationId!,
           start_location_type: startLocationType,
-          planned_date: plannedDate!,
+          planned_date: (planningWindowStart ?? plannedDate)!,
+          planning_window_start: planningWindowStart ?? plannedDate ?? undefined,
+          planning_window_end: planningWindowEnd ?? undefined,
           time_window: timeWindow,
           facility_order: workingSet.map((w) => w.facility_id),
           facility_requisition_map: workingSet.reduce(
@@ -383,6 +428,8 @@ export function UnifiedWorkflowDialog({
         totalDistanceKm: totalDistanceKm ?? undefined,
         estimatedDurationMin: estimatedDurationMin ?? undefined,
         routeFallbackUsed: routingFallbackUsed,
+        planningWindowStart: planningWindowStart ?? plannedDate,
+        planningWindowEnd: planningWindowEnd,
         notes: scheduleNotes,
       });
 
@@ -403,6 +450,8 @@ export function UnifiedWorkflowDialog({
     startLocationId,
     startLocationType,
     plannedDate,
+    planningWindowStart,
+    planningWindowEnd,
     timeWindow,
     workingSet,
     aiOptions,
@@ -458,26 +507,18 @@ export function UnifiedWorkflowDialog({
         return (
           <Step1Source
             sourceMethod={sourceMethod}
-            sourceSubOption={sourceSubOption}
             onSourceMethodChange={actions.setSourceMethod}
-            onSourceSubOptionChange={actions.setSourceSubOption}
           />
         );
 
       case 3:
         if (scheduleMode === 'copilot') {
           return (
-            <div className="flex flex-col items-center justify-center gap-4 p-12 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <span className="text-3xl">🚀</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Scheduling Copilot — Coming Soon</h3>
-                <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-                  The AI copilot for automated dispatch scheduling is under development. Stay tuned for updates.
-                </p>
-              </div>
-            </div>
+            <CopilotStep3Intent
+              intent={planningIntent}
+              onIntentChange={actions.setPlanningIntent}
+              operationalSnapshot={operationalSnapshot}
+            />
           );
         }
         return (
@@ -489,6 +530,9 @@ export function UnifiedWorkflowDialog({
             onStartLocationChange={actions.setStartLocation}
             plannedDate={plannedDate}
             onPlannedDateChange={actions.setPlannedDate}
+            planningWindowStart={planningWindowStart}
+            planningWindowEnd={planningWindowEnd}
+            onPlanningWindowChange={actions.setPlanningWindow}
             timeWindow={timeWindow}
             onTimeWindowChange={actions.setTimeWindow}
             sourceMethod={sourceMethod}
@@ -513,10 +557,25 @@ export function UnifiedWorkflowDialog({
             onUpdateParsedRow={actions.updateParsedFacility}
             policyContext={policyContext}
             onPolicyContextChange={actions.setPolicyContext}
+            operationalSnapshot={operationalSnapshot}
           />
         );
 
       case 4:
+        if (scheduleMode === 'copilot') {
+          return (
+            <CopilotStep4Candidates
+              intent={planningIntent!}
+              candidates={planningCandidates}
+              facilityCandidates={effectiveCandidates}
+              onCandidatesResolved={actions.setPlanningCandidates}
+              onPlanGenerated={actions.setCopilotPlan}
+              copilotPlan={copilotPlan}
+              vehicles={vehicles}
+              drivers={drivers}
+            />
+          );
+        }
         return (
           <Step3PackagingCompletion
             workingSet={workingSet}
@@ -526,6 +585,16 @@ export function UnifiedWorkflowDialog({
         );
 
       case 5:
+        if (scheduleMode === 'copilot') {
+          return copilotPlan ? (
+            <CopilotStep5Timeline
+              plan={copilotPlan}
+              vehicles={vehicles}
+              drivers={drivers}
+              onUpdateRun={actions.updateDispatchRunProposal}
+            />
+          ) : null;
+        }
         return (
           <Step3Batch
             batchName={batchName}
@@ -535,6 +604,8 @@ export function UnifiedWorkflowDialog({
             scheduleTitle={scheduleTitle}
             startLocationName={startLocationName}
             plannedDate={plannedDate}
+            planningWindowStart={planningWindowStart}
+            planningWindowEnd={planningWindowEnd}
             timeWindow={timeWindow}
             facilities={workingSet}
             selectedVehicleIds={vehicleIds.length > 0 ? vehicleIds : (vehicleId ? [vehicleId] : [])}
@@ -554,6 +625,11 @@ export function UnifiedWorkflowDialog({
         );
 
       case 6: {
+        if (scheduleMode === 'copilot') {
+          return copilotPlan && planningIntent ? (
+            <CopilotStep6Approve plan={copilotPlan} intent={planningIntent} />
+          ) : null;
+        }
         const startLocation = warehouses.find(w => w.id === startLocationId) || null;
         return (
           <Step4Route
@@ -581,11 +657,18 @@ export function UnifiedWorkflowDialog({
             scheduleTitle={scheduleTitle}
             startLocationName={startLocationName}
             plannedDate={plannedDate}
+            planningWindowStart={planningWindowStart}
+            planningWindowEnd={planningWindowEnd}
             timeWindow={timeWindow}
             batchName={batchName}
             priority={priority}
             vehicleName={selectedVehicle?.model || null}
             vehiclePlate={selectedVehicle?.plateNumber || null}
+            vehicles={selectedVehicles.map((v) => ({
+              id: v.id,
+              name: v.model,
+              plate: v.plateNumber,
+            }))}
             driverName={selectedDriver?.name || null}
             totalDistanceKm={totalDistanceKm}
             estimatedDurationMin={estimatedDurationMin}
@@ -607,6 +690,8 @@ export function UnifiedWorkflowDialog({
     startLocationId,
     startLocationType,
     plannedDate,
+    planningWindowStart,
+    planningWindowEnd,
     timeWindow,
     warehouses,
     effectiveCandidates,
@@ -628,15 +713,21 @@ export function UnifiedWorkflowDialog({
     routeGeometry,
     isLoading,
     selectedVehicle,
+    selectedVehicles,
     selectedDriver,
     scheduleNotes,
     parsedFacilities,
     policyContext,
     facilityPackaging,
     routingFallbackUsed,
+    operationalSnapshot,
     vehicleIds,
     actions,
     handleOptimizeRoute,
+    // copilot
+    planningIntent,
+    planningCandidates,
+    copilotPlan,
   ]);
 
   // Dynamic step labels based on schedule mode
@@ -656,7 +747,10 @@ export function UnifiedWorkflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0">
+      <DialogContent
+        className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
           <div className="flex items-center justify-between pr-14">
@@ -734,8 +828,17 @@ export function UnifiedWorkflowDialog({
               </Button>
             )}
 
-            {/* Copilot Coming Soon step — no navigation forward */}
-            {currentStep === 3 && scheduleMode === 'copilot' ? null : currentStep === 7 ? (
+            {/* Copilot final step (step 6) — Approve & Dispatch */}
+            {scheduleMode === 'copilot' && currentStep === 6 ? (
+              <Button onClick={handleConfirm} disabled={!canProceed || convertToBatch.isPending}>
+                {convertToBatch.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-1" />
+                )}
+                Approve & Dispatch
+              </Button>
+            ) : scheduleMode === 'manual' && currentStep === 7 ? (
               <Button
                 onClick={handleConfirm}
                 disabled={!canProceed || convertToBatch.isPending}
@@ -749,7 +852,11 @@ export function UnifiedWorkflowDialog({
               </Button>
             ) : (
               <Button onClick={handleNextStep} disabled={!canProceed}>
-                {currentStep === 4 ? 'Continue to Batch' : 'Next'}
+                {scheduleMode === 'copilot' && currentStep === 4
+                  ? 'Review Timeline'
+                  : scheduleMode === 'manual' && currentStep === 4
+                  ? 'Continue to Batch'
+                  : 'Next'}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             )}

@@ -151,6 +151,7 @@ export function NewInvoiceWizard({ open, onOpenChange, preSelectedRequisitionId,
             ? 'max-w-[92vw] w-full h-[90vh]'
             : 'max-h-[90vh] max-w-4xl'
         )}
+        onInteractOutside={(e) => e.preventDefault()}
       >
         {step === 'packaging' && pendingData ? (
           <PackagingStep

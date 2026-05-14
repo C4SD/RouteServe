@@ -455,7 +455,11 @@ export function UploadProgramItemsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col" onCloseAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent
+        className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />

@@ -2,11 +2,12 @@
  * =====================================================
  * Schedule Details Column (Right Column - Step 3)
  * =====================================================
- * Displays schedule info, route details, driver assignment,
- * and facility list summary.
+ * Displays schedule info, route details, return ETA,
+ * driver assignment, and facility list summary.
  */
 
 import * as React from 'react';
+import { addMinutes, format, parseISO } from 'date-fns';
 import {
   Calendar,
   Clock,
@@ -16,6 +17,7 @@ import {
   Building2,
   Package,
   AlertCircle,
+  TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
@@ -51,13 +53,20 @@ interface ScheduleDetailsColumnProps {
   // Schedule Info
   scheduleTitle: string | null;
   startLocationName: string | null;
+  /** @deprecated use planningWindowStart/End */
   plannedDate: string | null;
+  planningWindowStart?: string | null;
+  planningWindowEnd?: string | null;
   timeWindow: TimeWindow | null;
   priority: Priority;
 
   // Route Info
   totalDistanceKm: number | null;
   estimatedDurationMin: number | null;
+
+  // Return ETA
+  /** ISO timestamp for planned departure; if set, computed return is shown */
+  plannedDeparture?: string | null;
 
   // Driver Assignment
   selectedDriverId: string | null;
@@ -70,14 +79,45 @@ interface ScheduleDetailsColumnProps {
   className?: string;
 }
 
+function formatPlanningWindow(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start) return 'Not set';
+  const s = new Date(start);
+  if (!end || end === start) {
+    return s.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  const e = new Date(end);
+  const sMonth = s.toLocaleDateString('en-US', { month: 'short' });
+  const eMonth = e.toLocaleDateString('en-US', { month: 'short' });
+  if (sMonth === eMonth) {
+    return `${format(s, 'MMM d')} – ${format(e, 'd')}`;
+  }
+  return `${format(s, 'MMM d')} – ${format(e, 'MMM d')}`;
+}
+
+function computePlannedReturn(
+  departure: string,
+  durationMin: number,
+  bufferMin = 15
+): string {
+  try {
+    const ret = addMinutes(parseISO(departure), durationMin + bufferMin);
+    return format(ret, 'h:mma').toLowerCase();
+  } catch {
+    return '—';
+  }
+}
+
 export function ScheduleDetailsColumn({
   scheduleTitle,
   startLocationName,
   plannedDate,
+  planningWindowStart,
+  planningWindowEnd,
   timeWindow,
   priority,
   totalDistanceKm,
   estimatedDurationMin,
+  plannedDeparture,
   selectedDriverId,
   drivers,
   onDriverChange,
@@ -86,54 +126,53 @@ export function ScheduleDetailsColumn({
 }: ScheduleDetailsColumnProps) {
   const selectedDriver = drivers.find((d) => d.id === selectedDriverId);
 
-  // Format time window
+  // Effective planning window (fall back to plannedDate)
+  const effectiveStart = planningWindowStart ?? plannedDate;
+  const effectiveEnd = planningWindowEnd ?? plannedDate;
+
   const timeWindowLabel = React.useMemo(() => {
     switch (timeWindow) {
-      case 'morning':
-        return 'Morning (6am - 12pm)';
-      case 'afternoon':
-        return 'Afternoon (12pm - 6pm)';
-      case 'evening':
-        return 'Evening (6pm - 10pm)';
-      case 'all_day':
-        return 'All Day';
-      default:
-        return 'Not set';
+      case 'morning':    return 'Morning (6am – 12pm)';
+      case 'afternoon':  return 'Afternoon (12pm – 6pm)';
+      case 'evening':    return 'Evening (6pm – 10pm)';
+      case 'all_day':    return 'All Day';
+      default:           return 'Not set';
     }
   }, [timeWindow]);
 
-  // Format duration
   const durationLabel = React.useMemo(() => {
     if (!estimatedDurationMin) return '-';
-    const hours = Math.floor(estimatedDurationMin / 60);
-    const mins = estimatedDurationMin % 60;
-    if (hours === 0) return `${mins}min`;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h ${mins}min`;
+    const h = Math.floor(estimatedDurationMin / 60);
+    const m = estimatedDurationMin % 60;
+    if (h === 0) return `${m}min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}min`;
   }, [estimatedDurationMin]);
 
-  // Format date
-  const dateLabel = React.useMemo(() => {
-    if (!plannedDate) return 'Not set';
-    return new Date(plannedDate).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
-  }, [plannedDate]);
+  const planningWindowLabel = formatPlanningWindow(effectiveStart, effectiveEnd);
 
-  // Filter available drivers
-  const availableDrivers = drivers.filter((d) => d.status === 'available');
+  const returnETA = React.useMemo(() => {
+    if (!plannedDeparture || !estimatedDurationMin) return null;
+    return computePlannedReturn(plannedDeparture, estimatedDurationMin);
+  }, [plannedDeparture, estimatedDurationMin]);
+
+  const departureLabel = React.useMemo(() => {
+    if (!plannedDeparture) return null;
+    try {
+      return format(parseISO(plannedDeparture), 'h:mma').toLowerCase();
+    } catch {
+      return null;
+    }
+  }, [plannedDeparture]);
+
+  const availableDrivers   = drivers.filter((d) => d.status === 'available');
   const unavailableDrivers = drivers.filter((d) => d.status !== 'available');
 
-  // Calculate totals
-  const totals = React.useMemo(() => {
-    return {
-      facilities: facilities.length,
-      slots: facilities.reduce((sum, f) => sum + (f.slot_demand || 0), 0),
-      weight: facilities.reduce((sum, f) => sum + (f.weight_kg || 0), 0),
-    };
-  }, [facilities]);
+  const totals = React.useMemo(() => ({
+    facilities: facilities.length,
+    slots:  facilities.reduce((s, f) => s + (f.slot_demand || 0), 0),
+    weight: facilities.reduce((s, f) => s + (f.weight_kg || 0), 0),
+  }), [facilities]);
 
   return (
     <ScrollArea className={cn('h-full', className)}>
@@ -147,18 +186,15 @@ export function ScheduleDetailsColumn({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <DetailRow
-              label="Title"
-              value={scheduleTitle || 'Untitled'}
-            />
+            <DetailRow label="Title"          value={scheduleTitle || 'Untitled'} />
             <DetailRow
               label="Start Location"
               value={startLocationName || 'Not set'}
               icon={<Building2 className="h-3 w-3" />}
             />
             <DetailRow
-              label="Date"
-              value={dateLabel}
+              label="Planning Window"
+              value={planningWindowLabel}
               icon={<Calendar className="h-3 w-3" />}
             />
             <DetailRow
@@ -171,11 +207,9 @@ export function ScheduleDetailsColumn({
               value={
                 <Badge
                   variant={
-                    priority === 'urgent'
-                      ? 'destructive'
-                      : priority === 'high'
-                      ? 'default'
-                      : 'secondary'
+                    priority === 'urgent' ? 'destructive'
+                    : priority === 'high'  ? 'default'
+                    : 'secondary'
                   }
                   className="text-xs"
                 >
@@ -186,7 +220,7 @@ export function ScheduleDetailsColumn({
           </CardContent>
         </Card>
 
-        {/* Route Details */}
+        {/* Route + Return ETA */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -199,7 +233,7 @@ export function ScheduleDetailsColumn({
               <div className="p-2 rounded-lg bg-muted/50 text-center">
                 <p className="text-xs text-muted-foreground">Distance</p>
                 <p className="text-sm font-semibold">
-                  {totalDistanceKm ? `${totalDistanceKm.toFixed(1)} km` : '-'}
+                  {totalDistanceKm ? `${totalDistanceKm.toFixed(1)} km` : '—'}
                 </p>
               </div>
               <div className="p-2 rounded-lg bg-muted/50 text-center">
@@ -207,6 +241,24 @@ export function ScheduleDetailsColumn({
                 <p className="text-sm font-semibold">{durationLabel}</p>
               </div>
             </div>
+
+            {/* Return ETA section */}
+            {(departureLabel || returnETA) && (
+              <div className="rounded-lg border border-dashed px-3 py-2 space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  Departure / Return ETA
+                </p>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Departure</span>
+                  <span className="font-medium">{departureLabel ?? '—'}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Est. Return</span>
+                  <span className="font-medium text-green-700">{returnETA ?? '—'}</span>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -218,7 +270,7 @@ export function ScheduleDetailsColumn({
               Driver Assignment
             </CardTitle>
             <CardDescription className="text-xs">
-              Optional - can be assigned later
+              Optional — can be assigned later
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -300,10 +352,7 @@ export function ScheduleDetailsColumn({
             ) : (
               <div className="space-y-2">
                 {facilities.slice(0, 5).map((facility, idx) => (
-                  <div
-                    key={facility.facility_id}
-                    className="flex items-center gap-2 text-sm"
-                  >
+                  <div key={facility.facility_id} className="flex items-center gap-2 text-sm">
                     <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
                       {idx + 1}
                     </span>

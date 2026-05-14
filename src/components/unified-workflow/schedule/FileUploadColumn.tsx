@@ -74,10 +74,16 @@ async function parseCSV(file: File): Promise<string[]> {
         const rows = results.data as Record<string, string>[];
         if (rows.length === 0) return resolve([]);
         const colNames = Object.keys(rows[0]);
+        const FACILITY_HEADER_RE =
+          /facility|consignee|recipient|health.{0,10}facility|delivery.{0,5}point|dispatch.{0,5}point|site|location|destination/i;
         const facilityCol =
-          colNames.find((c) =>
-            /facility|name|site|health.?facility|location|destination/i.test(c),
-          ) ?? colNames[0];
+          colNames.find((c) => FACILITY_HEADER_RE.test(c)) ??
+          // Heuristic fallback: prefer the column with the most non-numeric values
+          colNames.reduce((best, col) => {
+            const nonNumeric = rows.filter(r => r[col] && !/^\d+$/.test(r[col])).length;
+            const bestNonNumeric = rows.filter(r => r[best] && !/^\d+$/.test(r[best])).length;
+            return nonNumeric > bestNonNumeric ? col : best;
+          }, colNames[0]);
         resolve(rows.map((r) => r[facilityCol]).filter(Boolean));
       },
       error: (err: any) => reject(err),
@@ -92,20 +98,43 @@ async function parseXLSX(file: File): Promise<string[]> {
   const sheet = wb.worksheets[0];
   if (!sheet) return [];
 
+  // headers is 1-indexed (ExcelJS col is 1-based)
   const headers: string[] = [];
   sheet.getRow(1).eachCell((cell, col) => {
     headers[col] = String(cell.value || '');
   });
 
-  let colIdx = headers.findIndex((h) =>
-    /facility|name|site|health.?facility|location|destination/i.test(h),
-  );
-  if (colIdx === -1) colIdx = 1;
+  // Prefer columns whose header looks like a facility/place name field
+  const FACILITY_HEADER_RE =
+    /facility|consignee|recipient|health.{0,10}facility|delivery.{0,5}point|dispatch.{0,5}point|site|location|destination/i;
+
+  let colIdx = headers.findIndex((h) => FACILITY_HEADER_RE.test(h));
+
+  if (colIdx === -1) {
+    // Heuristic: pick the column with the most distinct non-numeric string values
+    // (row numbers / serial numbers are purely numeric and should score low)
+    const colScores = new Map<number, number>();
+    sheet.eachRow((row, rowNum) => {
+      if (rowNum === 1) return;
+      row.eachCell((cell, col) => {
+        const v = String(cell.value ?? '').trim();
+        if (v && !/^\d+$/.test(v)) {
+          colScores.set(col, (colScores.get(col) ?? 0) + 1);
+        }
+      });
+    });
+    let bestCol = 1;
+    let bestScore = -1;
+    for (const [col, score] of colScores) {
+      if (score > bestScore) { bestScore = score; bestCol = col; }
+    }
+    colIdx = bestCol;
+  }
 
   const names: string[] = [];
   sheet.eachRow((row, rowNum) => {
     if (rowNum === 1) return;
-    const val = row.getCell(colIdx === 0 ? 1 : colIdx).value;
+    const val = row.getCell(colIdx).value;
     if (val) names.push(String(val).trim());
   });
   return names;

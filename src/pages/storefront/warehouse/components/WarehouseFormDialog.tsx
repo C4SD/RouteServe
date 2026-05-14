@@ -480,7 +480,10 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -636,17 +639,10 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
 
               <Separator />
 
-              {/* Stores section (create + edit) */}
+              {/* Stores section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold text-muted-foreground">Stores</h3>
-                    {!isEditing && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Stores are sub-nodes of this warehouse. You can add them now or after saving.
-                      </p>
-                    )}
-                  </div>
+                  <h3 className="text-sm font-semibold text-muted-foreground">Stores</h3>
                   <Button
                     type="button"
                     variant="outline"
@@ -662,14 +658,11 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
                   </Button>
                 </div>
 
-                {/* Existing stores (edit mode) */}
+                {/* Existing stores — edit mode */}
                 {isEditing && existingStores.length > 0 && (
                   <div className="space-y-1.5">
                     {existingStores.map(store => (
-                      <div
-                        key={store.id}
-                        className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 border text-sm"
-                      >
+                      <div key={store.id} className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 border text-sm">
                         <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <span className="font-medium truncate flex-1">{store.name}</span>
                         <Badge variant="outline" className="font-mono text-[10px]">{store.code}</Badge>
@@ -692,14 +685,11 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
                   </div>
                 )}
 
-                {/* Pending stores (create mode) */}
+                {/* Pending stores — create mode */}
                 {!isEditing && pendingStores.length > 0 && (
                   <div className="space-y-1.5">
                     {pendingStores.map((store, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 border text-sm"
-                      >
+                      <div key={i} className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 border text-sm">
                         <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                         <span className="font-medium truncate flex-1">{store.name}</span>
                         <Badge variant="outline" className="font-mono text-[10px]">{store.code}</Badge>
@@ -724,11 +714,17 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
                   </div>
                 )}
 
+                {isEditing && existingStores.length === 0 && !showAddStore && (
+                  <p className="text-sm text-muted-foreground italic">No stores added yet</p>
+                )}
+                {!isEditing && pendingStores.length === 0 && !showAddStore && (
+                  <p className="text-sm text-muted-foreground italic">No stores added — optional</p>
+                )}
+
                 {/* Inline add-store form */}
                 {showAddStore && (
                   <div className="rounded-lg border-2 border-dashed p-4 space-y-5 bg-muted/20">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">New Store</p>
-
                     <StoreFields
                       nameReg={inlineStoreForm.register('name')}
                       codeReg={inlineStoreForm.register('code')}
@@ -746,7 +742,6 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
                       errors={inlineStoreForm.formState.errors}
                       idPrefix="inline-"
                     />
-
                     <Button
                       type="button"
                       size="sm"
@@ -757,13 +752,6 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse, defaultPare
                       {isEditing && createWarehouse.isPending ? 'Adding...' : 'Add Store'}
                     </Button>
                   </div>
-                )}
-
-                {isEditing && existingStores.length === 0 && !showAddStore && (
-                  <p className="text-sm text-muted-foreground italic">No stores added yet</p>
-                )}
-                {!isEditing && pendingStores.length === 0 && !showAddStore && (
-                  <p className="text-sm text-muted-foreground italic">No stores added — optional</p>
                 )}
               </div>
 

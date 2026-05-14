@@ -25,6 +25,8 @@ import type {
   VehicleSuggestion,
   PolicyContext,
 } from '@/types/unified-workflow';
+import { OperationalSnapshotPanel } from '../schedule/OperationalSnapshotPanel';
+import type { OperationalSnapshot } from '../schedule/OperationalSnapshotPanel';
 import type { TimeWindow } from '@/types/scheduler';
 
 interface Step2ScheduleProps {
@@ -34,8 +36,13 @@ interface Step2ScheduleProps {
   startLocationId: string | null;
   startLocationType: 'warehouse' | 'facility';
   onStartLocationChange: (id: string, type: 'warehouse' | 'facility') => void;
+  /** @deprecated use planningWindowStart/End instead */
   plannedDate: string | null;
+  /** @deprecated use onPlanningWindowChange instead */
   onPlannedDateChange: (date: string) => void;
+  planningWindowStart: string | null;
+  planningWindowEnd: string | null;
+  onPlanningWindowChange: (start: string, end: string | null) => void;
   timeWindow: TimeWindow | null;
   onTimeWindowChange: (window: TimeWindow | null) => void;
 
@@ -74,6 +81,9 @@ interface Step2ScheduleProps {
   // Policy context (only used when sourceMethod === 'service_policy')
   policyContext?: PolicyContext | null;
   onPolicyContextChange?: (context: PolicyContext | null) => void;
+
+  // Optional operational snapshot shown in right column
+  operationalSnapshot?: OperationalSnapshot | null;
 }
 
 export function Step2Schedule({
@@ -84,6 +94,9 @@ export function Step2Schedule({
   onStartLocationChange,
   plannedDate,
   onPlannedDateChange,
+  planningWindowStart,
+  planningWindowEnd,
+  onPlanningWindowChange,
   timeWindow,
   onTimeWindowChange,
   sourceMethod,
@@ -108,6 +121,7 @@ export function Step2Schedule({
   onUpdateParsedRow,
   policyContext,
   onPolicyContextChange,
+  operationalSnapshot,
 }: Step2ScheduleProps) {
   // Get selected facility IDs for the left column
   const selectedFacilityIds = React.useMemo(
@@ -162,8 +176,9 @@ export function Step2Schedule({
         startLocationId={startLocationId}
         startLocationType={startLocationType}
         onStartLocationChange={onStartLocationChange}
-        plannedDate={plannedDate}
-        onPlannedDateChange={onPlannedDateChange}
+        planningWindowStart={planningWindowStart ?? plannedDate}
+        planningWindowEnd={planningWindowEnd}
+        onPlanningWindowChange={onPlanningWindowChange}
         timeWindow={timeWindow}
         onTimeWindowChange={onTimeWindowChange}
         warehouses={warehouses}
@@ -235,19 +250,26 @@ export function Step2Schedule({
             />
           </MiddleColumn>
 
-          {/* Right Column: Decision Support */}
+          {/* Right Column: Decision Support + Operational Snapshot */}
           <RightColumn title="Decision Support">
-            <DecisionSupportColumn
-              workingSet={workingSet}
-              startLocation={startLocation}
-              facilities={candidates}
-              sourceSubOption={sourceSubOption}
-              aiOptions={aiOptions}
-              onAiOptionsChange={onAiOptionsChange}
-              suggestedVehicleId={suggestedVehicleId}
-              onSuggestedVehicleChange={onSuggestedVehicleChange}
-              vehicleSuggestions={vehicleSuggestions}
-            />
+            <div className="flex flex-col h-full gap-3 overflow-y-auto">
+              <DecisionSupportColumn
+                workingSet={workingSet}
+                startLocation={startLocation}
+                facilities={candidates}
+                sourceSubOption={sourceSubOption}
+                aiOptions={aiOptions}
+                onAiOptionsChange={onAiOptionsChange}
+                suggestedVehicleId={suggestedVehicleId}
+                onSuggestedVehicleChange={onSuggestedVehicleChange}
+                vehicleSuggestions={vehicleSuggestions}
+              />
+              {operationalSnapshot && (
+                <div className="px-1 pb-2">
+                  <OperationalSnapshotPanel snapshot={operationalSnapshot} />
+                </div>
+              )}
+            </div>
           </RightColumn>
         </ThreeColumnLayout>
       </div>

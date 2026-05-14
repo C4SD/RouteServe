@@ -126,7 +126,10 @@ export function TransferFormDialog({ open, onOpenChange }: TransferFormDialogPro
 
   return (
     <Dialog open={open} onOpenChange={(open) => { if (!open) handleReset(); onOpenChange(open); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>Create Inventory Transfer</DialogTitle>
           <DialogDescription className="sr-only">

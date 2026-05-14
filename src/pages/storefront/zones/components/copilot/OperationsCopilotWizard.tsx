@@ -292,6 +292,8 @@ export function OperationsCopilotWizard({ open, onOpenChange }: OperationsCopilo
                 onBack={() => setStep(2)}
                 warehouseCount={selectedWarehouses.length}
                 facilityCount={selectedFacilities.length}
+                warehouses={selectedWarehouses}
+                facilities={selectedFacilities}
               />
             )}
             {step === 4 && (

@@ -702,10 +702,13 @@ export function UploadItemsDialog({ open, onOpenChange, onSuccess }: UploadItems
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className={cn(
-        "max-h-[90vh] overflow-hidden flex flex-col",
-        step === 'mapping' ? 'max-w-6xl' : 'max-w-4xl'
-      )}>
+      <DialogContent
+        className={cn(
+          "max-h-[90vh] overflow-hidden flex flex-col",
+          step === 'mapping' ? 'max-w-6xl' : 'max-w-4xl'
+        )}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             Upload Items

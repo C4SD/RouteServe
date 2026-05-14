@@ -247,7 +247,10 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
+      <DialogContent
+        className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Edit Zone</DialogTitle>
           <DialogDescription>

@@ -490,7 +490,10 @@ export function CreateServicePolicyWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[96vw] w-[1400px] h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent
+        className="max-w-[96vw] w-[1400px] h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             {/* Step indicator */}

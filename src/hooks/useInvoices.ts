@@ -9,6 +9,10 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 // ========================================
 
 function mapDbToInvoice(dbInvoice: any, items?: any[]): Invoice {
+  const pkgRow = Array.isArray(dbInvoice.invoice_packaging)
+    ? dbInvoice.invoice_packaging[0]
+    : dbInvoice.invoice_packaging;
+
   return {
     id: dbInvoice.id,
     invoice_number: dbInvoice.invoice_number,
@@ -37,6 +41,14 @@ function mapDbToInvoice(dbInvoice: any, items?: any[]): Invoice {
       lga: dbInvoice.facilities.lga,
     } : undefined,
     items: items || [],
+    packaging: pkgRow ? {
+      id: pkgRow.id,
+      invoice_id: pkgRow.invoice_id,
+      packaging_mode: pkgRow.packaging_mode,
+      total_packages: pkgRow.total_packages,
+      packages: pkgRow.package_items || [],
+      created_at: pkgRow.created_at,
+    } : undefined,
   };
 }
 
@@ -63,7 +75,7 @@ export function useInvoices(filters?: InvoiceFilters, page?: number, pageSize: n
     queryFn: async () => {
       let query = supabase
         .from('invoices')
-        .select('*, warehouses(id, name), facilities(id, name, address, lga)', { count: 'exact' })
+        .select('*, warehouses(id, name), facilities(id, name, address, lga), invoice_packaging(*, package_items(*))', { count: 'exact' })
         .eq('workspace_id', workspaceId!)
         .order('created_at', { ascending: false });
 
@@ -128,7 +140,7 @@ export function useInvoice(id: string | undefined) {
       const [invoiceData, itemsData] = await Promise.all([
         supabase
           .from('invoices')
-          .select('*, warehouses(id, name), facilities(id, name, address, lga)')
+          .select('*, warehouses(id, name), facilities(id, name, address, lga), invoice_packaging(*, package_items(*))')
           .eq('id', id)
           .eq('workspace_id', workspaceId)
           .single(),

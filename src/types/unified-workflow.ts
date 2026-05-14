@@ -7,6 +7,7 @@
  */
 
 import type { TimeWindow, Priority, RoutePoint } from './scheduler';
+import type { PlanningCandidate, PlanningIntent, CopilotPlan } from './scheduling-copilot';
 
 // =====================================================
 // WORKFLOW STEP TYPES
@@ -23,6 +24,15 @@ export type SourceSubOption = 'manual_scheduling' | 'ai_optimization';
 export type StartLocationType = 'warehouse' | 'facility';
 
 export type PreBatchStatus = 'draft' | 'ready' | 'converted' | 'cancelled';
+
+// =====================================================
+// PLANNING WINDOW TYPE
+// =====================================================
+
+export interface PlanningWindow {
+  start: string; // ISO date YYYY-MM-DD
+  end: string | null; // ISO date, null = open-ended from start
+}
 
 // =====================================================
 // POLICY CONTEXT (service_policy source method)
@@ -135,7 +145,9 @@ export interface PreBatch {
   schedule_title: string;
   start_location_id: string;
   start_location_type: StartLocationType;
-  planned_date: string;
+  planned_date: string; // kept for backward compat — equals planning_window_start
+  planning_window_start: string;
+  planning_window_end: string | null;
   time_window?: TimeWindow | null;
 
   // Working Set
@@ -210,6 +222,8 @@ export interface CreatePreBatchPayload {
   start_location_id: string;
   start_location_type: StartLocationType;
   planned_date: string;
+  planning_window_start?: string;
+  planning_window_end?: string | null;
   time_window?: TimeWindow | null;
   facility_order: string[];
   facility_requisition_map: Record<string, string[]>;
@@ -227,6 +241,8 @@ export interface UpdatePreBatchPayload {
   start_location_id?: string;
   start_location_type?: StartLocationType;
   planned_date?: string;
+  planning_window_start?: string;
+  planning_window_end?: string | null;
   time_window?: TimeWindow | null;
   facility_order?: string[];
   facility_requisition_map?: Record<string, string[]>;
@@ -272,7 +288,9 @@ export interface UnifiedWorkflowState {
   schedule_title: string | null;
   start_location_id: string | null;
   start_location_type: StartLocationType;
-  planned_date: string | null;
+  planned_date: string | null; // backward compat — equals planning_window_start
+  planning_window_start: string | null;
+  planning_window_end: string | null;
   time_window: TimeWindow | null;
 
   // Step 2: Working Set (Middle Column)
@@ -318,7 +336,24 @@ export interface UnifiedWorkflowState {
 
   // Routing diagnostics
   routing_fallback_used: boolean;
+
+  // =====================================================
+  // COPILOT MODE STATE
+  // =====================================================
+  // Only active when schedule_mode === 'copilot'
+
+  // Copilot Step 3: Planning intent (user-defined preferences)
+  planning_intent: PlanningIntent | null;
+
+  // Copilot Step 4: Resolved planning candidates (enriched from source)
+  planning_candidates: PlanningCandidate[] | null;
+
+  // Copilot Step 4→5: Generated execution plan
+  copilot_plan: CopilotPlan | null;
 }
+
+// Re-export copilot types so consumers can import from this module
+export type { PlanningCandidate, PlanningIntent, CopilotPlan };
 
 // =====================================================
 // FILE UPLOAD TYPES
@@ -424,6 +459,7 @@ export interface UnifiedWorkflowActions {
   setScheduleTitle: (title: string) => void;
   setStartLocation: (id: string, type: StartLocationType) => void;
   setPlannedDate: (date: string) => void;
+  setPlanningWindow: (start: string, end: string | null) => void;
   setTimeWindow: (window: TimeWindow | null) => void;
   setScheduleNotes: (notes: string | null) => void;
 
@@ -487,6 +523,14 @@ export interface UnifiedWorkflowActions {
   // Loading/Error
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+
+  // =====================================================
+  // COPILOT ACTIONS
+  // =====================================================
+  setPlanningIntent: (intent: PlanningIntent) => void;
+  setPlanningCandidates: (candidates: PlanningCandidate[]) => void;
+  setCopilotPlan: (plan: CopilotPlan | null) => void;
+  updateDispatchRunProposal: (runId: string, updates: Partial<import('./scheduling-copilot').DispatchRunProposal>) => void;
 }
 
 export type UnifiedWorkflowStore = UnifiedWorkflowState & UnifiedWorkflowActions;
@@ -496,20 +540,64 @@ export type UnifiedWorkflowStore = UnifiedWorkflowState & UnifiedWorkflowActions
 // =====================================================
 
 export type DispatchRunStatus =
+  | 'planned'
+  | 'loading'
   | 'pending'
+  | 'departed'
   | 'dispatched'
   | 'in_transit'
+  | 'delayed'
+  | 'partial_delivery'
+  | 'returned'
   | 'completed'
+  | 'failed'
   | 'cancelled';
 
 // Legal state-machine transitions
 export const DISPATCH_RUN_TRANSITIONS: Record<DispatchRunStatus, DispatchRunStatus[]> = {
-  pending:    ['dispatched', 'cancelled'],
-  dispatched: ['in_transit', 'cancelled'],
-  in_transit: ['completed', 'cancelled'],
-  completed:  [],
-  cancelled:  [],
+  planned:          ['loading', 'pending', 'cancelled'],
+  loading:          ['departed', 'pending', 'cancelled'],
+  pending:          ['dispatched', 'loading', 'cancelled'],
+  departed:         ['in_transit', 'delayed', 'cancelled'],
+  dispatched:       ['in_transit', 'departed', 'delayed', 'cancelled'],
+  in_transit:       ['completed', 'partial_delivery', 'delayed', 'cancelled'],
+  delayed:          ['in_transit', 'partial_delivery', 'cancelled'],
+  partial_delivery: ['returned', 'completed', 'cancelled'],
+  returned:         ['completed', 'cancelled'],
+  completed:        [],
+  failed:           [],
+  cancelled:        [],
 };
+
+export const DISPATCH_RUN_STATUS_LABELS: Record<DispatchRunStatus, string> = {
+  planned:          'Planned',
+  loading:          'Loading',
+  pending:          'Pending Dispatch',
+  departed:         'Departed',
+  dispatched:       'Dispatched',
+  in_transit:       'In Transit',
+  delayed:          'Delayed',
+  partial_delivery: 'Partial Delivery',
+  returned:         'Returned',
+  completed:        'Completed',
+  failed:           'Failed',
+  cancelled:        'Cancelled',
+};
+
+export interface ReturnedDelivery {
+  facility_id: string;
+  facility_name: string;
+  reason: string;
+  action: 'reschedule' | 'merge_future' | 'manual' | 'warehouse_return';
+}
+
+export interface VehicleAllocation {
+  vehicle_id: string;
+  vehicle_label?: string;
+  facilities: string[]; // facility_ids
+  slots_used: number;
+  capacity: number;
+}
 
 export interface DispatchRun {
   id: string;
@@ -521,6 +609,8 @@ export interface DispatchRun {
   vehicle_ids: string[];
   driver_id: string | null;
 
+  planned_departure: string | null;
+  planned_return: string | null;
   dispatched_at: string | null;
   departed_at: string | null;
   completed_at: string | null;
@@ -531,6 +621,9 @@ export interface DispatchRun {
   stops_completed: number;
   distance_km: number | null;
   duration_min: number | null;
+
+  returned_deliveries: ReturnedDelivery[] | null;
+  vehicle_allocations: VehicleAllocation[] | null;
 
   notes: string | null;
   cancel_reason: string | null;
@@ -548,6 +641,9 @@ export interface CreateDispatchRunPayload {
   stops_total?: number;
   distance_km?: number | null;
   duration_min?: number | null;
+  planned_departure?: string | null;
+  planned_return?: string | null;
+  vehicle_allocations?: VehicleAllocation[] | null;
   notes?: string | null;
 }
 
@@ -578,5 +674,9 @@ export interface ConvertPreBatchPayload {
   totalDistanceKm?: number;
   estimatedDurationMin?: number;
   routeFallbackUsed?: boolean;
+  planningWindowStart?: string | null;
+  planningWindowEnd?: string | null;
+  plannedReturn?: string | null;
+  vehicleAllocations?: VehicleAllocation[] | null;
   notes?: string | null;
 }

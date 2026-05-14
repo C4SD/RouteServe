@@ -172,7 +172,10 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Create Service Area</DialogTitle>
           <DialogDescription>

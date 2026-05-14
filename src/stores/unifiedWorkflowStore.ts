@@ -120,6 +120,8 @@ const initialState: UnifiedWorkflowState = {
   start_location_id: null,
   start_location_type: 'warehouse',
   planned_date: null,
+  planning_window_start: null,
+  planning_window_end: null,
   time_window: null,
 
   // Step 2: Working Set
@@ -165,6 +167,11 @@ const initialState: UnifiedWorkflowState = {
 
   // Routing diagnostics
   routing_fallback_used: false,
+
+  // Copilot
+  planning_intent: null,
+  planning_candidates: null,
+  copilot_plan: null,
 };
 
 // =====================================================
@@ -227,8 +234,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
           set(
             {
               source_method: method,
-              // Reset sub-option when method changes
-              source_sub_option: null,
+              source_sub_option: method === 'ready' ? 'manual_scheduling' : null,
             },
             false,
             'unified/setSourceMethod'
@@ -259,7 +265,27 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         },
 
         setPlannedDate: (date: string) => {
-          set({ planned_date: date }, false, 'unified/setPlannedDate');
+          set(
+            {
+              planned_date: date,
+              planning_window_start: date,
+              // keep end in sync if not set separately
+            },
+            false,
+            'unified/setPlannedDate'
+          );
+        },
+
+        setPlanningWindow: (start: string, end: string | null) => {
+          set(
+            {
+              planning_window_start: start,
+              planning_window_end: end,
+              planned_date: start, // backward compat
+            },
+            false,
+            'unified/setPlanningWindow'
+          );
         },
 
         setTimeWindow: (window: TimeWindow | null) => {
@@ -753,14 +779,20 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               return true;
 
             case 3: {
-              // Step 3: Copilot path has no further steps (Coming Soon)
-              if (state.schedule_mode === 'copilot') return false;
+              // Copilot: must have planning intent with window defined
+              if (state.schedule_mode === 'copilot') {
+                return (
+                  state.planning_intent !== null &&
+                  !!state.planning_intent.planning_window_start &&
+                  !!state.planning_intent.planning_window_end
+                );
+              }
               // Manual: Must have schedule details and working set
               const hasScheduleDetails =
                 state.schedule_title !== null &&
                 state.schedule_title.trim() !== '' &&
                 state.start_location_id !== null &&
-                state.planned_date !== null;
+                (state.planning_window_start !== null || state.planned_date !== null);
 
               if (state.source_method === 'service_policy') {
                 return (
@@ -776,7 +808,11 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             }
 
             case 4: {
-              // Step 4: All facilities must have packaging defined
+              // Copilot: must have planning candidates resolved
+              if (state.schedule_mode === 'copilot') {
+                return state.planning_candidates !== null;
+              }
+              // Manual: All facilities must have packaging defined
               if (state.working_set.length === 0) return false;
               return state.working_set.every(
                 (ws) =>
@@ -786,7 +822,11 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             }
 
             case 5:
-              // Step 5: Must have batch name and at least one vehicle committed
+              // Copilot: must have plan generated
+              if (state.schedule_mode === 'copilot') {
+                return state.copilot_plan !== null;
+              }
+              // Manual: Must have batch name and at least one vehicle committed
               return (
                 state.batch_name !== null &&
                 state.batch_name.trim() !== '' &&
@@ -794,7 +834,9 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               );
 
             case 6:
-              // Step 6: Must have optimized route
+              // Copilot: review/approve — always can proceed
+              if (state.schedule_mode === 'copilot') return true;
+              // Manual: Must have optimized route
               return state.optimized_route.length > 0;
 
             case 7:
@@ -833,8 +875,8 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               if (!state.start_location_id) {
                 errors.push('Start location is required');
               }
-              if (!state.planned_date) {
-                errors.push('Planned date is required');
+              if (!state.planning_window_start && !state.planned_date) {
+                errors.push('Planning window is required');
               }
               if (state.source_method === 'service_policy' && !state.policy_context) {
                 errors.push('Please select a service policy cluster');
@@ -892,6 +934,39 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
         setError: (error: string | null) => {
           set({ error }, false, 'unified/setError');
         },
+
+        // =====================================================
+        // COPILOT ACTIONS
+        // =====================================================
+
+        setPlanningIntent: (intent) => {
+          set({ planning_intent: intent }, false, 'unified/setPlanningIntent');
+        },
+
+        setPlanningCandidates: (candidates) => {
+          set({ planning_candidates: candidates }, false, 'unified/setPlanningCandidates');
+        },
+
+        setCopilotPlan: (plan) => {
+          set({ copilot_plan: plan }, false, 'unified/setCopilotPlan');
+        },
+
+        updateDispatchRunProposal: (runId, updates) => {
+          const { copilot_plan } = get();
+          if (!copilot_plan) return;
+          set(
+            {
+              copilot_plan: {
+                ...copilot_plan,
+                dispatch_runs: copilot_plan.dispatch_runs.map((r) =>
+                  r.id === runId ? { ...r, ...updates, user_overridden: true } : r
+                ),
+              },
+            },
+            false,
+            'unified/updateDispatchRunProposal'
+          );
+        },
       }),
       {
         name: 'unified-workflow-storage',
@@ -905,6 +980,8 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
           start_location_id: state.start_location_id,
           start_location_type: state.start_location_type,
           planned_date: state.planned_date,
+          planning_window_start: state.planning_window_start,
+          planning_window_end: state.planning_window_end,
           time_window: state.time_window,
           working_set: state.working_set,
           ai_optimization_options: state.ai_optimization_options,
@@ -954,6 +1031,8 @@ export const useScheduleDetails = () =>
     startLocationId: state.start_location_id,
     startLocationType: state.start_location_type,
     plannedDate: state.planned_date,
+    planningWindowStart: state.planning_window_start,
+    planningWindowEnd: state.planning_window_end,
     timeWindow: state.time_window,
     notes: state.schedule_notes,
   })));
@@ -1011,12 +1090,18 @@ export const useCanProceed = () =>
         return true;
 
       case 3: {
-        if (state.schedule_mode === 'copilot') return false;
+        if (state.schedule_mode === 'copilot') {
+          return (
+            state.planning_intent !== null &&
+            !!state.planning_intent.planning_window_start &&
+            !!state.planning_intent.planning_window_end
+          );
+        }
         const hasScheduleDetails =
           state.schedule_title !== null &&
           state.schedule_title.trim() !== '' &&
           state.start_location_id !== null &&
-          state.planned_date !== null;
+          (state.planning_window_start !== null || state.planned_date !== null);
 
         if (state.source_method === 'service_policy') {
           return (
@@ -1030,6 +1115,7 @@ export const useCanProceed = () =>
       }
 
       case 4:
+        if (state.schedule_mode === 'copilot') return state.planning_candidates !== null;
         if (state.working_set.length === 0) return false;
         return state.working_set.every(
           (ws) =>
@@ -1038,6 +1124,7 @@ export const useCanProceed = () =>
         );
 
       case 5:
+        if (state.schedule_mode === 'copilot') return state.copilot_plan !== null;
         return (
           state.batch_name !== null &&
           state.batch_name.trim() !== '' &&
@@ -1045,6 +1132,7 @@ export const useCanProceed = () =>
         );
 
       case 6:
+        if (state.schedule_mode === 'copilot') return true;
         return state.optimized_route.length > 0;
 
       case 7:
@@ -1078,15 +1166,22 @@ export const useValidationErrors = () =>
         break;
 
       case 3:
-        if (state.schedule_mode !== 'copilot') {
+        if (state.schedule_mode === 'copilot') {
+          if (!state.planning_intent?.planning_window_start) {
+            errors.push('Planning window start date is required');
+          }
+          if (!state.planning_intent?.planning_window_end) {
+            errors.push('Planning window end date is required');
+          }
+        } else {
           if (!state.schedule_title || state.schedule_title.trim() === '') {
             errors.push('Schedule title is required');
           }
           if (!state.start_location_id) {
             errors.push('Start location is required');
           }
-          if (!state.planned_date) {
-            errors.push('Planned date is required');
+          if (!state.planning_window_start && !state.planned_date) {
+            errors.push('Planning window is required');
           }
           if (state.working_set.length === 0) {
             if (state.source_method === 'upload') {
@@ -1153,6 +1248,7 @@ export const useWorkflowActions = () => {
       setScheduleTitle: state.setScheduleTitle,
       setStartLocation: state.setStartLocation,
       setPlannedDate: state.setPlannedDate,
+      setPlanningWindow: state.setPlanningWindow,
       setTimeWindow: state.setTimeWindow,
       setScheduleNotes: state.setScheduleNotes,
       addToWorkingSet: state.addToWorkingSet,
@@ -1171,6 +1267,11 @@ export const useWorkflowActions = () => {
       setFacilityPackaging: state.setFacilityPackaging,
       savePreBatch: state.savePreBatch,
       loadPreBatch: state.loadPreBatch,
+      // Copilot intent
+      setPlanningIntent: state.setPlanningIntent,
+      setPlanningCandidates: state.setPlanningCandidates,
+      setCopilotPlan: state.setCopilotPlan,
+      updateDispatchRunProposal: state.updateDispatchRunProposal,
       // Step 3
       setBatchName: state.setBatchName,
       setPriority: state.setPriority,

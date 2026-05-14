@@ -79,7 +79,10 @@ export function CreateZoneDialog({ open, onOpenChange }: CreateZoneDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden">
+      <DialogContent
+        className="sm:max-w-[900px] max-h-[90vh] overflow-hidden"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <form onSubmit={handleSubmit} className="flex flex-col h-full">
           <DialogHeader>
             <DialogTitle>Create New Zone</DialogTitle>

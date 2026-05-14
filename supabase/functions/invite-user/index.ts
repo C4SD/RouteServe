@@ -62,27 +62,32 @@ serve(async (req) => {
     });
 
     if (error) {
-      // If user already exists, we can't use inviteUserByEmail
-      // Generate a magic link instead so they can sign in and accept
+      // User already exists in auth — send a magic link email via the OTP endpoint.
+      // generateLink({ type: 'magiclink' }) only returns a token; it does NOT send email.
+      // The /auth/v1/otp endpoint actually sends the email.
       if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
-        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-          type: 'magiclink',
-          email,
-          options: {
-            redirectTo,
-            data: {
-              invitation_token,
-              workspace_name: workspace_name || 'BIKO',
-              invited_by: caller.email,
-            },
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+
+        const otpRes = await fetch(`${supabaseUrl}/auth/v1/otp`, {
+          method: 'POST',
+          headers: {
+            'apikey': anonKey,
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            email,
+            create_user: false,
+            options: { emailRedirectTo: redirectTo },
+          }),
         });
 
-        if (linkError) {
+        if (!otpRes.ok) {
+          const otpErr = await otpRes.json().catch(() => ({}));
           return new Response(
             JSON.stringify({
-              error: 'User already exists. Could not send login link.',
-              details: linkError.message,
+              error: 'Could not send sign-in link to existing user.',
+              details: otpErr,
               invitation_url: redirectTo,
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -93,7 +98,7 @@ serve(async (req) => {
           JSON.stringify({
             success: true,
             existing_user: true,
-            message: `Login link sent to ${email}`,
+            message: `Sign-in link sent to ${email}`,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
