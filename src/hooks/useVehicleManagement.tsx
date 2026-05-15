@@ -53,10 +53,14 @@ export function useVehicleManagement() {
 
   const updateVehicle = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<VehicleFormData> }) => {
+      const workspaceId = localStorage.getItem('biko_active_workspace_id');
+      if (!workspaceId) throw new Error('No active workspace selected');
+
       const { error } = await supabase
         .from('vehicles')
         .update(data)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('workspace_id', workspaceId);
       
       if (error) throw error;
     },
@@ -73,10 +77,14 @@ export function useVehicleManagement() {
 
   const deleteVehicle = useMutation({
     mutationFn: async (id: string) => {
+      const workspaceId = localStorage.getItem('biko_active_workspace_id');
+      if (!workspaceId) throw new Error('No active workspace selected');
+
       const { error, count } = await supabase
         .from('vehicles')
         .delete({ count: 'exact' })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('workspace_id', workspaceId);
 
       if (error) throw error;
       if (count === 0) throw new Error('Vehicle not found or you do not have permission to delete it');
