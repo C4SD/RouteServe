@@ -1,19 +1,28 @@
 /**
  * =====================================================
- * Step 3: Batch Phase (Manual Scheduling)
+ * Step 5: Batch — Manual Scheduling
  * =====================================================
- * 3-column layout for batch configuration:
- * - Left: Facility Schedule List (route sequence)
- * - Middle: Slot Grid (vehicle + slots)
- * - Right: Schedule Details (info + driver + allocation)
+ * Resource-aware execution planning.
  *
- * Operational refinement: multi-vehicle allocation panel
- * + advisory warnings. Manual control preserved.
+ * Architecture:
+ *   Facilities → Operational Clustering
+ *             → Initial Projection (pre-vehicle)
+ *             → Vehicle Assignment
+ *             → Dynamic Resimulation
+ *             → Execution Waves → Dispatch Runs
+ *
+ * Users retain full control. The engine simulates and
+ * warns; it never auto-dispatches.
+ *
+ * Layout:
+ *   [Execution Strategy Bar]
+ *   [Left: Wave List] [Center: Wave Vehicle Assignment] [Right: Schedule + Analysis]
  */
 
 import * as React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -21,17 +30,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ThreeColumnLayout, LeftColumn, MiddleColumn, RightColumn } from '../schedule/ThreeColumnLayout';
-import { FacilityScheduleList } from '../batch/FacilityScheduleList';
-import { SlotGridColumn } from '../batch/SlotGridColumn';
 import { ScheduleDetailsColumn } from '../batch/ScheduleDetailsColumn';
-import { VehicleAllocationPanel } from '../batch/VehicleAllocationPanel';
 import { VehicleAvailabilityPanel } from '../batch/VehicleAvailabilityPanel';
+import { ExecutionStrategyBar } from '../batch/ExecutionStrategyBar';
+import { WaveGroupedFacilityList } from '../batch/WaveGroupedFacilityList';
+import { WaveVehicleAssignmentPanel } from '../batch/WaveVehicleAssignmentPanel';
+import { ExecutionIntelligencePanel } from '../batch/ExecutionIntelligencePanel';
 import { OperationalWarningsPanel, buildOperationalWarnings } from '../shared/OperationalWarnings';
+import { projectExecution, projectIdealResources } from '@/lib/executionEngine';
 import type { WorkingSetItem, SlotAssignment } from '@/types/unified-workflow';
+import type {
+  ExecutionEngineConfig,
+  ExecutionProjection,
+  DEFAULT_EXECUTION_CONFIG,
+} from '@/types/unified-workflow';
+import { DEFAULT_EXECUTION_CONFIG as DEFAULT_CONFIG } from '@/types/unified-workflow';
 import type { TimeWindow, Priority } from '@/types/scheduler';
 import type { VehicleAvailabilityEntry } from '../batch/VehicleAvailabilityPanel';
+
+// =====================================================
+// Types
+// =====================================================
 
 interface Vehicle {
   id: string;
@@ -66,7 +86,7 @@ interface Step3BatchProps {
   priority: Priority;
   onPriorityChange: (priority: Priority) => void;
 
-  // Schedule Info (from Step 2)
+  // Schedule Info
   scheduleTitle: string | null;
   startLocationName: string | null;
   /** @deprecated use planningWindowStart/End */
@@ -75,10 +95,10 @@ interface Step3BatchProps {
   planningWindowEnd?: string | null;
   timeWindow: TimeWindow | null;
 
-  // Facilities (from Step 2)
+  // Facilities
   facilities: WorkingSetItem[];
 
-  // Vehicle (multi)
+  // Vehicles (multi)
   selectedVehicleIds: string[];
   vehicles: Vehicle[];
   onVehicleChange: (vehicleId: string) => void;
@@ -89,7 +109,7 @@ interface Step3BatchProps {
   drivers: Driver[];
   onDriverChange: (driverId: string | null) => void;
 
-  // Slot Assignments
+  // Slot Assignments (legacy — kept for store compat)
   slotAssignments: Record<string, SlotAssignment>;
   onAssignSlot: (slotKey: string, facilityId: string, requisitionIds: string[]) => void;
   onUnassignSlot: (slotKey: string) => void;
@@ -99,6 +119,10 @@ interface Step3BatchProps {
   totalDistanceKm: number | null;
   estimatedDurationMin: number | null;
 }
+
+// =====================================================
+// Component
+// =====================================================
 
 export function Step3Batch({
   batchName,
@@ -126,17 +150,82 @@ export function Step3Batch({
   totalDistanceKm,
   estimatedDurationMin,
 }: Step3BatchProps) {
+  // -----------------------------------------------
+  // Execution engine config (local state)
+  // -----------------------------------------------
+  const [execConfig, setExecConfig] = React.useState<ExecutionEngineConfig>(DEFAULT_CONFIG);
+
+  const handleConfigChange = React.useCallback(
+    (updates: Partial<ExecutionEngineConfig>) => {
+      setExecConfig(prev => ({ ...prev, ...updates }));
+    },
+    [],
+  );
+
+  // -----------------------------------------------
+  // Wave vehicle overrides (user can re-assign vehicles per wave)
+  // -----------------------------------------------
+  const [waveVehicleOverrides, setWaveVehicleOverrides] = React.useState<Record<string, string[]>>({});
+
+  const handleWaveVehicleOverride = React.useCallback(
+    (waveId: string, vehicleIds: string[]) => {
+      setWaveVehicleOverrides(prev => ({ ...prev, [waveId]: vehicleIds }));
+    },
+    [],
+  );
+
+  // -----------------------------------------------
+  // Execution projection (resimulates dynamically)
+  // -----------------------------------------------
+  const assignedVehicles = React.useMemo(
+    () => vehicles.filter(v => selectedVehicleIds.includes(v.id)),
+    [vehicles, selectedVehicleIds],
+  );
+
+  const projection: ExecutionProjection = React.useMemo(
+    () =>
+      projectExecution(
+        facilities,
+        assignedVehicles,
+        execConfig,
+        planningWindowStart ?? plannedDate,
+      ),
+    [facilities, assignedVehicles, execConfig, planningWindowStart, plannedDate],
+  );
+
+  // Ideal resource estimate (shown before vehicles are assigned)
+  const idealResources = React.useMemo(
+    () => projectIdealResources(facilities, execConfig),
+    [facilities, execConfig],
+  );
+
+  // -----------------------------------------------
+  // Auto-assign: distribute committed vehicles across waves
+  // -----------------------------------------------
+  const handleAutoAssignWaves = React.useCallback(() => {
+    if (projection.waves.length === 0 || selectedVehicleIds.length === 0) return;
+    const overrides: Record<string, string[]> = {};
+    projection.waves.forEach(wave => {
+      overrides[wave.id] = wave.vehicle_ids;
+    });
+    setWaveVehicleOverrides(overrides);
+  }, [projection.waves, selectedVehicleIds]);
+
+  // -----------------------------------------------
+  // Dismissed warnings
+  // -----------------------------------------------
   const [dismissedWarnings, setDismissedWarnings] = React.useState<string[]>([]);
 
-  const startLocation = React.useMemo(() => {
-    if (!startLocationName) return null;
-    return { id: 'start', name: startLocationName, type: 'warehouse' as const };
-  }, [startLocationName]);
+  const handleDismissWarning = React.useCallback((id: string) => {
+    setDismissedWarnings(prev => [...prev, id]);
+  }, []);
 
-  // Build vehicle availability entries from vehicle list
+  // -----------------------------------------------
+  // Vehicle availability entries
+  // -----------------------------------------------
   const vehicleAvailabilityEntries: VehicleAvailabilityEntry[] = React.useMemo(
     () =>
-      vehicles.map((v) => ({
+      vehicles.map(v => ({
         vehicle_id: v.id,
         vehicle_label: `${v.model} (${v.plateNumber})`,
         plate_number: v.plateNumber,
@@ -147,20 +236,21 @@ export function Step3Batch({
           : 'offline',
         is_committed: selectedVehicleIds.includes(v.id),
       })),
-    [vehicles, selectedVehicleIds]
+    [vehicles, selectedVehicleIds],
   );
 
-  // Build vehicle statuses map for warning builder
+  // -----------------------------------------------
+  // Legacy operational warnings (shift/maintenance)
+  // -----------------------------------------------
   const vehicleStatuses = React.useMemo(() => {
     const map: Record<string, 'available' | 'occupied' | 'maintenance' | 'offline'> = {};
-    vehicleAvailabilityEntries.forEach((e) => {
+    vehicleAvailabilityEntries.forEach(e => {
       map[e.vehicle_id] = e.operational_status;
     });
     return map;
   }, [vehicleAvailabilityEntries]);
 
-  // Build operational warnings
-  const rawWarnings = React.useMemo(
+  const legacyWarnings = React.useMemo(
     () =>
       buildOperationalWarnings({
         estimatedDurationMin,
@@ -169,14 +259,22 @@ export function Step3Batch({
         planningWindowStart: planningWindowStart ?? plannedDate,
         planningWindowEnd,
       }),
-    [estimatedDurationMin, selectedVehicleIds, vehicleStatuses, planningWindowStart, plannedDate, planningWindowEnd]
+    [estimatedDurationMin, selectedVehicleIds, vehicleStatuses, planningWindowStart, plannedDate, planningWindowEnd],
   );
 
-  const activeWarnings = rawWarnings.filter((w) => !dismissedWarnings.includes(w.id));
+  const activeWarnings = legacyWarnings.filter(w => !dismissedWarnings.includes(w.id));
 
-  const handleDismissWarning = React.useCallback((id: string) => {
-    setDismissedWarnings((prev) => [...prev, id]);
-  }, []);
+  // -----------------------------------------------
+  // Counts for strategy bar
+  // -----------------------------------------------
+  const vehiclesAvailable = vehicles.filter(
+    v => v.status === 'available' || v.status === 'in-use',
+  ).length;
+
+  const startLocation = React.useMemo(
+    () => (startLocationName ? { id: 'start', name: startLocationName, type: 'warehouse' as const } : null),
+    [startLocationName],
+  );
 
   return (
     <div className="flex flex-col min-h-[65vh]">
@@ -191,8 +289,8 @@ export function Step3Batch({
             <Input
               id="batch-name"
               value={batchName || ''}
-              onChange={(e) => onBatchNameChange(e.target.value)}
-              placeholder="Enter batch name..."
+              onChange={e => onBatchNameChange(e.target.value)}
+              placeholder="Enter batch name…"
               className="mt-1"
             />
           </div>
@@ -210,7 +308,7 @@ export function Step3Batch({
           {/* Priority */}
           <div>
             <Label className="text-xs font-medium">Priority</Label>
-            <Select value={priority} onValueChange={(v) => onPriorityChange(v as Priority)}>
+            <Select value={priority} onValueChange={v => onPriorityChange(v as Priority)}>
               <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
@@ -224,7 +322,7 @@ export function Step3Batch({
           </div>
         </div>
 
-        {/* Operational Warnings — advisory only */}
+        {/* Legacy operational warnings */}
         {activeWarnings.length > 0 && (
           <div className="mt-3">
             <OperationalWarningsPanel
@@ -235,49 +333,43 @@ export function Step3Batch({
         )}
       </div>
 
+      {/* Execution Strategy Bar */}
+      <ExecutionStrategyBar
+        config={execConfig}
+        onConfigChange={handleConfigChange}
+        vehiclesAvailable={vehiclesAvailable}
+        vehiclesTotal={vehicles.length}
+      />
+
       {/* 3-Column Layout */}
       <div className="flex-1 min-h-0 p-4">
         <ThreeColumnLayout className="h-full">
-          {/* Left Column: Route Sequence */}
+          {/* Left: Wave-Grouped Route Sequence */}
           <LeftColumn>
-            <FacilityScheduleList
+            <WaveGroupedFacilityList
               facilities={facilities}
+              waves={projection.waves}
               startLocation={startLocation}
             />
           </LeftColumn>
 
-          {/* Middle Column: Slot Grid */}
+          {/* Center: Wave Vehicle Assignment */}
           <MiddleColumn>
-            <div className="flex flex-col h-full gap-3">
-              <SlotGridColumn
-                selectedVehicleId={selectedVehicleIds[0] ?? null}
-                selectedVehicleIds={selectedVehicleIds}
-                vehicles={vehicles}
-                onVehicleChange={onVehicleChange}
-                onVehiclesChange={onVehiclesChange}
-                slotAssignments={slotAssignments}
-                availableFacilities={facilities}
-                onAssignSlot={onAssignSlot}
-                onUnassignSlot={onUnassignSlot}
-                onAutoAssign={onAutoAssign}
-              />
-
-              {/* Vehicle Allocation Panel (below slot grid) */}
-              {selectedVehicleIds.length > 1 && (
-                <VehicleAllocationPanel
-                  vehicles={vehicles}
-                  selectedVehicleIds={selectedVehicleIds}
-                  facilities={facilities}
-                  slotAssignments={slotAssignments}
-                />
-              )}
-            </div>
+            <WaveVehicleAssignmentPanel
+              waves={projection.waves}
+              vehicles={vehicles}
+              selectedVehicleIds={selectedVehicleIds}
+              waveVehicleOverrides={waveVehicleOverrides}
+              onSelectVehicles={onVehiclesChange}
+              onWaveVehicleOverride={handleWaveVehicleOverride}
+              onAutoAssign={handleAutoAssignWaves}
+            />
           </MiddleColumn>
 
-          {/* Right Column: Details + Availability */}
+          {/* Right: Schedule Details + Execution Intelligence */}
           <RightColumn>
             <ScrollArea className="h-full">
-              <div className="space-y-4">
+              <div className="space-y-4 pb-4">
                 <ScheduleDetailsColumn
                   scheduleTitle={scheduleTitle}
                   startLocationName={startLocationName}
@@ -294,9 +386,14 @@ export function Step3Batch({
                   facilities={facilities}
                 />
 
-                {/* Vehicle availability — always show in batch step */}
+                {/* Execution Intelligence */}
+                <div className="px-4">
+                  <ExecutionIntelligencePanel projection={projection} />
+                </div>
+
+                {/* Vehicle Availability */}
                 {vehicleAvailabilityEntries.length > 0 && (
-                  <div className="px-4 pb-4">
+                  <div className="px-4">
                     <VehicleAvailabilityPanel
                       entries={vehicleAvailabilityEntries}
                       committedVehicleIds={selectedVehicleIds}

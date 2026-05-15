@@ -536,6 +536,100 @@ export interface UnifiedWorkflowActions {
 export type UnifiedWorkflowStore = UnifiedWorkflowState & UnifiedWorkflowActions;
 
 // =====================================================
+// EXECUTION ENGINE TYPES (Manual Scheduling — Step 5)
+// =====================================================
+
+export type ClusteringStrategy =
+  | 'geographic_proximity'
+  | 'balanced_workload'
+  | 'sla_priority';
+
+export type ExecutionStrategy =
+  | 'maximize_vehicle_reuse'
+  | 'fastest_completion'
+  | 'minimize_operational_days'
+  | 'balance_fleet_utilization';
+
+export type ReturnToBaseBuffer = 'immediate' | 'half_day' | 'next_day';
+
+export interface ExecutionEngineConfig {
+  clustering_strategy: ClusteringStrategy;
+  execution_strategy: ExecutionStrategy;
+  working_hours_start: string; // "09:00"
+  working_hours_end: string;   // "16:00"
+  service_buffer_min: number;  // e.g. 45
+  return_buffer: ReturnToBaseBuffer;
+  allow_multi_day: boolean;
+  allow_same_day_reuse: boolean;
+  respect_facility_hours: boolean;
+  respect_driver_shift: boolean;
+}
+
+export const DEFAULT_EXECUTION_CONFIG: ExecutionEngineConfig = {
+  clustering_strategy: 'geographic_proximity',
+  execution_strategy: 'maximize_vehicle_reuse',
+  working_hours_start: '09:00',
+  working_hours_end: '16:00',
+  service_buffer_min: 45,
+  return_buffer: 'immediate',
+  allow_multi_day: true,
+  allow_same_day_reuse: true,
+  respect_facility_hours: true,
+  respect_driver_shift: true,
+};
+
+export interface DispatchRunProjection {
+  id: string;
+  run_index: number;
+  wave_id: string;
+  vehicle_id: string | null;
+  vehicle_label: string | null;
+  facility_ids: string[];
+  facility_names: string[];
+  total_slots: number;
+  departure_time: string; // "09:00"
+  return_time: string;    // "13:00"
+  duration_min: number;
+}
+
+export interface ExecutionWaveProjection {
+  id: string;
+  wave_index: number;
+  date: string;  // ISO date YYYY-MM-DD
+  label: string; // "Wave 1 · Mon, May 15"
+  vehicle_ids: string[];
+  vehicle_labels: string[];
+  runs: DispatchRunProjection[];
+  facility_ids: string[];
+  total_slots: number;
+  total_facilities: number;
+}
+
+export interface ExecutionEngineWarning {
+  id: string;
+  message: string;
+}
+
+export interface ExecutionProjection {
+  operational_days: number;
+  total_waves: number;
+  total_runs: number;
+  total_facilities: number;
+  total_slots: number;
+  vehicle_utilization_avg: number; // 0–100
+  vehicle_reuse_enabled: boolean;
+  projected_completion: string | null; // ISO date
+  waves: ExecutionWaveProjection[];
+  warnings: ExecutionEngineWarning[];
+}
+
+// Manual override: user can re-assign vehicles to a wave
+export interface WaveVehicleOverride {
+  wave_id: string;
+  vehicle_ids: string[];
+}
+
+// =====================================================
 // DISPATCH RUN TYPES
 // =====================================================
 

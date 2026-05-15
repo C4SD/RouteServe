@@ -406,21 +406,20 @@ export const useVehiclesStore = create<VehiclesState>()(
       deleteVehicle: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          const { error } = await supabase
+          const { error, count } = await supabase
             .from('vehicles')
-            .delete()
+            .delete({ count: 'exact' })
             .eq('id', id);
 
           if (error) throw error;
+          if (count === 0) throw new Error('Vehicle not found or you do not have permission to delete it');
 
           set((state) => ({
             vehicles: state.vehicles.filter((v) => v.id !== id),
             isLoading: false,
           }));
-          toast.success('Vehicle deleted successfully');
         } catch (error: any) {
           set({ error: error.message, isLoading: false });
-          toast.error(`Failed to delete vehicle: ${error.message}`);
           throw error;
         }
       },

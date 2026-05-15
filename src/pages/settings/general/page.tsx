@@ -1155,7 +1155,6 @@ export default function SettingsGeneralPage() {
             <SettingsSection
               title="Waiting Time SLA"
               description="Agreed time allocated per stop for drivers and couriers to load and offload. Applied to every delivery stop in route duration and turnaround calculations."
-              showSeparator={false}
             >
               <div className="flex items-center gap-2">
                 <Input
@@ -1175,6 +1174,34 @@ export default function SettingsGeneralPage() {
                   placeholder="15"
                 />
                 <span className="text-sm text-muted-foreground">minutes per stop</span>
+              </div>
+            </SettingsSection>
+
+            <SettingsSection
+              title="Working Hours SLA"
+              description="Operational window during which facilities are available. Used to determine if a facility can receive deliveries at a given time."
+              showSeparator={false}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Start</span>
+                  <Input
+                    type="time"
+                    value={settings.working_hours_start || ''}
+                    onChange={(e) => updateSettings('working_hours_start', e.target.value || undefined)}
+                    className="w-32"
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground">→</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">End</span>
+                  <Input
+                    type="time"
+                    value={settings.working_hours_end || ''}
+                    onChange={(e) => updateSettings('working_hours_end', e.target.value || undefined)}
+                    className="w-32"
+                  />
+                </div>
               </div>
             </SettingsSection>
           </div>

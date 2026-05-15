@@ -297,11 +297,12 @@ export function useResendInvitation() {
       workspaceRole: WorkspaceRole;
       workspaceName?: string;
     }): Promise<string> => {
-      // Revoke the old invitation — throw if it fails
+      // Revoke the old invitation only if it's still pending; skip silently otherwise
+      // (expired/revoked invitations can't be revoked again, but we still want to resend)
       const { error: revokeError } = await supabase.rpc('revoke_invitation', {
         p_invitation_id: invitationId,
       });
-      if (revokeError) throw revokeError;
+      if (revokeError && !revokeError.message?.includes('not pending')) throw revokeError;
 
       // Create a fresh invitation
       const { data, error } = await supabase.rpc('invite_user', {

@@ -180,7 +180,7 @@ export function InvitationsList({ workspaceId }: InvitationsListProps) {
                         <TableCell className="font-medium">{invitation.email}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <Badge variant="outline">{invitation.pre_assigned_role.replace('_', ' ')}</Badge>
+                            <Badge variant="outline">{invitation.role_code.replace('_', ' ')}</Badge>
                             <Badge variant="secondary" className="text-xs">
                               {invitation.workspace_role}
                             </Badge>
@@ -279,7 +279,7 @@ export function InvitationsList({ workspaceId }: InvitationsListProps) {
                         <TableRow key={invitation.id}>
                           <TableCell className="font-medium">{invitation.email}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">{invitation.pre_assigned_role.replace('_', ' ')}</Badge>
+                            <Badge variant="outline">{invitation.role_code.replace('_', ' ')}</Badge>
                           </TableCell>
                           <TableCell>
                             <Badge variant={statusConfig.variant} className="gap-1">

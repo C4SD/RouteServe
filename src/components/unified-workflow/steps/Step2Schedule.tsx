@@ -51,7 +51,7 @@ interface Step2ScheduleProps {
 
   // Data
   warehouses: Array<{ id: string; name: string; lat?: number; lng?: number }>;
-  facilities?: Array<{ id: string; name: string }>;
+  facilities?: Array<{ id: string; name: string; lat?: number; lng?: number }>;
   candidates: FacilityCandidate[];
   candidatesLoading?: boolean;
 
@@ -162,7 +162,7 @@ export function Step2Schedule({
     }
     const facility = facilities.find((f) => f.id === startLocationId);
     if (facility) {
-      return { id: facility.id, name: facility.name };
+      return { id: facility.id, name: facility.name, lat: facility.lat, lng: facility.lng };
     }
     return null;
   }, [startLocationId, warehouses, facilities]);

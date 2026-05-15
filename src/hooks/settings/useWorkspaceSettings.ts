@@ -20,6 +20,8 @@ export interface WorkspaceSettings {
   dispatch_cutoff?: string;
   sla_hours?: number;
   waiting_time_sla_minutes?: number;
+  working_hours_start?: string;
+  working_hours_end?: string;
   date_format?: string;
   coordinate_policy?: CoordinatePolicy;
 }

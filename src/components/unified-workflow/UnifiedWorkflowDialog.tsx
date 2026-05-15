@@ -48,6 +48,10 @@ import {
   useWorkflowActions,
 } from '@/stores/unifiedWorkflowStore';
 
+// Execution engine (for run-scoped route step)
+import { projectExecution } from '@/lib/executionEngine';
+import { DEFAULT_EXECUTION_CONFIG } from '@/types/unified-workflow';
+
 // Hooks
 import { useFacilities } from '@/hooks/useFacilities';
 import { useWarehouses } from '@/hooks/useWarehouses';
@@ -211,7 +215,7 @@ export function UnifiedWorkflowDialog({
     }));
   }, [driversData]);
 
-  // Operational snapshot for Step 2 awareness panel
+  // Operational snapshot for Step 2 awareness panel — source-aware
   const operationalSnapshot = React.useMemo(() => {
     const totalVehicles = vehicles.length;
     const availableVehicles = vehicles.filter((v) => v.status === 'available').length;
@@ -219,20 +223,38 @@ export function UnifiedWorkflowDialog({
     const totalDrivers = drivers.length;
     const activeDrivers = drivers.filter((d) => d.status === 'available').length;
 
-    return {
-      ready_requisitions: facilityCandidates.reduce(
+    let demandFacilities = 0;
+    let demandRequisitions = 0;
+
+    if (sourceMethod === 'upload') {
+      // Use parsed/matched facilities from the uploaded file
+      const validParsed = (parsedFacilities ?? []).filter((f) => f.is_valid && f.matched_facility_id);
+      demandFacilities = workingSet.length > 0 ? workingSet.length : validParsed.length;
+      demandRequisitions = demandFacilities;
+    } else if (sourceMethod === 'manual' || sourceMethod === 'service_policy') {
+      demandFacilities = workingSet.length;
+      demandRequisitions = workingSet.length;
+    } else {
+      // ready — use actual ready consignments
+      demandFacilities = facilityCandidates.length;
+      demandRequisitions = facilityCandidates.reduce(
         (sum, c) => sum + ((c as any).requisition_ids?.length ?? 1),
         0
-      ),
-      ready_facilities: facilityCandidates.length,
+      );
+    }
+
+    return {
+      ready_requisitions: demandRequisitions,
+      ready_facilities: demandFacilities,
       vehicles_available: availableVehicles,
       vehicles_total: totalVehicles,
       vehicles_maintenance: maintenanceVehicles,
       drivers_active: activeDrivers,
       drivers_total: totalDrivers,
       drivers_overlap_warnings: 0,
+      source_method: sourceMethod,
     };
-  }, [vehicles, drivers, facilityCandidates]);
+  }, [vehicles, drivers, facilityCandidates, sourceMethod, parsedFacilities, workingSet]);
 
   // Calculate vehicle suggestions based on working set demand
   const vehicleSuggestions = React.useMemo(() => {
@@ -268,6 +290,26 @@ export function UnifiedWorkflowDialog({
       .sort((a, b) => b.fit_score - a.fit_score)
       .slice(0, 3);
   }, [vehicles, workingSet]);
+
+  // Execution projection for run-scoped route step
+  // Uses default config; Step3Batch manages its own local config for detailed simulation
+  const executionProjection = React.useMemo(() => {
+    if (workingSet.length === 0 || vehicleIds.length === 0) return null;
+    const assignedVehicles = vehicles.filter(v => vehicleIds.includes(v.id));
+    if (assignedVehicles.length === 0) return null;
+    return projectExecution(
+      workingSet,
+      assignedVehicles.map(v => ({
+        id: v.id,
+        model: v.model,
+        plateNumber: v.plateNumber,
+        capacity: v.capacity,
+        status: v.status,
+      })),
+      DEFAULT_EXECUTION_CONFIG,
+      planningWindowStart ?? plannedDate,
+    );
+  }, [workingSet, vehicleIds, vehicles, planningWindowStart, plannedDate]);
 
   // Get selected vehicles for review (multi-vehicle support)
   const selectedVehicles = React.useMemo(
@@ -488,9 +530,15 @@ export function UnifiedWorkflowDialog({
 
   // Handle route optimization (Step 4) (memoized to prevent infinite loops)
   const handleOptimizeRoute = React.useCallback(async () => {
-    const startLocation = warehouses.find(w => w.id === startLocationId) || null;
+    let startLocation: { id: string; name: string; lat: number; lng: number } | null = null;
+    if (startLocationType === 'facility') {
+      const fac = facilitiesData?.facilities?.find(f => f.id === startLocationId);
+      if (fac?.lat && fac?.lng) startLocation = { id: fac.id, name: fac.name, lat: fac.lat, lng: fac.lng };
+    } else {
+      startLocation = warehouses.find(w => w.id === startLocationId) || null;
+    }
     await actions.optimizeRoute(effectiveCandidates, startLocation);
-  }, [actions, effectiveCandidates, warehouses, startLocationId]);
+  }, [actions, effectiveCandidates, warehouses, startLocationId, startLocationType, facilitiesData]);
 
   // Render step content (memoized to prevent infinite loops)
   const renderStepContent = React.useMemo(() => {
@@ -518,6 +566,13 @@ export function UnifiedWorkflowDialog({
               intent={planningIntent}
               onIntentChange={actions.setPlanningIntent}
               operationalSnapshot={operationalSnapshot}
+              sourceMethod={sourceMethod}
+              allFacilities={facilitiesData?.facilities?.map((f) => ({ id: f.id, name: f.name, lga: f.lga, lat: f.lat, lng: f.lng })) ?? []}
+              parsedFacilities={parsedFacilities}
+              onFileParsed={actions.setParsedFacilities}
+              onUpdateParsedRow={actions.updateParsedFacility}
+              onAddToWorkingSet={actions.addToWorkingSet}
+              workingSet={workingSet}
             />
           );
         }
@@ -537,7 +592,7 @@ export function UnifiedWorkflowDialog({
             onTimeWindowChange={actions.setTimeWindow}
             sourceMethod={sourceMethod}
             warehouses={warehouses}
-            facilities={facilitiesData?.facilities?.map((f) => ({ id: f.id, name: f.name })) ?? []}
+            facilities={facilitiesData?.facilities?.map((f) => ({ id: f.id, name: f.name, lat: f.lat, lng: f.lng })) ?? []}
             candidates={effectiveCandidates}
             candidatesLoading={effectiveCandidatesLoading}
             workingSet={workingSet}
@@ -645,6 +700,7 @@ export function UnifiedWorkflowDialog({
             optimizationOptions={aiOptions}
             onOptimizationOptionsChange={actions.setAiOptimizationOptions}
             onOptimize={handleOptimizeRoute}
+            executionWaves={executionProjection?.waves ?? []}
           />
         );
       }
@@ -724,6 +780,7 @@ export function UnifiedWorkflowDialog({
     vehicleIds,
     actions,
     handleOptimizeRoute,
+    executionProjection,
     // copilot
     planningIntent,
     planningCandidates,

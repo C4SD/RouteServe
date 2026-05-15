@@ -73,12 +73,13 @@ export function useVehicleManagement() {
 
   const deleteVehicle = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error, count } = await supabase
         .from('vehicles')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('id', id);
-      
+
       if (error) throw error;
+      if (count === 0) throw new Error('Vehicle not found or you do not have permission to delete it');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });

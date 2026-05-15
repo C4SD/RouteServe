@@ -65,22 +65,29 @@ serve(async (req) => {
       // User already exists in auth — send a magic link email via the OTP endpoint.
       // generateLink({ type: 'magiclink' }) only returns a token; it does NOT send email.
       // The /auth/v1/otp endpoint actually sends the email.
-      if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
+      const isAlreadyRegistered =
+        (error as any).status === 422 ||
+        error.message?.includes('already been registered') ||
+        error.message?.includes('already exists') ||
+        error.message?.includes('User already registered');
+      if (isAlreadyRegistered) {
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
         const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
-        const otpRes = await fetch(`${supabaseUrl}/auth/v1/otp`, {
-          method: 'POST',
-          headers: {
-            'apikey': anonKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            create_user: false,
-            options: { emailRedirectTo: redirectTo },
-          }),
-        });
+        const otpRes = await fetch(
+          `${supabaseUrl}/auth/v1/otp?redirect_to=${encodeURIComponent(redirectTo)}`,
+          {
+            method: 'POST',
+            headers: {
+              'apikey': anonKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email,
+              create_user: false,
+            }),
+          }
+        );
 
         if (!otpRes.ok) {
           const otpErr = await otpRes.json().catch(() => ({}));
@@ -90,7 +97,7 @@ serve(async (req) => {
               details: otpErr,
               invitation_url: redirectTo,
             }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
