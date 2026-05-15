@@ -1,4 +1,4 @@
-# Log4 - Comprehensive Fleet Management System
+# RouteServe - Comprehensive Fleet Management System
 
 <div align="center">
 
@@ -15,7 +15,7 @@
 
 ## Overview
 
-Log4 is a modern, comprehensive fleet management system designed to optimize logistics operations through intelligent workspace-based architecture. Built with cutting-edge web technologies, it provides real-time tracking, vehicle lifecycle management, payload optimization, and advanced analytics.
+RouteServe is a modern, comprehensive fleet management system designed to optimize logistics operations through intelligent workspace-based architecture. Built with cutting-edge web technologies, it provides real-time tracking, vehicle lifecycle management, payload optimization, and advanced analytics.
 
 ### Key Features
 
