@@ -25,10 +25,10 @@ export default function VehicleOnboardPage() {
   }, [navigate]);
 
   return (
-    <div className="h-screen flex items-center justify-center bg-muted/20 p-6">
-      <div className="max-w-md w-full space-y-4">
-        <Alert variant="default">
-          <AlertCircle className="h-4 w-4" />
+    <div className="flex h-screen items-center justify-center bg-muted/20 p-6">
+      <div className="flex w-full max-w-md flex-col gap-4">
+        <Alert>
+          <AlertCircle />
           <AlertTitle>Route Deprecated</AlertTitle>
           <AlertDescription>
             This route is no longer used. Vehicle configuration is now accessed via modal dialog
@@ -37,10 +37,10 @@ export default function VehicleOnboardPage() {
         </Alert>
 
         <div className="flex flex-col gap-2">
-          <Button onClick={() => navigate('/fleetops/vlms/vehicles')} className="w-full">
+          <Button onClick={() => navigate('/fleetops/vlms/vehicles')} fullWidth>
             Go to Vehicles List
           </Button>
-          <p className="text-sm text-muted-foreground text-center">
+          <p className="text-center text-sm text-muted-foreground">
             Redirecting automatically in 3 seconds...
           </p>
         </div>

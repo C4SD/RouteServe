@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, X, Search, Package, Upload, Database, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Plus, X, Search, Package, Upload, Database, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -19,12 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Select,
   SelectContent,
@@ -119,29 +113,34 @@ export function ProgramItemsSection({ program }: ProgramItemsSectionProps) {
           </Badge>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Add Items
-              <ChevronDown className="h-3.5 w-3.5 ml-1" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setIsAddManualOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Manually
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setIsUploadOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Upload File
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setIsAddFromDbOpen(true)}>
-              <Database className="h-4 w-4 mr-2" />
-              From Items Database
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsAddManualOpen(true)}
+            title="Add a single item manually"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add Manually
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsAddFromDbOpen(true)}
+            title="Link existing items from the database"
+          >
+            <Database className="h-3.5 w-3.5 mr-1" />
+            From Database
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setIsUploadOpen(true)}
+            title="Import items from a CSV/Excel file"
+          >
+            <Upload className="h-3.5 w-3.5 mr-1" />
+            Add Items
+          </Button>
+        </div>
       </div>
 
       {/* Search and filters */}

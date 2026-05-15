@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, AlertTriangle } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ReportIncidentDialog } from './ReportIncidentDialog';
 
 export default function IncidentsPage() {
@@ -39,14 +40,14 @@ export default function IncidentsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Incident Management</h1>
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-3xl font-bold tracking-tight">Incident Management</h1>
           <p className="text-muted-foreground">Track and manage vehicle incidents</p>
         </div>
         <Button onClick={() => setReportDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus data-icon="inline-start" />
           Report Incident
         </Button>
       </div>
@@ -54,7 +55,7 @@ export default function IncidentsPage() {
       <Card>
         {isLoading ? (
           <div className="flex items-center justify-center p-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
+            <LoadingSpinner size="lg" />
           </div>
         ) : incidents && incidents.length > 0 ? (
           <Table>

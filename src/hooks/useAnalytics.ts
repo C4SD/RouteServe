@@ -48,13 +48,14 @@ export function useDeliveryKPIs(
   endDate?: string | null,
   options?: Omit<UseQueryOptions<DeliveryKPIs>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.deliveryKPIs(workspaceId ?? '', startDate, endDate),
     queryFn: () => analyticsAPI.getDeliveryKPIs(workspaceId!, startDate, endDate),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -63,13 +64,14 @@ export function useTopVehiclesByOnTime(
   limit: number = 10,
   options?: Omit<UseQueryOptions<TopVehiclePerformance[]>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.topVehicles(workspaceId ?? '', limit),
     queryFn: () => analyticsAPI.getTopVehiclesByOnTime(workspaceId!, limit),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -77,13 +79,14 @@ export function useTopVehiclesByOnTime(
 export function useDriverKPIs(
   options?: Omit<UseQueryOptions<DriverKPIs>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.driverKPIs(workspaceId ?? ''),
     queryFn: () => analyticsAPI.getDriverKPIs(workspaceId!),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -93,13 +96,14 @@ export function useTopDrivers(
   limit: number = 10,
   options?: Omit<UseQueryOptions<TopDriverPerformance[]>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.topDrivers(workspaceId ?? '', metric, limit),
     queryFn: () => analyticsAPI.getTopDrivers(workspaceId!, metric, limit),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -107,13 +111,14 @@ export function useTopDrivers(
 export function useVehicleKPIs(
   options?: Omit<UseQueryOptions<VehicleKPIs>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.vehicleKPIs(workspaceId ?? ''),
     queryFn: () => analyticsAPI.getVehicleKPIs(workspaceId!),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -121,13 +126,14 @@ export function useVehicleKPIs(
 export function useVehiclesNeedingMaintenance(
   options?: Omit<UseQueryOptions<VehicleMaintenanceNeeded[]>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.vehicleMaintenance(workspaceId ?? ''),
     queryFn: () => analyticsAPI.getVehiclesNeedingMaintenance(workspaceId!),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -135,13 +141,14 @@ export function useVehiclesNeedingMaintenance(
 export function useCostKPIs(
   options?: Omit<UseQueryOptions<CostKPIs>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.costKPIs(workspaceId ?? ''),
     queryFn: () => analyticsAPI.getCostKPIs(workspaceId!),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -150,13 +157,14 @@ export function useVehicleCosts(
   limit: number = 10,
   options?: Omit<UseQueryOptions<VehicleCostBreakdown[]>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.vehicleCosts(workspaceId ?? '', limit),
     queryFn: () => analyticsAPI.getVehicleCosts(workspaceId!, limit),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -165,13 +173,14 @@ export function useDriverCosts(
   limit: number = 10,
   options?: Omit<UseQueryOptions<DriverCostBreakdown[]>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.driverCosts(workspaceId ?? '', limit),
     queryFn: () => analyticsAPI.getDriverCosts(workspaceId!, limit),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }
@@ -181,13 +190,14 @@ export function useDashboardSummary(
   endDate?: string | null,
   options?: Omit<UseQueryOptions<DashboardSummary>, 'queryKey' | 'queryFn'>
 ) {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, isLoadingWorkspaces } = useWorkspace();
   return useQuery({
     queryKey: analyticsKeys.dashboard(workspaceId ?? '', startDate, endDate),
     queryFn: () => analyticsAPI.getDashboardSummary(workspaceId!, startDate, endDate),
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && !isLoadingWorkspaces,
     staleTime: DEFAULT_STALE_TIME,
     gcTime: DEFAULT_CACHE_TIME,
+    retry: false,
     ...options,
   });
 }

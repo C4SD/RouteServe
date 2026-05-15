@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Loader2, UserCheck } from 'lucide-react';
+import { Plus, UserCheck } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { CreateAssignmentDialog } from './CreateAssignmentDialog';
 
 export default function AssignmentsPage() {
@@ -29,14 +30,14 @@ export default function AssignmentsPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Vehicle Assignments</h1>
-          <p className="text-muted-foreground mt-2">Track vehicle assignments to drivers and locations</p>
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-3xl font-bold tracking-tight">Vehicle Assignments</h1>
+          <p className="text-muted-foreground">Track vehicle assignments to drivers and locations</p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus data-icon="inline-start" />
           Create Assignment
         </Button>
       </div>
@@ -44,7 +45,7 @@ export default function AssignmentsPage() {
       <Card>
         {isLoading ? (
           <div className="flex items-center justify-center p-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
+            <LoadingSpinner size="lg" />
           </div>
         ) : assignments && assignments.length > 0 ? (
           <Table>

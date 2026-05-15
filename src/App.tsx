@@ -100,7 +100,7 @@ const queryClient = new QueryClient({
       gcTime: 10 * 60 * 1000,           // 10 minutes garbage collection
       refetchOnWindowFocus: false,       // Don't refetch on tab switch
       refetchOnReconnect: 'always',      // Do refetch when network reconnects
-      retry: 1,                          // Single retry on failure
+      retry: false,                      // No retries by default; hooks opt-in as needed
     },
   },
 });

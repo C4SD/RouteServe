@@ -110,6 +110,19 @@ export default defineConfig(({ mode }) => ({
     // Strip console.log and debugger in production for smaller bundles and security
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
+  // Pre-bundle heavy/lazy-only deps so Vite doesn't re-optimize mid-session
+  // (which invalidates browser chunk URLs and causes "504 Outdated Optimize Dep"
+  // followed by "Failed to fetch dynamically imported module" on lazy routes).
+  optimizeDeps: {
+    include: [
+      'papaparse',
+      'exceljs',
+      'mammoth',
+      'pdfjs-dist',
+      'tesseract.js',
+      '@radix-ui/react-switch',
+    ],
+  },
   build: {
     // Target modern browsers (ES2020) to avoid transpiling to older, bulkier ES5 code
     target: 'es2020',

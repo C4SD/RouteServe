@@ -13,8 +13,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Calendar, Loader2, Wrench } from 'lucide-react';
+import { Plus, Calendar, Wrench } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ScheduleMaintenanceDialog } from './ScheduleMaintenanceDialog';
 
 export default function MaintenancePage() {
@@ -42,19 +43,19 @@ export default function MaintenancePage() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Maintenance Management</h1>
-          <p className="text-muted-foreground mt-2">Track vehicle maintenance and service records</p>
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-3xl font-bold tracking-tight">Maintenance Management</h1>
+          <p className="text-muted-foreground">Track vehicle maintenance and service records</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => alert('Calendar view coming soon!')}>
-            <Calendar className="h-4 w-4 mr-2" />
+            <Calendar data-icon="inline-start" />
             Calendar View
           </Button>
           <Button onClick={() => setScheduleDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus data-icon="inline-start" />
             Schedule Maintenance
           </Button>
         </div>
@@ -63,7 +64,7 @@ export default function MaintenancePage() {
       <Card>
         {isLoading ? (
           <div className="flex items-center justify-center p-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
+            <LoadingSpinner size="lg" />
           </div>
         ) : records && records.length > 0 ? (
           <Table>

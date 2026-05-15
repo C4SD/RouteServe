@@ -10,6 +10,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: any }>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
+  updatePassword: (password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   sendDriverOtp: (email: string, workspaceId: string) => Promise<{ data?: string; error: any }>;
   verifyDriverOtp: (email: string, otp: string) => Promise<{ success: boolean; error: any }>;
@@ -79,6 +81,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
+  const resetPassword = useCallback(async (email: string) => {
+    const redirectUrl = `${window.location.origin}/auth?reset=true`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    });
+    return { error };
+  }, []);
+
+  const updatePassword = useCallback(async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error };
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     navigate('/auth');
@@ -131,8 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const contextValue = useMemo(() => ({
-    user, session, loading, signIn, signInWithGoogle, signUp, signOut, sendDriverOtp, verifyDriverOtp,
-  }), [user, session, loading, signIn, signInWithGoogle, signUp, signOut, sendDriverOtp, verifyDriverOtp]);
+    user, session, loading, signIn, signInWithGoogle, signUp, resetPassword, updatePassword, signOut, sendDriverOtp, verifyDriverOtp,
+  }), [user, session, loading, signIn, signInWithGoogle, signUp, resetPassword, updatePassword, signOut, sendDriverOtp, verifyDriverOtp]);
 
   return (
     <AuthContext.Provider value={contextValue}>

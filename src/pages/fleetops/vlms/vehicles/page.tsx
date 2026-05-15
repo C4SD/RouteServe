@@ -16,7 +16,8 @@ import { VehicleKanbanView } from '@/components/vlms/vehicles/VehicleKanbanView'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Loader2, ChevronRight, Package } from 'lucide-react';
+import { Plus, Search, ChevronRight, Package } from 'lucide-react';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { cn } from '@/lib/utils';
 import { getStatusColors } from '@/lib/designTokens';
 import { PaginationControls, usePagination } from '@/components/ui/pagination-controls';
@@ -125,8 +126,8 @@ export default function VehiclesPage() {
           </div>
           <div className="flex items-center gap-3">
             <VehicleViewToggle value={viewMode} onValueChange={setViewMode} />
-            <Button onClick={() => setIsConfiguratorOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
+            <Button onClick={() => setIsConfiguratorOpen(true)}>
+              <Plus data-icon="inline-start" />
               Add Vehicle
             </Button>
           </div>
@@ -170,7 +171,7 @@ export default function VehiclesPage() {
               className="m-2"
               aria-label="Expand sidebar"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight />
             </Button>
           </div>
         )}
@@ -180,12 +181,12 @@ export default function VehiclesPage() {
           {/* Search Bar */}
           <div className="border-b border-border bg-card px-6 py-3 flex-shrink-0">
             <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Quick search vehicles..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-9"
+                className="h-9 pl-10"
               />
             </div>
           </div>
@@ -193,11 +194,8 @@ export default function VehiclesPage() {
           {/* Content - List/Card/Table Views */}
           <div className="flex-1 overflow-y-auto p-6">
             {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-                  <p className="text-sm text-muted-foreground">Loading vehicles...</p>
-                </div>
+              <div className="flex h-full items-center justify-center">
+                <LoadingSpinner size="lg" text="Loading vehicles..." />
               </div>
             ) : filteredVehicles && filteredVehicles.length > 0 ? (
               <div className="flex flex-col gap-6 h-full">
@@ -252,8 +250,8 @@ export default function VehiclesPage() {
                       : 'Get started by adding your first vehicle to the fleet.'
                   }
                   action={
-                    <Button onClick={() => setIsConfiguratorOpen(true)} className="gap-2">
-                      <Plus className="h-4 w-4" />
+                    <Button onClick={() => setIsConfiguratorOpen(true)}>
+                      <Plus data-icon="inline-start" />
                       Add Vehicle
                     </Button>
                   }

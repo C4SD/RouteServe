@@ -54,12 +54,24 @@ const emailPasswordSchema = z.object({
   path: ['confirmPassword'],
 });
 
+const passwordResetSchema = z.object({
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Must contain at least one number'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
+
 const profileSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
   phone: z.string().optional(),
 });
 
-type AuthMode = 'login' | 'signup' | 'otp-login';
+type AuthMode = 'login' | 'signup' | 'otp-login' | 'forgot-password' | 'reset-password';
 type SignupStep = 'credentials' | 'profile' | 'complete';
 type OtpStep = 'email' | 'verify';
 type DriverLoginTab = 'otp' | 'password';
@@ -130,7 +142,7 @@ function GradientOrb() {
 }
 
 export default function Auth() {
-  const { signIn, signUp, signInWithGoogle, user, sendDriverOtp, verifyDriverOtp } = useAuth();
+  const { signIn, signUp, signInWithGoogle, resetPassword, updatePassword, user, sendDriverOtp, verifyDriverOtp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -149,6 +161,9 @@ export default function Auth() {
   const [driverIdentifier, setDriverIdentifier] = useState('');
   const [driverPassword, setDriverPassword] = useState('');
   const [showDriverPassword, setShowDriverPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   const [formData, setFormData] = useState<FormData>({
     email: '',
@@ -160,6 +175,13 @@ export default function Auth() {
 
   // Check for invitation token in URL
   const inviteToken = searchParams.get('invite');
+  const isPasswordReset = searchParams.get('reset') === 'true';
+
+  useEffect(() => {
+    if (isPasswordReset) {
+      setMode('reset-password');
+    }
+  }, [isPasswordReset]);
 
   // Pre-fill email from invitation when arriving with ?invite=TOKEN
   useEffect(() => {
@@ -357,6 +379,74 @@ export default function Auth() {
     setErrors({});
   };
 
+  const switchToForgotPassword = () => {
+    setMode('forgot-password');
+    setResetEmail(formData.email);
+    setErrors({});
+  };
+
+  const handleForgotPassword = async () => {
+    if (!resetEmail || !z.string().email().safeParse(resetEmail).success) {
+      setErrors({ resetEmail: 'Please enter a valid email address' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await resetPassword(resetEmail);
+      if (error) {
+        toast.error('Reset Failed', { description: error.message });
+      } else {
+        toast.success('Password reset email sent', {
+          description: `Check ${resetEmail} for a reset link.`,
+        });
+        switchToLogin();
+      }
+    } catch {
+      toast.error('An error occurred while sending the reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    const result = passwordResetSchema.safeParse({
+      password: newPassword,
+      confirmPassword: confirmNewPassword,
+    });
+
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      result.error.errors.forEach((e) => {
+        if (e.path[0]) {
+          fieldErrors[e.path[0] as string] = e.message;
+        }
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await updatePassword(newPassword);
+      if (error) {
+        toast.error('Password Update Failed', { description: error.message });
+      } else {
+        toast.success('Password updated', {
+          description: 'You can now sign in with your new password.',
+        });
+        setNewPassword('');
+        setConfirmNewPassword('');
+        navigate('/auth', { replace: true });
+        switchToLogin();
+      }
+    } catch {
+      toast.error('An error occurred while updating your password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOtpEmailSubmit = async () => {
     if (!otpEmail) {
       setErrors({ email: 'Please enter your email address' });
@@ -496,9 +586,18 @@ export default function Auth() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-zinc-300">
-            Password
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password" className="text-zinc-300">
+              Password
+            </Label>
+            <button
+              type="button"
+              onClick={switchToForgotPassword}
+              className="text-sm text-emerald-400 hover:text-emerald-300 font-medium"
+            >
+              Forgot password?
+            </button>
+          </div>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
             <Input
@@ -559,6 +658,147 @@ export default function Auth() {
           Driver Login with Code
         </button>
       </div>
+    </div>
+  );
+
+  const renderForgotPassword = () => (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <button
+          onClick={switchToLogin}
+          className="flex items-center text-zinc-400 hover:text-zinc-200 text-sm mb-4"
+          disabled={loading}
+        >
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          Back to sign in
+        </button>
+        <h1 className="text-3xl font-semibold text-white">Reset your password</h1>
+        <p className="text-zinc-400">Enter your email and we&apos;ll send you a password reset link.</p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="reset-email" className="text-zinc-300">
+            Email
+          </Label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+            <Input
+              id="reset-email"
+              type="email"
+              placeholder="Enter your email"
+              value={resetEmail}
+              onChange={(e) => {
+                setResetEmail(e.target.value);
+                if (errors.resetEmail) setErrors({});
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleForgotPassword(); }}
+              className={cn(
+                'h-12 pl-11 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-emerald-500 focus:ring-emerald-500/20',
+                errors.resetEmail && 'border-red-500'
+              )}
+            />
+          </div>
+          {errors.resetEmail && <p className="text-sm text-red-400">{errors.resetEmail}</p>}
+        </div>
+      </div>
+
+      <Button
+        onClick={handleForgotPassword}
+        disabled={loading}
+        className="w-full h-12 bg-white hover:bg-zinc-200 text-black font-medium"
+      >
+        {loading ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            Sending reset link...
+          </>
+        ) : (
+          'Send Reset Link'
+        )}
+      </Button>
+    </div>
+  );
+
+  const renderResetPassword = () => (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold text-white">Create a new password</h1>
+        <p className="text-zinc-400">Choose a secure password for your account.</p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="new-password" className="text-zinc-300">
+            New password
+          </Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+            <Input
+              id="new-password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Enter your new password"
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (errors.password) setErrors({});
+              }}
+              className={cn(
+                'h-12 pl-11 pr-11 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-emerald-500 focus:ring-emerald-500/20',
+                errors.password && 'border-red-500'
+              )}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+          {errors.password && <p className="text-sm text-red-400">{errors.password}</p>}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="confirm-new-password" className="text-zinc-300">
+            Confirm new password
+          </Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+            <Input
+              id="confirm-new-password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Confirm your new password"
+              value={confirmNewPassword}
+              onChange={(e) => {
+                setConfirmNewPassword(e.target.value);
+                if (errors.confirmPassword) setErrors({});
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleUpdatePassword(); }}
+              className={cn(
+                'h-12 pl-11 bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:border-emerald-500 focus:ring-emerald-500/20',
+                errors.confirmPassword && 'border-red-500'
+              )}
+            />
+          </div>
+          {errors.confirmPassword && <p className="text-sm text-red-400">{errors.confirmPassword}</p>}
+        </div>
+      </div>
+
+      <Button
+        onClick={handleUpdatePassword}
+        disabled={loading}
+        className="w-full h-12 bg-white hover:bg-zinc-200 text-black font-medium"
+      >
+        {loading ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            Updating password...
+          </>
+        ) : (
+          'Update Password'
+        )}
+      </Button>
     </div>
   );
 
@@ -1230,6 +1470,14 @@ export default function Auth() {
 
     if (mode === 'login') {
       return renderLogin();
+    }
+
+    if (mode === 'forgot-password') {
+      return renderForgotPassword();
+    }
+
+    if (mode === 'reset-password') {
+      return renderResetPassword();
     }
 
     if (mode === 'otp-login') {

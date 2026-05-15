@@ -6,8 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ClipboardCheck, Calendar, Plus } from 'lucide-react';
+import { ClipboardCheck, Calendar, Plus } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { InspectionsCalendarView } from './InspectionsCalendarView';
 import { CreateInspectionDialog } from './CreateInspectionDialog';
 
@@ -46,19 +47,19 @@ export default function InspectionsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Vehicle Inspections</h1>
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-3xl font-bold tracking-tight">Vehicle Inspections</h1>
           <p className="text-muted-foreground">Track vehicle safety and compliance inspections</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={() => setShowCalendar(true)}>
-            <Calendar className="h-4 w-4 mr-2" />
+            <Calendar data-icon="inline-start" />
             Calendar View
           </Button>
           <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus data-icon="inline-start" />
             Create Inspection
           </Button>
         </div>
@@ -81,7 +82,7 @@ export default function InspectionsPage() {
       <Card>
         {isLoading ? (
           <div className="flex items-center justify-center p-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
+            <LoadingSpinner size="lg" />
           </div>
         ) : inspections && inspections.length > 0 ? (
           <Table>
