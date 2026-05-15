@@ -19,6 +19,7 @@ import {
 import {
   IntegrationCard,
   ActiveIntegrationItem,
+  BackupStatusCard,
   LinkByEmailDialog,
   GenerateOTPDialog,
   LinkedUsersTable,
@@ -281,6 +282,8 @@ export default function AdminIntegrationPage() {
 
         {/* Current Integrations Tab */}
         <TabsContent value="active" className="space-y-4">
+          <BackupStatusCard workspaceId={workspaceId} />
+
           {activeIntegrations.length === 0 ? (
             <Card>
               <CardContent className="pt-6 text-center py-12">

@@ -33,15 +33,19 @@ COMMENT ON COLUMN public.scheduler_pre_batches.planning_window_end IS
 -- 2. PLANNING WINDOW on delivery_batches
 -- ============================================================
 
+-- Drop stale cost_analysis trigger (mat view was dropped in 20260510000001 via CASCADE
+-- but the trigger referencing refresh_cost_analysis() was not cleaned up).
+DROP TRIGGER IF EXISTS trg_refresh_cost_analysis_batches ON public.delivery_batches;
+
 ALTER TABLE public.delivery_batches
   ADD COLUMN IF NOT EXISTS planning_window_start DATE,
   ADD COLUMN IF NOT EXISTS planning_window_end   DATE;
 
--- Backfill from scheduled_date / planned_date (whichever exists)
+-- Backfill from scheduled_date
 UPDATE public.delivery_batches
 SET
-  planning_window_start = COALESCE(scheduled_date::date, planned_date::date),
-  planning_window_end   = COALESCE(scheduled_date::date, planned_date::date)
+  planning_window_start = scheduled_date::date,
+  planning_window_end   = scheduled_date::date
 WHERE planning_window_start IS NULL;
 
 COMMENT ON COLUMN public.delivery_batches.planning_window_start IS

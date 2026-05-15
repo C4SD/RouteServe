@@ -18,6 +18,7 @@ import { useRoutes } from '@/hooks/useRoutes';
 import { useServiceAreas } from '@/hooks/useServiceAreas';
 import { useOperationalZones } from '@/hooks/useOperationalZones';
 import { useFacilities } from '@/hooks/useFacilities';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { supabase } from '@/integrations/supabase/client';
 import { computeConvexHull } from '@/lib/algorithms/convexHull';
 import { calculateDistance } from '@/lib/routeOptimization';
@@ -81,6 +82,7 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
   const [selectedRouteInsights, setSelectedRouteInsights] = useState<RouteInsightsData | null>(null);
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
 
+  const { workspaceId } = useWorkspace();
   const { data: routes } = useRoutes();
   const { data: serviceAreas } = useServiceAreas();
   const { data: operationalZones } = useOperationalZones();
@@ -108,33 +110,63 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
     setTimeout(() => mapRef.current?.invalidateSize(), 100);
   }, []);
 
-  // ── Route facilities batch query ──
+  // ── Route facilities batch query (two-step to avoid RLS-dependent embedded joins) ──
   const routeIds = useMemo(() => (routes || []).map(r => r.id), [routes]);
 
-  const { data: allRouteFacilities } = useQuery({
-    queryKey: ['route-facilities-batch', routeIds],
+  const { data: routeFacilityLinks } = useQuery({
+    queryKey: ['route-facility-links', routeIds],
     queryFn: async () => {
       if (routeIds.length === 0) return [];
       const { data, error } = await supabase
         .from('route_facilities')
-        .select(`
-          route_id,
-          sequence_order,
-          facilities:facility_id (name, lat, lng, type, lga)
-        `)
+        .select('route_id, sequence_order, facility_id')
         .in('route_id', routeIds)
         .order('sequence_order', { ascending: true });
-
       if (error) throw error;
-      return data as Array<{
-        route_id: string;
-        sequence_order: number;
-        facilities: { name: string; lat: number; lng: number; type: string; lga: string | null } | null;
-      }>;
+      return (data || []) as Array<{ route_id: string; sequence_order: number; facility_id: string }>;
     },
     enabled: routeIds.length > 0,
     staleTime: 1000 * 60 * 5,
   });
+
+  const routeFacilityIds = useMemo(
+    () => [...new Set((routeFacilityLinks || []).map(rf => rf.facility_id))],
+    [routeFacilityLinks]
+  );
+
+  const { data: routeFacilityDetails } = useQuery({
+    queryKey: ['route-facility-details', routeFacilityIds],
+    queryFn: async () => {
+      if (routeFacilityIds.length === 0) return [];
+      const CHUNK = 200;
+      const chunks = Array.from({ length: Math.ceil(routeFacilityIds.length / CHUNK) }, (_, i) =>
+        routeFacilityIds.slice(i * CHUNK, (i + 1) * CHUNK)
+      );
+      const results = await Promise.all(
+        chunks.map(chunk =>
+          supabase
+            .from('facilities')
+            .select('id, name, lat, lng, type, lga')
+            .in('id', chunk)
+            .eq('workspace_id', workspaceId!)
+        )
+      );
+      return results.flatMap(r => r.data || []) as Array<{
+        id: string; name: string; lat: number; lng: number; type: string; lga: string | null;
+      }>;
+    },
+    enabled: routeFacilityIds.length > 0 && !!workspaceId,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const allRouteFacilities = useMemo(() => {
+    const facilityMap = new Map((routeFacilityDetails || []).map(f => [f.id, f]));
+    return (routeFacilityLinks || []).map(rf => ({
+      route_id: rf.route_id,
+      sequence_order: rf.sequence_order,
+      facilities: facilityMap.get(rf.facility_id) ?? null,
+    }));
+  }, [routeFacilityLinks, routeFacilityDetails]);
 
   // ── Service area facilities batch query ──
   const serviceAreaIds = useMemo(() => (serviceAreas || []).map(sa => sa.id), [serviceAreas]);
@@ -299,7 +331,7 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
     name: route.name,
     status: route.status,
     is_sandbox: route.is_sandbox,
-    warehouse: route.warehouses && route.warehouses.lat != null && route.warehouses.lng != null
+    warehouse: route.warehouses
       ? { lat: route.warehouses.lat, lng: route.warehouses.lng, name: route.warehouses.name }
       : null,
     facilities: facilitiesByRoute.get(route.id) || [],

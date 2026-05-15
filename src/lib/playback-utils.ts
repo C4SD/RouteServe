@@ -147,7 +147,7 @@ export function interpolatePosition(
  * @param p2 - [lng, lat]
  * @returns Distance in meters
  */
-export function calculateDistance(
+function calculateDistance(
   p1: [number, number],
   p2: [number, number]
 ): number {

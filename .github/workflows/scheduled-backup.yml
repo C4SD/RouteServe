@@ -1,0 +1,293 @@
+name: Scheduled Backup to OneDrive
+
+on:
+  schedule:
+    # Daily backup: DB + storage at 02:00 UTC
+    - cron: '0 2 * * *'
+    # Weekly full snapshot: Sunday at 03:00 UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Backup mode'
+        required: true
+        default: 'deployment'
+        type: choice
+        options:
+          - daily
+          - weekly
+          - full
+          - deployment
+
+jobs:
+  # ─── Determine mode ─────────────────────────────────────────────────────────
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      date: ${{ steps.mode.outputs.date }}
+    steps:
+      - name: Determine backup mode
+        id: mode
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+          else
+            DAY=$(date -u +%u)
+            if [ "$DAY" = "7" ]; then
+              echo "mode=weekly" >> $GITHUB_OUTPUT
+            else
+              echo "mode=daily" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  # ─── Database backup ─────────────────────────────────────────────────────────
+  backup-database:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Run Tier 1 + 2 backup
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            "${{ secrets.SUPABASE_BACKUP_URL }}/backup-db-to-onedrive" \
+            -H "Content-Type: application/json" \
+            -H "x-backup-secret: ${{ secrets.BACKUP_AUTH_SECRET }}" \
+            -d "{\"mode\":\"${{ needs.setup.outputs.mode }}\",\"tier\":\"1\",\"date\":\"${{ needs.setup.outputs.date }}\",\"git_commit\":\"${{ github.sha }}\"}" \
+            -m 140)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+          echo "Tier 1 response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Tier 1 backup failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+          FAILED=$(echo "$BODY" | jq -r '.summary.failed // 0')
+          if [ "$FAILED" -gt "0" ]; then
+            echo "Tier 1 had $FAILED failed tables"
+            echo "$BODY" | jq '.errors'
+            exit 1
+          fi
+
+      - name: Run Tier 2 backup
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            "${{ secrets.SUPABASE_BACKUP_URL }}/backup-db-to-onedrive" \
+            -H "Content-Type: application/json" \
+            -H "x-backup-secret: ${{ secrets.BACKUP_AUTH_SECRET }}" \
+            -d "{\"mode\":\"${{ needs.setup.outputs.mode }}\",\"tier\":\"2\",\"date\":\"${{ needs.setup.outputs.date }}\",\"git_commit\":\"${{ github.sha }}\"}" \
+            -m 140)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+          echo "Tier 2 response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Tier 2 backup failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Run Tier 3 + VLMS backup
+        run: |
+          for TIER in 3 vlms otp; do
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              -X POST \
+              "${{ secrets.SUPABASE_BACKUP_URL }}/backup-db-to-onedrive" \
+              -H "Content-Type: application/json" \
+              -H "x-backup-secret: ${{ secrets.BACKUP_AUTH_SECRET }}" \
+              -d "{\"mode\":\"${{ needs.setup.outputs.mode }}\",\"tier\":\"$TIER\",\"date\":\"${{ needs.setup.outputs.date }}\",\"git_commit\":\"${{ github.sha }}\"}" \
+              -m 140)
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -1)
+            echo "Tier $TIER response: $BODY"
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "Tier $TIER backup failed with status $HTTP_CODE"
+              exit 1
+            fi
+          done
+
+      - name: Run Tier 4 backup (weekly only)
+        if: needs.setup.outputs.mode == 'weekly' || needs.setup.outputs.mode == 'full' || github.event.inputs.mode == 'deployment'
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            "${{ secrets.SUPABASE_BACKUP_URL }}/backup-db-to-onedrive" \
+            -H "Content-Type: application/json" \
+            -H "x-backup-secret: ${{ secrets.BACKUP_AUTH_SECRET }}" \
+            -d "{\"mode\":\"${{ needs.setup.outputs.mode }}\",\"tier\":\"4\",\"date\":\"${{ needs.setup.outputs.date }}\",\"git_commit\":\"${{ github.sha }}\"}" \
+            -m 140)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -1)
+          echo "Tier 4 response: $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Tier 4 backup failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+  # ─── Storage file backup ──────────────────────────────────────────────────────
+  backup-storage:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Sync all storage buckets to OneDrive (paginated)
+        run: |
+          OFFSET=0
+          LIMIT=50
+          BATCH=0
+
+          while true; do
+            BATCH=$((BATCH + 1))
+            echo "Storage batch $BATCH (offset=$OFFSET)"
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              -X POST \
+              "${{ secrets.SUPABASE_BACKUP_URL }}/backup-files-to-onedrive" \
+              -H "Content-Type: application/json" \
+              -H "x-backup-secret: ${{ secrets.BACKUP_AUTH_SECRET }}" \
+              -d "{\"offset\":$OFFSET,\"limit\":$LIMIT}" \
+              -m 120)
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -1)
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "Storage backup failed with status $HTTP_CODE at offset $OFFSET"
+              echo "$BODY"
+              exit 1
+            fi
+
+            PROCESSED=$(echo "$BODY" | jq -r '.processed // 0')
+            ERRORS=$(echo "$BODY" | jq -r '.errors | length')
+            DONE=$(echo "$BODY" | jq -r '.done')
+            NEXT=$(echo "$BODY" | jq -r '.next_offset')
+
+            echo "Batch $BATCH: processed=$PROCESSED errors=$ERRORS done=$DONE"
+
+            if [ "$ERRORS" -gt "0" ]; then
+              echo "File backup errors in batch $BATCH:"
+              echo "$BODY" | jq '.errors'
+              exit 1
+            fi
+
+            if [ "$DONE" = "true" ]; then
+              echo "Storage backup complete."
+              break
+            fi
+
+            OFFSET=$NEXT
+          done
+
+  # ─── Weekly integrity validation ─────────────────────────────────────────────
+  validate-integrity:
+    runs-on: ubuntu-latest
+    needs: [setup, backup-database, backup-storage]
+    if: needs.setup.outputs.mode == 'weekly' || needs.setup.outputs.mode == 'full'
+    steps:
+      - name: Check backup manifests are present
+        run: |
+          echo "Integrity validation: verifying backup completed for ${{ needs.setup.outputs.date }}"
+          # The DB backup function writes manifest.json.gz.enc to OneDrive.
+          # Full integrity (SHA-256 spot-check) requires the decrypt key and Graph API access.
+          # This step validates via the system_settings table instead — confirms last_backup_at was updated.
+          RESPONSE=$(curl -s \
+            "https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/rest/v1/system_settings?setting_key=eq.last_backup_at&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          BACKUP_AT=$(echo "$RESPONSE" | jq -r '.[0].setting_value // ""')
+          echo "Last backup at: $BACKUP_AT"
+
+          if [ -z "$BACKUP_AT" ]; then
+            echo "No backup timestamp found in system_settings"
+            exit 1
+          fi
+
+          # Verify the backup happened today
+          TODAY=$(date -u +%Y-%m-%d)
+          if [[ "$BACKUP_AT" != "$TODAY"* ]]; then
+            echo "Last backup ($BACKUP_AT) is not from today ($TODAY)"
+            exit 1
+          fi
+
+          echo "Integrity check passed."
+
+  # ─── Retention cleanup ────────────────────────────────────────────────────────
+  cleanup-retention:
+    runs-on: ubuntu-latest
+    needs: [setup, validate-integrity]
+    if: (needs.setup.outputs.mode == 'weekly' || needs.setup.outputs.mode == 'full') && always()
+    steps:
+      - name: Delete expired daily backup folders
+        env:
+          TENANT_ID: ${{ secrets.ONEDRIVE_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.ONEDRIVE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.ONEDRIVE_CLIENT_SECRET }}
+          DRIVE_ID: ${{ secrets.ONEDRIVE_DRIVE_ID }}
+        run: |
+          # Acquire Graph token
+          TOKEN=$(curl -s -X POST \
+            "https://login.microsoftonline.com/$TENANT_ID/oauth2/v2.0/token" \
+            -d "grant_type=client_credentials&client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET&scope=https://graph.microsoft.com/.default" \
+            | jq -r '.access_token')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Failed to acquire Graph token for cleanup"
+            exit 1
+          fi
+
+          # Daily folders: retain 90 days
+          CUTOFF_DAILY=$(date -u -d "90 days ago" +%Y-%m-%d 2>/dev/null || date -u -v-90d +%Y-%m-%d)
+          echo "Deleting daily backup folders older than $CUTOFF_DAILY"
+
+          # List Routeserve_Backups/Database/Daily/ children
+          DAILY_LIST=$(curl -s \
+            "https://graph.microsoft.com/v1.0/drives/$DRIVE_ID/root:/Routeserve_Backups/Database/Daily:/children" \
+            -H "Authorization: Bearer $TOKEN" | jq -r '.value[] | "\(.name) \(.id)"')
+
+          while IFS= read -r line; do
+            FOLDER_NAME=$(echo "$line" | awk '{print $1}')
+            FOLDER_ID=$(echo "$line" | awk '{print $2}')
+            if [[ "$FOLDER_NAME" < "$CUTOFF_DAILY" ]]; then
+              echo "Deleting expired daily folder: $FOLDER_NAME"
+              curl -s -X DELETE \
+                "https://graph.microsoft.com/v1.0/drives/$DRIVE_ID/items/$FOLDER_ID" \
+                -H "Authorization: Bearer $TOKEN"
+            fi
+          done <<< "$DAILY_LIST"
+
+          echo "Retention cleanup complete."
+
+  # ─── Failure notification ─────────────────────────────────────────────────────
+  notify-on-failure:
+    runs-on: ubuntu-latest
+    needs: [backup-database, backup-storage]
+    if: failure()
+    steps:
+      - name: Create GitHub issue for backup failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const date = new Date().toISOString();
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Backup failure — ${date.slice(0,10)}`,
+              body: `## Backup job failed\n\n` +
+                `**Workflow run**: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n` +
+                `**Mode**: ${{ needs.setup.outputs.mode }}\n` +
+                `**Date**: ${{ needs.setup.outputs.date }}\n\n` +
+                `Please check the workflow logs and verify the last backup status in Settings → Integration → Backup & Redundancy.\n\n` +
+                `**Recovery action**: If this is an isolated failure, re-run the workflow manually with mode=daily. If failures persist, check Supabase secrets and OneDrive credentials.`,
+              labels: ['backup', 'incident'],
+            });

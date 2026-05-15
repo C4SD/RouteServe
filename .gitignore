@@ -43,3 +43,6 @@ supabase/.temp/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Claude Code runtime files
+.github/context-mode/

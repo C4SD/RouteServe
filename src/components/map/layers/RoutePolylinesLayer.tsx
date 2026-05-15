@@ -26,7 +26,7 @@ export interface RoutePolylineData {
   name: string;
   status: string;
   is_sandbox: boolean;
-  warehouse: { lat: number; lng: number; name: string } | null;
+  warehouse: { lat: number | null; lng: number | null; name: string } | null;
   facilities: Array<{
     lat: number;
     lng: number;
@@ -100,7 +100,18 @@ export function RoutePolylinesLayer({
       layerRef.current.clearLayers();
 
       routes.forEach((route, index) => {
-        if (!layerRef.current || !route.warehouse || route.facilities.length === 0) return;
+        if (!layerRef.current) return;
+
+        const hasRoadGeometry = !!(route.optimized_geometry?.coordinates?.length);
+        const hasWarehouseCoords = route.warehouse?.lat != null && route.warehouse?.lng != null;
+        const sortedFacilities = [...route.facilities].sort(
+          (a, b) => a.sequence_order - b.sequence_order
+        );
+
+        // Need at least road geometry, or a renderable straight-line path
+        const canRenderRoad = hasRoadGeometry;
+        const canRenderStraight = sortedFacilities.length >= 1 && (hasWarehouseCoords || sortedFacilities.length >= 2);
+        if (!canRenderRoad && !canRenderStraight) return;
 
         const isSelected = selectedRouteId === route.id;
         const baseColor = ROUTE_COLORS[index % ROUTE_COLORS.length];
@@ -108,21 +119,17 @@ export function RoutePolylinesLayer({
           ? { dashArray: '4, 4', color: '#f59e0b' }
           : STATUS_STYLES[route.status] || STATUS_STYLES.draft;
 
-        // Build ordered coordinate list: warehouse → facility 1 → facility 2 → ...
-        const sortedFacilities = [...route.facilities].sort(
-          (a, b) => a.sequence_order - b.sequence_order
-        );
-
-        // Use road geometry if available, otherwise straight lines
-        const hasRoadGeometry = route.optimized_geometry?.coordinates?.length > 0;
+        // Build coordinate list: road geometry takes priority; fall back to straight lines
         const coords: [number, number][] = hasRoadGeometry
           ? route.optimized_geometry!.coordinates.map(
               (c: [number, number]) => [c[1], c[0]] as [number, number] // [lng,lat] → [lat,lng] for Leaflet
             )
-          : [
-              [route.warehouse.lat, route.warehouse.lng],
+          : hasWarehouseCoords
+          ? [
+              [route.warehouse!.lat!, route.warehouse!.lng!],
               ...sortedFacilities.map(f => [f.lat, f.lng] as [number, number]),
-            ];
+            ]
+          : sortedFacilities.map(f => [f.lat, f.lng] as [number, number]);
 
         // Route polyline — solid when road geometry, dashed when straight-line
         const polyline = L.polyline(coords, {
@@ -145,19 +152,21 @@ export function RoutePolylinesLayer({
         try {
           polyline.addTo(layerRef.current);
 
-          // When road geometry is available, draw thin connector lines from each facility
-          // to the nearest point on the road (facilities may be off-road)
+          // When road geometry is available, draw thin connector lines from each stop
+          // to the nearest point on the road (stops may be off-road)
           if (hasRoadGeometry) {
-            // Connector from warehouse to nearest road point
-            const whCoord: [number, number] = [route.warehouse.lat, route.warehouse.lng];
-            const nearestToWh = findNearestPoint(whCoord, coords);
-            if (nearestToWh) {
-              L.polyline([whCoord, nearestToWh], {
-                color: statusStyle.color,
-                weight: 1,
-                opacity: 0.5,
-                dashArray: '3, 3',
-              }).addTo(layerRef.current!);
+            // Connector from warehouse to nearest road point (only if warehouse has coords)
+            if (hasWarehouseCoords) {
+              const whCoord: [number, number] = [route.warehouse!.lat!, route.warehouse!.lng!];
+              const nearestToWh = findNearestPoint(whCoord, coords);
+              if (nearestToWh) {
+                L.polyline([whCoord, nearestToWh], {
+                  color: statusStyle.color,
+                  weight: 1,
+                  opacity: 0.5,
+                  dashArray: '3, 3',
+                }).addTo(layerRef.current!);
+              }
             }
 
             // Connector from each facility to nearest road point
@@ -218,8 +227,8 @@ export function RoutePolylinesLayer({
             <span style="font-size:12px">Route: ${route.name}</span>
           `);
 
-          // Facility click handler
-          if (onFacilityClick && route.warehouse) {
+          // Facility click handler (only if warehouse coords available for distance calc)
+          if (onFacilityClick && hasWarehouseCoords) {
             const handleClick = (e: L.LeafletEvent) => {
               L.DomEvent.stopPropagation(e as any);
               const prev = sortedFacilities[idx - 1] || null;
@@ -236,11 +245,11 @@ export function RoutePolylinesLayer({
                 routeId: route.id,
                 routeName: route.name,
                 warehouseName: route.warehouse!.name,
-                warehouseLat: route.warehouse!.lat,
-                warehouseLng: route.warehouse!.lng,
+                warehouseLat: route.warehouse!.lat!,
+                warehouseLng: route.warehouse!.lng!,
                 distanceToWarehouseKm: calculateDistance(
                   facility.lat, facility.lng,
-                  route.warehouse!.lat, route.warehouse!.lng
+                  route.warehouse!.lat!, route.warehouse!.lng!
                 ),
                 distanceToPreviousKm: prev
                   ? calculateDistance(facility.lat, facility.lng, prev.lat, prev.lng)
@@ -263,27 +272,29 @@ export function RoutePolylinesLayer({
           }
         });
 
-        // Warehouse pin
-        const whMarker = L.circleMarker(
-          [route.warehouse.lat, route.warehouse.lng],
-          {
-            radius: isSelected ? 12 : 9,
-            fillColor: '#1e293b',
-            color: '#fff',
-            weight: 3,
-            fillOpacity: 0.9,
+        // Warehouse pin — only if warehouse has valid coordinates
+        if (hasWarehouseCoords) {
+          const whMarker = L.circleMarker(
+            [route.warehouse!.lat!, route.warehouse!.lng!],
+            {
+              radius: isSelected ? 12 : 9,
+              fillColor: '#1e293b',
+              color: '#fff',
+              weight: 3,
+              fillOpacity: 0.9,
+            }
+          );
+
+          whMarker.bindPopup(`
+            <strong>${route.warehouse!.name}</strong><br/>
+            <span style="font-size:12px">Origin for: ${route.name}</span>
+          `);
+
+          try {
+            whMarker.addTo(layerRef.current);
+          } catch (e) {
+            console.error('[RoutePolylinesLayer] Failed to add warehouse marker:', e);
           }
-        );
-
-        whMarker.bindPopup(`
-          <strong>${route.warehouse.name}</strong><br/>
-          <span style="font-size:12px">Origin for: ${route.name}</span>
-        `);
-
-        try {
-          whMarker.addTo(layerRef.current);
-        } catch (e) {
-          console.error('[RoutePolylinesLayer] Failed to add warehouse marker:', e);
         }
       });
     };

@@ -42,3 +42,9 @@ verify_jwt = true
 
 [functions.update-stop-status]
 verify_jwt = true
+
+[functions.backup-db-to-onedrive]
+verify_jwt = false
+
+[functions.backup-files-to-onedrive]
+verify_jwt = false
