@@ -779,13 +779,17 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               return true;
 
             case 3: {
-              // Copilot: must have planning intent with window defined
+              // Copilot: must have planning intent with window defined;
+              // non-ready sources also need at least one facility in working set
               if (state.schedule_mode === 'copilot') {
-                return (
+                const hasWindow =
                   state.planning_intent !== null &&
                   !!state.planning_intent.planning_window_start &&
-                  !!state.planning_intent.planning_window_end
-                );
+                  !!state.planning_intent.planning_window_end;
+                if (state.source_method !== 'ready') {
+                  return hasWindow && state.working_set.length > 0;
+                }
+                return hasWindow;
               }
               // Manual: Must have schedule details and working set
               const hasScheduleDetails =
@@ -808,9 +812,14 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             }
 
             case 4: {
-              // Copilot: must have planning candidates resolved
+              // Copilot: packaging step — all working-set facilities must have packaging defined
               if (state.schedule_mode === 'copilot') {
-                return state.planning_candidates !== null;
+                if (state.working_set.length === 0) return false;
+                return state.working_set.every(
+                  (ws) =>
+                    state.facility_packaging[ws.facility_id] !== undefined &&
+                    state.facility_packaging[ws.facility_id].packages.length > 0
+                );
               }
               // Manual: All facilities must have packaging defined
               if (state.working_set.length === 0) return false;
@@ -822,9 +831,9 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             }
 
             case 5:
-              // Copilot: must have plan generated
+              // Copilot: must have planning candidates resolved (Demand step)
               if (state.schedule_mode === 'copilot') {
-                return state.copilot_plan !== null;
+                return state.planning_candidates !== null;
               }
               // Manual: Must have batch name and at least one vehicle committed
               return (
@@ -834,13 +843,13 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               );
 
             case 6:
-              // Copilot: review/approve — always can proceed
-              if (state.schedule_mode === 'copilot') return true;
+              // Copilot: must have plan generated (Timeline step)
+              if (state.schedule_mode === 'copilot') return state.copilot_plan !== null;
               // Manual: Must have optimized route
               return state.optimized_route.length > 0;
 
             case 7:
-              // Step 7: Review — always can proceed (to submit)
+              // Both: always can proceed (Approve / Review)
               return true;
 
             default:
@@ -905,16 +914,20 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             }
 
             case 5:
-              if (!state.batch_name || state.batch_name.trim() === '') {
-                errors.push('Batch name is required');
-              }
-              if (state.vehicle_ids.length === 0 && !state.vehicle_id) {
-                errors.push('At least one vehicle is required');
+              if (state.schedule_mode === 'copilot') {
+                // No validation errors needed — button is disabled until plan is generated
+              } else {
+                if (!state.batch_name || state.batch_name.trim() === '') {
+                  errors.push('Batch name is required');
+                }
+                if (state.vehicle_ids.length === 0 && !state.vehicle_id) {
+                  errors.push('At least one vehicle is required');
+                }
               }
               break;
 
             case 6:
-              if (state.optimized_route.length === 0) {
+              if (state.schedule_mode !== 'copilot' && state.optimized_route.length === 0) {
                 errors.push('Route optimization is required');
               }
               break;
@@ -1091,11 +1104,14 @@ export const useCanProceed = () =>
 
       case 3: {
         if (state.schedule_mode === 'copilot') {
-          return (
+          const hasWindow =
             state.planning_intent !== null &&
             !!state.planning_intent.planning_window_start &&
-            !!state.planning_intent.planning_window_end
-          );
+            !!state.planning_intent.planning_window_end;
+          if (state.source_method !== 'ready') {
+            return hasWindow && state.working_set.length > 0;
+          }
+          return hasWindow;
         }
         const hasScheduleDetails =
           state.schedule_title !== null &&
@@ -1115,7 +1131,7 @@ export const useCanProceed = () =>
       }
 
       case 4:
-        if (state.schedule_mode === 'copilot') return state.planning_candidates !== null;
+        // Both copilot and manual: packaging check
         if (state.working_set.length === 0) return false;
         return state.working_set.every(
           (ws) =>
@@ -1124,7 +1140,8 @@ export const useCanProceed = () =>
         );
 
       case 5:
-        if (state.schedule_mode === 'copilot') return state.copilot_plan !== null;
+        // Copilot: Demand step — must have planning candidates resolved
+        if (state.schedule_mode === 'copilot') return state.planning_candidates !== null;
         return (
           state.batch_name !== null &&
           state.batch_name.trim() !== '' &&
@@ -1132,7 +1149,8 @@ export const useCanProceed = () =>
         );
 
       case 6:
-        if (state.schedule_mode === 'copilot') return true;
+        // Copilot: Timeline step — must have plan generated
+        if (state.schedule_mode === 'copilot') return state.copilot_plan !== null;
         return state.optimized_route.length > 0;
 
       case 7:
@@ -1206,16 +1224,18 @@ export const useValidationErrors = () =>
       }
 
       case 5:
-        if (!state.batch_name || state.batch_name.trim() === '') {
-          errors.push('Batch name is required');
-        }
-        if (state.vehicle_ids.length === 0 && !state.vehicle_id) {
-          errors.push('At least one vehicle is required');
+        if (state.schedule_mode !== 'copilot') {
+          if (!state.batch_name || state.batch_name.trim() === '') {
+            errors.push('Batch name is required');
+          }
+          if (state.vehicle_ids.length === 0 && !state.vehicle_id) {
+            errors.push('At least one vehicle is required');
+          }
         }
         break;
 
       case 6:
-        if (state.optimized_route.length === 0) {
+        if (state.schedule_mode !== 'copilot' && state.optimized_route.length === 0) {
           errors.push('Route optimization is required');
         }
         break;

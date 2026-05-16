@@ -14,15 +14,26 @@ import {
   ListChecks,
   Network,
   PlusCircle,
+  Search,
+  Plus,
+  MapPin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { FileUploadColumn } from '../schedule/FileUploadColumn';
+import { WorkingSetColumn } from '../schedule/WorkingSetColumn';
 import type { PlanningIntent, CopilotPriority } from '@/types/scheduling-copilot';
 import { DEFAULT_PLANNING_INTENT } from '@/types/scheduling-copilot';
-import type { SourceMethod, ParsedFacility, WorkingSetEntry } from '@/types/unified-workflow';
+import type { SourceMethod, ParsedFacility, WorkingSetItem } from '@/types/unified-workflow';
 
 interface Facility {
   id: string;
@@ -52,8 +63,15 @@ interface CopilotStep3IntentProps {
   parsedFacilities: ParsedFacility[] | null;
   onFileParsed: (facilities: ParsedFacility[]) => void;
   onUpdateParsedRow: (rowIndex: number, updates: Partial<ParsedFacility>) => void;
-  onAddToWorkingSet: (entry: WorkingSetEntry) => void;
-  workingSet: WorkingSetEntry[];
+  onAddToWorkingSet: (entry: WorkingSetItem) => void;
+  onRemoveFromWorkingSet: (facilityId: string) => void;
+  onReorderWorkingSet: (fromIndex: number, toIndex: number) => void;
+  onClearWorkingSet: () => void;
+  workingSet: WorkingSetItem[];
+  // Start location
+  warehouses: Array<{ id: string; name: string }>;
+  startLocationId: string | null;
+  onStartLocationChange: (id: string, type: 'warehouse') => void;
 }
 
 const PRIORITY_OPTIONS: { value: CopilotPriority; label: string; description: string }[] = [
@@ -152,6 +170,134 @@ function computeAIOptimalIntent(snapshot: CopilotStep3IntentProps['operationalSn
   };
 }
 
+// ─── Facility Browser Panel (manual / service_policy sources) ─────────────────
+
+function FacilityBrowserPanel({
+  sourceMethod,
+  allFacilities,
+  workingSet,
+  onAddToWorkingSet,
+  onRemoveFromWorkingSet,
+  onReorderWorkingSet,
+  onClearWorkingSet,
+  selectedFacilitiesSection,
+}: {
+  sourceMethod: SourceMethod | null;
+  allFacilities: Facility[];
+  workingSet: WorkingSetItem[];
+  onAddToWorkingSet: (entry: WorkingSetItem) => void;
+  onRemoveFromWorkingSet: (facilityId: string) => void;
+  onReorderWorkingSet: (fromIndex: number, toIndex: number) => void;
+  onClearWorkingSet: () => void;
+  selectedFacilitiesSection: React.ReactNode;
+}) {
+  const [query, setQuery] = React.useState('');
+  const selectedIds = React.useMemo(
+    () => new Set(workingSet.map((w) => w.facility_id)),
+    [workingSet]
+  );
+
+  const filtered = React.useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return allFacilities;
+    return allFacilities.filter(
+      (f) =>
+        f.name.toLowerCase().includes(q) ||
+        (f.lga && f.lga.toLowerCase().includes(q))
+    );
+  }, [allFacilities, query]);
+
+  return (
+    <div className="flex flex-col gap-4 h-full">
+      <div>
+        <h3 className="text-sm font-semibold">Facility Source</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {sourceMethod === 'service_policy'
+            ? 'Select facilities from your service policy cluster.'
+            : 'Search and select facilities to include in this copilot run.'}
+        </p>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Search by name or LGA…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full rounded-md border border-input bg-background pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Facility list */}
+      <div className="flex-1 max-h-56 overflow-y-auto rounded-lg border divide-y">
+        {filtered.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-6">No facilities match your search.</p>
+        ) : (
+          filtered.map((f) => {
+            const isSelected = selectedIds.has(f.id);
+            return (
+              <div key={f.id} className="flex items-center gap-3 px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{f.name}</p>
+                  {f.lga && (
+                    <p className="text-xs text-muted-foreground">{f.lga}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isSelected) {
+                      onAddToWorkingSet({
+                        facility_id: f.id,
+                        facility_name: f.name,
+                        requisition_ids: [],
+                        slot_demand: 1,
+                      });
+                    } else {
+                      onRemoveFromWorkingSet(f.id);
+                    }
+                  }}
+                  className={cn(
+                    'flex-shrink-0 h-7 w-7 rounded-md flex items-center justify-center transition-colors',
+                    isSelected
+                      ? 'bg-primary/10 text-primary hover:bg-red-50 hover:text-red-500'
+                      : 'bg-muted hover:bg-primary/10 hover:text-primary'
+                  )}
+                  title={isSelected ? 'Remove' : 'Add'}
+                >
+                  {isSelected ? (
+                    <X className="h-3.5 w-3.5" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {workingSet.length === 0 && (
+        <p className="text-xs text-amber-600">
+          Select at least one facility to continue.
+        </p>
+      )}
+
+      {selectedFacilitiesSection}
+    </div>
+  );
+}
+
 // ─── Source Column ────────────────────────────────────────────────────────────
 
 function SourceColumn({
@@ -161,6 +307,9 @@ function SourceColumn({
   onFileParsed,
   onUpdateParsedRow,
   onAddToWorkingSet,
+  onRemoveFromWorkingSet,
+  onReorderWorkingSet,
+  onClearWorkingSet,
   workingSet,
 }: {
   sourceMethod: SourceMethod | null;
@@ -168,8 +317,11 @@ function SourceColumn({
   parsedFacilities: ParsedFacility[] | null;
   onFileParsed: (facilities: ParsedFacility[]) => void;
   onUpdateParsedRow: (rowIndex: number, updates: Partial<ParsedFacility>) => void;
-  onAddToWorkingSet: (entry: WorkingSetEntry) => void;
-  workingSet: WorkingSetEntry[];
+  onAddToWorkingSet: (entry: WorkingSetItem) => void;
+  onRemoveFromWorkingSet: (facilityId: string) => void;
+  onReorderWorkingSet: (fromIndex: number, toIndex: number) => void;
+  onClearWorkingSet: () => void;
+  workingSet: WorkingSetItem[];
 }) {
   const handleAddValidToWorkingSet = React.useCallback(() => {
     if (!parsedFacilities) return;
@@ -184,6 +336,23 @@ function SourceColumn({
         });
       });
   }, [parsedFacilities, onAddToWorkingSet]);
+
+  const selectedFacilitiesSection = workingSet.length > 0 ? (
+    <div className="mt-5 flex flex-col gap-2">
+      <div>
+        <h3 className="text-sm font-semibold">Selected Facilities</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {workingSet.length} {workingSet.length === 1 ? 'facility' : 'facilities'} queued for copilot
+        </p>
+      </div>
+      <WorkingSetColumn
+        items={workingSet}
+        onReorder={onReorderWorkingSet}
+        onRemove={onRemoveFromWorkingSet}
+        onClear={onClearWorkingSet}
+      />
+    </div>
+  ) : null;
 
   if (sourceMethod === 'upload') {
     return (
@@ -202,12 +371,7 @@ function SourceColumn({
           onAddValidToWorkingSet={handleAddValidToWorkingSet}
           className="flex-1"
         />
-        {workingSet.length > 0 && (
-          <div className="mt-4 rounded-lg border bg-muted/40 p-3">
-            <p className="text-xs font-medium text-muted-foreground mb-1">Queued for copilot</p>
-            <p className="text-sm font-semibold">{workingSet.length} facilities</p>
-          </div>
-        )}
+        {selectedFacilitiesSection}
       </div>
     );
   }
@@ -234,58 +398,36 @@ function SourceColumn({
             </p>
           </div>
         </div>
+        {selectedFacilitiesSection}
       </div>
     );
   }
 
-  if (sourceMethod === 'service_policy') {
+  if (sourceMethod === 'service_policy' || sourceMethod === 'manual') {
     return (
-      <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="text-sm font-semibold">Facility Source</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Facilities will be loaded from your selected service policy cluster.
-          </p>
-        </div>
-        <div className="rounded-lg border bg-muted/30 p-4 flex items-start gap-3">
-          <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Network className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-sm font-medium">Service Policy</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              The copilot will use the policy cluster defined in the previous step.
-              Facilities and their demand context will be automatically resolved
-              from the cluster configuration.
-            </p>
-          </div>
-        </div>
-      </div>
+      <FacilityBrowserPanel
+        sourceMethod={sourceMethod}
+        allFacilities={allFacilities}
+        workingSet={workingSet}
+        onAddToWorkingSet={onAddToWorkingSet}
+        onRemoveFromWorkingSet={onRemoveFromWorkingSet}
+        onReorderWorkingSet={onReorderWorkingSet}
+        onClearWorkingSet={onClearWorkingSet}
+        selectedFacilitiesSection={selectedFacilitiesSection}
+      />
     );
   }
 
-  // manual
+  // fallback (should not reach)
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h3 className="text-sm font-semibold">Facility Source</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          You'll select facilities manually in the Demand step.
+          Facilities will be resolved in the next step.
         </p>
       </div>
-      <div className="rounded-lg border bg-muted/30 p-4 flex items-start gap-3">
-        <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-          <PlusCircle className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <p className="text-sm font-medium">Manual Entry</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            After defining your planning intent, you'll pick facilities from the
-            database in the next step. The copilot will then generate a plan
-            based on your selection.
-          </p>
-        </div>
-      </div>
+      {selectedFacilitiesSection}
     </div>
   );
 }
@@ -302,7 +444,13 @@ export function CopilotStep3Intent({
   onFileParsed,
   onUpdateParsedRow,
   onAddToWorkingSet,
+  onRemoveFromWorkingSet,
+  onReorderWorkingSet,
+  onClearWorkingSet,
   workingSet,
+  warehouses,
+  startLocationId,
+  onStartLocationChange,
 }: CopilotStep3IntentProps) {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [calendarOpen, setCalendarOpen] = React.useState(false);
@@ -366,6 +514,9 @@ export function CopilotStep3Intent({
           onFileParsed={onFileParsed}
           onUpdateParsedRow={onUpdateParsedRow}
           onAddToWorkingSet={onAddToWorkingSet}
+          onRemoveFromWorkingSet={onRemoveFromWorkingSet}
+          onReorderWorkingSet={onReorderWorkingSet}
+          onClearWorkingSet={onClearWorkingSet}
           workingSet={workingSet}
         />
       </div>
@@ -473,6 +624,34 @@ export function CopilotStep3Intent({
           </Popover>
           {dateRange?.from && !dateRange?.to && (
             <p className="text-xs text-muted-foreground">Click an end date to complete the range.</p>
+          )}
+        </div>
+
+        {/* Start Location */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-medium">Start Location</p>
+          </div>
+          <Select
+            value={startLocationId ?? ''}
+            onValueChange={(id) => onStartLocationChange(id, 'warehouse')}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select warehouse / depot…" />
+            </SelectTrigger>
+            <SelectContent className="z-[10000]">
+              {warehouses.map((w) => (
+                <SelectItem key={w.id} value={w.id}>
+                  {w.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!startLocationId && (
+            <p className="text-xs text-amber-600">
+              Select a start location to enable route optimization.
+            </p>
           )}
         </div>
 

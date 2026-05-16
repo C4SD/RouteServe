@@ -83,9 +83,10 @@ const COPILOT_STEP_LABELS = [
   { num: 1, label: 'Mode' },
   { num: 2, label: 'Source' },
   { num: 3, label: 'Intent' },
-  { num: 4, label: 'Demand' },
-  { num: 5, label: 'Timeline' },
-  { num: 6, label: 'Approve' },
+  { num: 4, label: 'Packaging' },
+  { num: 5, label: 'Demand' },
+  { num: 6, label: 'Timeline' },
+  { num: 7, label: 'Approve' },
 ];
 
 export function UnifiedWorkflowDialog({
@@ -164,15 +165,66 @@ export function UnifiedWorkflowDialog({
     }));
   }, [facilitiesData]);
 
-  // Use all facilities for manual/service_policy mode, ready consignments for ready mode
-  const effectiveCandidates =
+  // For upload mode, build candidates from the working set joined with facility coordinates
+  const uploadCandidates = React.useMemo<FacilityCandidate[]>(() => {
+    if (sourceMethod !== 'upload') return [];
+    return workingSet.map((ws) => {
+      const fac = allFacilityCandidates.find((f) => f.id === ws.facility_id);
+      return {
+        id: ws.facility_id,
+        name: ws.facility_name,
+        code: fac?.code,
+        lga: fac?.lga,
+        zone: fac?.zone,
+        lat: fac?.lat,
+        lng: fac?.lng,
+        requisition_ids: ws.requisition_ids,
+        slot_demand: ws.slot_demand,
+        weight_kg: ws.weight_kg,
+        volume_m3: ws.volume_m3,
+      };
+    });
+  }, [sourceMethod, workingSet, allFacilityCandidates]);
+
+  // Use all facilities for manual/service_policy, uploaded working set for upload, ready consignments otherwise
+  const effectiveCandidates: FacilityCandidate[] =
     sourceMethod === 'manual' || sourceMethod === 'service_policy'
       ? allFacilityCandidates
+      : sourceMethod === 'upload'
+      ? uploadCandidates
       : facilityCandidates;
   const effectiveCandidatesLoading =
-    sourceMethod === 'manual' || sourceMethod === 'service_policy'
+    sourceMethod === 'manual' || sourceMethod === 'service_policy' || sourceMethod === 'upload'
       ? !facilitiesData
       : facilitiesLoading;
+
+  // For copilot flow: when source is manual/service_policy, Demand step should see only
+  // the facilities the user explicitly added to the working set in the Intent step,
+  // not all facilities. Upload and ready already produce the correct scoped list.
+  const copilotFacilityCandidates = React.useMemo<FacilityCandidate[]>(() => {
+    if (
+      (sourceMethod === 'manual' || sourceMethod === 'service_policy') &&
+      workingSet.length > 0
+    ) {
+      return workingSet.map((ws) => {
+        const fac = allFacilityCandidates.find((f) => f.id === ws.facility_id);
+        return {
+          id: ws.facility_id,
+          name: ws.facility_name,
+          code: fac?.code,
+          lga: fac?.lga,
+          zone: fac?.zone,
+          lat: fac?.lat,
+          lng: fac?.lng,
+          requisition_ids: ws.requisition_ids,
+          slot_demand: ws.slot_demand,
+          weight_kg: ws.weight_kg,
+          volume_m3: ws.volume_m3,
+        };
+      });
+    }
+    return effectiveCandidates;
+  }, [sourceMethod, workingSet, allFacilityCandidates, effectiveCandidates]);
 
   // Mutations
   const createPreBatch = useCreatePreBatch();
@@ -518,15 +570,38 @@ export function UnifiedWorkflowDialog({
 
   // Handle next step — auto-commits suggested vehicles when leaving Schedule step (step 3 manual)
   const handleNextStep = React.useCallback(() => {
-    if (currentStep === 3 && vehicleIds.length === 0) {
+    if (currentStep === 3 && scheduleMode === 'manual' && vehicleIds.length === 0) {
       if (suggestedVehicleIds.length > 0) {
         actions.commitVehicles(suggestedVehicleIds);
       } else if (suggestedVehicleId) {
         actions.commitVehicle(suggestedVehicleId);
       }
     }
+
+    // Copilot + ready source: auto-populate working set from ready consignments before Packaging step
+    if (
+      currentStep === 3 &&
+      scheduleMode === 'copilot' &&
+      sourceMethod === 'ready' &&
+      workingSet.length === 0 &&
+      facilityCandidates.length > 0
+    ) {
+      actions.setWorkingSet(
+        facilityCandidates.map((fc, idx) => ({
+          facility_id: fc.id,
+          facility_name: fc.name,
+          facility_code: fc.code,
+          requisition_ids: fc.requisition_ids,
+          slot_demand: fc.slot_demand,
+          weight_kg: fc.weight_kg,
+          volume_m3: fc.volume_m3,
+          sequence: idx + 1,
+        }))
+      );
+    }
+
     actions.nextStep();
-  }, [currentStep, suggestedVehicleIds, suggestedVehicleId, vehicleIds, actions]);
+  }, [currentStep, scheduleMode, sourceMethod, workingSet, facilityCandidates, suggestedVehicleIds, suggestedVehicleId, vehicleIds, actions]);
 
   // Handle route optimization (Step 4) (memoized to prevent infinite loops)
   const handleOptimizeRoute = React.useCallback(async () => {
@@ -572,7 +647,13 @@ export function UnifiedWorkflowDialog({
               onFileParsed={actions.setParsedFacilities}
               onUpdateParsedRow={actions.updateParsedFacility}
               onAddToWorkingSet={actions.addToWorkingSet}
+              onRemoveFromWorkingSet={actions.removeFromWorkingSet}
+              onReorderWorkingSet={actions.reorderWorkingSet}
+              onClearWorkingSet={actions.clearWorkingSet}
               workingSet={workingSet}
+              warehouses={warehouses}
+              startLocationId={startLocationId}
+              onStartLocationChange={actions.setStartLocation}
             />
           );
         }
@@ -619,15 +700,10 @@ export function UnifiedWorkflowDialog({
       case 4:
         if (scheduleMode === 'copilot') {
           return (
-            <CopilotStep4Candidates
-              intent={planningIntent!}
-              candidates={planningCandidates}
-              facilityCandidates={effectiveCandidates}
-              onCandidatesResolved={actions.setPlanningCandidates}
-              onPlanGenerated={actions.setCopilotPlan}
-              copilotPlan={copilotPlan}
-              vehicles={vehicles}
-              drivers={drivers}
+            <Step3PackagingCompletion
+              workingSet={workingSet}
+              facilityPackaging={facilityPackaging}
+              onSetFacilityPackaging={actions.setFacilityPackaging}
             />
           );
         }
@@ -641,14 +717,26 @@ export function UnifiedWorkflowDialog({
 
       case 5:
         if (scheduleMode === 'copilot') {
-          return copilotPlan ? (
-            <CopilotStep5Timeline
-              plan={copilotPlan}
+          return (
+            <CopilotStep4Candidates
+              intent={planningIntent}
+              candidates={planningCandidates}
+              facilityCandidates={copilotFacilityCandidates}
+              onCandidatesResolved={actions.setPlanningCandidates}
+              onPlanGenerated={actions.setCopilotPlan}
+              copilotPlan={copilotPlan}
               vehicles={vehicles}
               drivers={drivers}
-              onUpdateRun={actions.updateDispatchRunProposal}
+              workingSet={workingSet}
+              startLocation={warehouses.find((w) => w.id === startLocationId) ?? null}
+              facilities={facilitiesData?.facilities?.map((f) => ({ id: f.id, name: f.name, lat: f.lat, lng: f.lng })) ?? []}
+              aiOptions={aiOptions}
+              onAiOptionsChange={actions.setAiOptimizationOptions}
+              suggestedVehicleId={suggestedVehicleId}
+              onSuggestedVehicleChange={actions.setSuggestedVehicle}
+              vehicleSuggestions={vehicleSuggestions}
             />
-          ) : null;
+          );
         }
         return (
           <Step3Batch
@@ -681,8 +769,13 @@ export function UnifiedWorkflowDialog({
 
       case 6: {
         if (scheduleMode === 'copilot') {
-          return copilotPlan && planningIntent ? (
-            <CopilotStep6Approve plan={copilotPlan} intent={planningIntent} />
+          return copilotPlan ? (
+            <CopilotStep5Timeline
+              plan={copilotPlan}
+              vehicles={vehicles}
+              drivers={drivers}
+              onUpdateRun={actions.updateDispatchRunProposal}
+            />
           ) : null;
         }
         const startLocation = warehouses.find(w => w.id === startLocationId) || null;
@@ -706,6 +799,11 @@ export function UnifiedWorkflowDialog({
       }
 
       case 7:
+        if (scheduleMode === 'copilot') {
+          return copilotPlan && planningIntent ? (
+            <CopilotStep6Approve plan={copilotPlan} intent={planningIntent} />
+          ) : null;
+        }
         return (
           <Step5Review
             sourceMethod={sourceMethod}
@@ -751,6 +849,7 @@ export function UnifiedWorkflowDialog({
     timeWindow,
     warehouses,
     effectiveCandidates,
+    copilotFacilityCandidates,
     facilitiesLoading,
     workingSet,
     aiOptions,
@@ -885,8 +984,8 @@ export function UnifiedWorkflowDialog({
               </Button>
             )}
 
-            {/* Copilot final step (step 6) — Approve & Dispatch */}
-            {scheduleMode === 'copilot' && currentStep === 6 ? (
+            {/* Copilot final step (step 7) — Approve & Dispatch */}
+            {scheduleMode === 'copilot' && currentStep === 7 ? (
               <Button onClick={handleConfirm} disabled={!canProceed || convertToBatch.isPending}>
                 {convertToBatch.isPending ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />

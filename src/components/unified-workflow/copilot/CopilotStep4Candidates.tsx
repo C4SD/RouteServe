@@ -13,11 +13,14 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { PlanningCandidate, PlanningIntent, CopilotPlan } from '@/types/scheduling-copilot';
+import { DEFAULT_PLANNING_INTENT } from '@/types/scheduling-copilot';
 import { generateCopilotPlan, convertToPlanningCandidates } from '@/lib/scheduling-copilot-engine';
 import type { FacilityCandidate } from '@/components/unified-workflow/schedule/SourceOfTruthColumn';
+import { DecisionSupportColumn } from '@/components/unified-workflow/schedule/DecisionSupportColumn';
+import type { WorkingSetItem, AiOptimizationOptions, VehicleSuggestion } from '@/types/unified-workflow';
 
 interface CopilotStep4CandidatesProps {
-  intent: PlanningIntent;
+  intent: PlanningIntent | null;
   candidates: PlanningCandidate[] | null;
   facilityCandidates: FacilityCandidate[];
   onCandidatesResolved: (candidates: PlanningCandidate[]) => void;
@@ -37,6 +40,15 @@ interface CopilotStep4CandidatesProps {
     name: string;
     status: string;
   }>;
+  // Decision support
+  workingSet: WorkingSetItem[];
+  startLocation?: { id: string; name: string; lat?: number; lng?: number } | null;
+  facilities?: Array<{ id: string; name: string; lat?: number; lng?: number }>;
+  aiOptions: AiOptimizationOptions;
+  onAiOptionsChange: (options: Partial<AiOptimizationOptions>) => void;
+  suggestedVehicleId: string | null;
+  onSuggestedVehicleChange: (id: string | null) => void;
+  vehicleSuggestions: VehicleSuggestion[];
 }
 
 type GenerationPhase =
@@ -114,6 +126,14 @@ export function CopilotStep4Candidates({
   copilotPlan,
   vehicles,
   drivers,
+  workingSet,
+  startLocation,
+  facilities = [],
+  aiOptions,
+  onAiOptionsChange,
+  suggestedVehicleId,
+  onSuggestedVehicleChange,
+  vehicleSuggestions,
 }: CopilotStep4CandidatesProps) {
   const [phase, setPhase] = React.useState<GenerationPhase>('idle');
   const [currentPhaseIdx, setCurrentPhaseIdx] = React.useState(-1);
@@ -188,7 +208,7 @@ export function CopilotStep4Candidates({
         | 'off_duty',
     }));
 
-    const plan = generateCopilotPlan(planningCandidates, intent, {
+    const plan = generateCopilotPlan(planningCandidates, intent ?? DEFAULT_PLANNING_INTENT, {
       vehicles: vehicleResources,
       drivers: driverResources,
     });
@@ -209,209 +229,224 @@ export function CopilotStep4Candidates({
   const isGenerating = phase !== 'idle' && phase !== 'done';
   const hasPlan = copilotPlan !== null;
 
+  const displayCandidates = resolved.length > 0
+    ? resolved
+    : convertToPlanningCandidates(
+        facilityCandidates.map((fc) => ({
+          id: fc.id,
+          name: fc.name,
+          code: fc.code,
+          lga: fc.lga,
+          zone: fc.zone,
+          lat: fc.lat,
+          lng: fc.lng,
+          requisition_ids: fc.requisition_ids,
+          slot_demand: fc.slot_demand,
+          weight_kg: fc.weight_kg,
+          volume_m3: fc.volume_m3,
+        }))
+      );
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Resolve Planning Candidates</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Review the operational demand sourced for this plan, then generate the execution plan.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        {/* Demand */}
-        <div className="rounded-lg border p-4 space-y-1">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Package className="h-4 w-4" />
-            <p className="text-xs font-medium uppercase tracking-wide">Ready Demand</p>
-          </div>
-          <p className="text-2xl font-bold">{readyCount}</p>
-          <p className="text-xs text-muted-foreground">
-            {facilityCandidates.length} total facilities
-          </p>
-          {notReadyCount > 0 && (
-            <p className="text-xs text-amber-600">{notReadyCount} not dispatch-ready</p>
-          )}
-        </div>
-
-        {/* Fleet */}
-        <div className="rounded-lg border p-4 space-y-1">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Truck className="h-4 w-4" />
-            <p className="text-xs font-medium uppercase tracking-wide">Fleet Status</p>
-          </div>
-          <p className="text-2xl font-bold">{availableVehicles.length}</p>
-          <p className="text-xs text-muted-foreground">available of {vehicles.length}</p>
-          {vehicles.filter((v) => v.status === 'maintenance').length > 0 && (
-            <p className="text-xs text-amber-600">
-              {vehicles.filter((v) => v.status === 'maintenance').length} maintenance
-            </p>
-          )}
-        </div>
-
-        {/* Drivers */}
-        <div className="rounded-lg border p-4 space-y-1">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <p className="text-xs font-medium uppercase tracking-wide">Drivers</p>
-          </div>
-          <p className="text-2xl font-bold">{activeDrivers.length}</p>
-          <p className="text-xs text-muted-foreground">active of {drivers.length}</p>
-        </div>
-      </div>
-
-      {/* Candidates list */}
-      {facilityCandidates.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">
-              Source Facilities
-              <span className="ml-2 text-xs text-muted-foreground font-normal">
-                ({facilityCandidates.length})
-              </span>
+    <div className="flex flex-col lg:flex-row gap-0 min-h-[65vh]">
+      {/* Left column — Source Facilities */}
+      <div className="lg:w-[55%] border-r flex flex-col overflow-y-auto">
+        <div className="p-6 space-y-5 flex-1">
+          <div>
+            <h2 className="text-lg font-semibold">Resolve Planning Candidates</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Review the operational demand sourced for this plan, then generate the execution plan.
             </p>
           </div>
-          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-            {(resolved.length > 0 ? resolved : convertToPlanningCandidates(
-              facilityCandidates.map((fc) => ({
-                id: fc.id,
-                name: fc.name,
-                code: fc.code,
-                lga: fc.lga,
-                zone: fc.zone,
-                lat: fc.lat,
-                lng: fc.lng,
-                requisition_ids: fc.requisition_ids,
-                slot_demand: fc.slot_demand,
-                weight_kg: fc.weight_kg,
-                volume_m3: fc.volume_m3,
-              }))
-            )).map((c) => (
-              <CandidateCard key={c.facility_id} candidate={c} />
-            ))}
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border p-3 space-y-1">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Package className="h-3.5 w-3.5" />
+                <p className="text-xs font-medium uppercase tracking-wide">Ready Demand</p>
+              </div>
+              <p className="text-xl font-bold">{readyCount}</p>
+              <p className="text-xs text-muted-foreground">{facilityCandidates.length} total facilities</p>
+              {notReadyCount > 0 && (
+                <p className="text-xs text-amber-600">{notReadyCount} not dispatch-ready</p>
+              )}
+            </div>
+            <div className="rounded-lg border p-3 space-y-1">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Truck className="h-3.5 w-3.5" />
+                <p className="text-xs font-medium uppercase tracking-wide">Fleet</p>
+              </div>
+              <p className="text-xl font-bold">{availableVehicles.length}</p>
+              <p className="text-xs text-muted-foreground">available of {vehicles.length}</p>
+              {vehicles.filter((v) => v.status === 'maintenance').length > 0 && (
+                <p className="text-xs text-amber-600">
+                  {vehicles.filter((v) => v.status === 'maintenance').length} maintenance
+                </p>
+              )}
+            </div>
+            <div className="rounded-lg border p-3 space-y-1">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Users className="h-3.5 w-3.5" />
+                <p className="text-xs font-medium uppercase tracking-wide">Drivers</p>
+              </div>
+              <p className="text-xl font-bold">{activeDrivers.length}</p>
+              <p className="text-xs text-muted-foreground">active of {drivers.length}</p>
+            </div>
           </div>
-        </div>
-      )}
 
-      {facilityCandidates.length === 0 && (
-        <div className="rounded-lg border border-dashed p-6 text-center">
-          <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
-          <p className="text-sm font-medium">No facilities from selected source</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Go back to Source to select a source with available demand.
-          </p>
-        </div>
-      )}
+          {/* Source Facilities list */}
+          {facilityCandidates.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                Source Facilities
+                <span className="ml-2 text-xs text-muted-foreground font-normal">
+                  ({facilityCandidates.length})
+                </span>
+              </p>
+              <div className="overflow-y-auto space-y-1.5 pr-1 max-h-[340px]">
+                {displayCandidates.map((c) => (
+                  <CandidateCard key={c.facility_id} candidate={c} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-6 text-center">
+              <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
+              <p className="text-sm font-medium">No facilities from selected source</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Go back to Source to select a source with available demand.
+              </p>
+            </div>
+          )}
 
-      {/* Generation progress */}
-      {isGenerating && (
-        <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-          <p className="text-sm font-medium flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Generating execution plan…
-          </p>
-          <div className="space-y-2">
-            {PHASES.map((p, idx) => (
-              <div key={p.phase} className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    'h-2 w-2 rounded-full flex-shrink-0',
-                    idx < currentPhaseIdx
-                      ? 'bg-primary'
-                      : idx === currentPhaseIdx
-                      ? 'bg-primary animate-pulse'
-                      : 'bg-muted'
-                  )}
-                />
-                <p
-                  className={cn(
-                    'text-xs',
-                    idx <= currentPhaseIdx ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                >
-                  {p.label}
+          {/* Generation progress */}
+          {isGenerating && (
+            <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+              <p className="text-sm font-medium flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                Generating execution plan…
+              </p>
+              <div className="space-y-2">
+                {PHASES.map((p, idx) => (
+                  <div key={p.phase} className="flex items-center gap-2">
+                    <div
+                      className={cn(
+                        'h-2 w-2 rounded-full flex-shrink-0',
+                        idx < currentPhaseIdx
+                          ? 'bg-primary'
+                          : idx === currentPhaseIdx
+                          ? 'bg-primary animate-pulse'
+                          : 'bg-muted'
+                      )}
+                    />
+                    <p
+                      className={cn(
+                        'text-xs',
+                        idx <= currentPhaseIdx ? 'text-foreground' : 'text-muted-foreground'
+                      )}
+                    >
+                      {p.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Plan summary (when done) */}
+          {hasPlan && phase === 'done' && (
+            <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                  Execution plan generated
                 </p>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Plan summary (when done) */}
-      {hasPlan && phase === 'done' && (
-        <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <p className="text-sm font-semibold text-green-700 dark:text-green-400">
-              Execution plan generated
-            </p>
-          </div>
-          <div className="grid grid-cols-4 gap-3 text-center">
-            <div>
-              <p className="text-lg font-bold">{copilotPlan!.summary.total_runs}</p>
-              <p className="text-xs text-muted-foreground">runs</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold">{copilotPlan!.summary.estimated_execution_days}</p>
-              <p className="text-xs text-muted-foreground">days</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold">{copilotPlan!.summary.total_vehicles_used}</p>
-              <p className="text-xs text-muted-foreground">vehicles</p>
-            </div>
-            <div>
-              <p
-                className={cn(
-                  'text-lg font-bold',
-                  copilotPlan!.summary.total_warnings > 0 ? 'text-amber-600' : 'text-green-600'
-                )}
-              >
-                {copilotPlan!.summary.total_warnings}
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div>
+                  <p className="text-lg font-bold">{copilotPlan!.summary.total_runs}</p>
+                  <p className="text-xs text-muted-foreground">runs</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{copilotPlan!.summary.estimated_execution_days}</p>
+                  <p className="text-xs text-muted-foreground">days</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{copilotPlan!.summary.total_vehicles_used}</p>
+                  <p className="text-xs text-muted-foreground">vehicles</p>
+                </div>
+                <div>
+                  <p
+                    className={cn(
+                      'text-lg font-bold',
+                      copilotPlan!.summary.total_warnings > 0 ? 'text-amber-600' : 'text-green-600'
+                    )}
+                  >
+                    {copilotPlan!.summary.total_warnings}
+                  </p>
+                  <p className="text-xs text-muted-foreground">warnings</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {copilotPlan!.summary.total_assigned} of {copilotPlan!.summary.total_candidates} facilities scheduled.
+                {copilotPlan!.summary.total_unassigned > 0 &&
+                  ` ${copilotPlan!.summary.total_unassigned} unassigned.`}
               </p>
-              <p className="text-xs text-muted-foreground">warnings</p>
             </div>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            {copilotPlan!.summary.total_assigned} of {copilotPlan!.summary.total_candidates} facilities scheduled.
-            {copilotPlan!.summary.total_unassigned > 0 &&
-              ` ${copilotPlan!.summary.total_unassigned} unassigned.`}
-          </p>
-        </div>
-      )}
+          )}
 
-      {/* Generate button */}
-      {!hasPlan && !isGenerating && (
-        <div className="pt-2">
-          <Button
-            onClick={handleGenerate}
-            disabled={facilityCandidates.length === 0}
-            className="w-full"
-          >
-            <Zap className="h-4 w-4 mr-2" />
-            Generate Execution Plan
-          </Button>
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            The copilot will group, split, and schedule all demand within your planning window.
-          </p>
-        </div>
-      )}
+          {/* Generate button */}
+          {!hasPlan && !isGenerating && (
+            <div className="pt-2">
+              <Button
+                onClick={handleGenerate}
+                disabled={facilityCandidates.length === 0}
+                className="w-full"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Generate Execution Plan
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                The copilot will group, split, and schedule all demand within your planning window.
+              </p>
+            </div>
+          )}
 
-      {hasPlan && phase === 'done' && (
-        <div className="pt-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setPhase('idle');
-              setCurrentPhaseIdx(-1);
-              handleGenerate();
-            }}
-            className="w-full"
-          >
-            Regenerate Plan
-          </Button>
+          {hasPlan && phase === 'done' && (
+            <div className="pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPhase('idle');
+                  setCurrentPhaseIdx(-1);
+                  handleGenerate();
+                }}
+                className="w-full"
+              >
+                Regenerate Plan
+              </Button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+
+      {/* Right column — Decision Support */}
+      <div className="flex-1 overflow-hidden">
+        <DecisionSupportColumn
+          workingSet={workingSet}
+          startLocation={startLocation}
+          facilities={facilities}
+          aiOptions={aiOptions}
+          onAiOptionsChange={onAiOptionsChange}
+          suggestedVehicleId={suggestedVehicleId}
+          onSuggestedVehicleChange={onSuggestedVehicleChange}
+          vehicleSuggestions={vehicleSuggestions}
+          sourceSubOption={null}
+          className="h-full"
+        />
+      </div>
     </div>
   );
 }
