@@ -3,7 +3,7 @@
  *
  * Lightweight MapLibre-based map for the FleetOps dashboard.
  * Replaces the Leaflet-based UnifiedMapContainer for consistent
- * zoom/pan behavior with the rest of the BIKO ecosystem.
+ * zoom/pan behavior with the rest of the RouteServe ecosystem.
  *
  * Shows: batch route lines, facility markers, warehouse markers.
  * Supports: batch selection, click handlers, theme-aware basemap.

@@ -382,7 +382,7 @@ export function RegistrationForm() {
                   <SelectValue placeholder="Select provider" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="biko_native">Biko Native</SelectItem>
+                  <SelectItem value="biko_native">RouteServe Native</SelectItem>
                   <SelectItem value="teltonika">Teltonika</SelectItem>
                   <SelectItem value="queclink">Queclink</SelectItem>
                   <SelectItem value="ruptela">Ruptela</SelectItem>

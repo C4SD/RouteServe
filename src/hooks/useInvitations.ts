@@ -391,7 +391,7 @@ export function getTimeUntilExpiry(expiresAt: string): string {
 }
 
 /**
- * Build invitation URL (main Biko app)
+ * Build invitation URL (main RouteServe app)
  */
 export function buildInvitationUrl(token: string): string {
   const baseUrl = window.location.origin;

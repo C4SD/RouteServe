@@ -1,5 +1,5 @@
 /**
- * Unit Conversion Library for BIKO
+ * Unit Conversion Library for RouteServe
  *
  * Provides conversion utilities for weight, volume, and distance units
  * commonly used in logistics operations.
@@ -152,7 +152,7 @@ export function getUnitOptions(type: 'weight' | 'volume' | 'distance'): UnitOpti
 // User Preference Storage
 // ============================================================================
 
-const STORAGE_KEY = 'biko_unit_preferences';
+const STORAGE_KEY = 'routeserve_unit_preferences';
 
 export interface UnitPreferences {
   weight: WeightUnit;

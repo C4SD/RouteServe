@@ -374,7 +374,7 @@ export default function WorkspaceSetupWizard() {
               <div className="space-y-2">
                 <Label htmlFor="workspace-slug">Workspace URL Slug</Label>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">app.biko.ng/</span>
+                  <span className="text-sm text-muted-foreground">app.routeserve.com/</span>
                   <Input
                     id="workspace-slug"
                     placeholder="kano-pharma"

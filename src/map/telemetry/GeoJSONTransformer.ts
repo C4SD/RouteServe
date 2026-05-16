@@ -1,7 +1,7 @@
 /**
  * GeoJSONTransformer.ts
  *
- * Transforms BIKO entity data to GeoJSON FeatureCollections
+ * Transforms RouteServe entity data to GeoJSON FeatureCollections
  * for use with MapLibre GL JS sources
  */
 

@@ -1,7 +1,7 @@
 /**
  * Driver Onboarding Dialog - Single Window Layout
  * Full-featured driver onboarding with profile picture upload
- * Uses BIKO design system branding and vehicle configurator pattern
+ * Uses RouteServe design system branding and vehicle configurator pattern
  */
 
 import React, { useState } from 'react';
@@ -87,7 +87,7 @@ const initialFormData: OnboardingFormData = {
   dateOfBirth: '',
   phone: '',
   email: '',
-  employer: 'BIKO Logistics',
+  employer: 'RouteServe Logistics',
   position: 'Driver',
   employmentType: 'full-time',
   startDate: '',
@@ -148,7 +148,7 @@ export function DriverOnboardingDialog({ open, onOpenChange, driver, mode = 'cre
         dateOfBirth: driver.dateOfBirth || driver.date_of_birth || '',
         phone: driver.phone || '',
         email: driver.email || '',
-        employer: driver.employer || 'BIKO Logistics',
+        employer: driver.employer || 'RouteServe Logistics',
         position: driver.position || 'Driver',
         employmentType: driver.employmentType || driver.employment_type || 'full-time',
         startDate: driver.startDate || driver.start_date || '',

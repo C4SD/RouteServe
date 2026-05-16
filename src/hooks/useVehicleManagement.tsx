@@ -28,7 +28,7 @@ export function useVehicleManagement() {
 
   const createVehicle = useMutation({
     mutationFn: async (data: VehicleFormData) => {
-      const workspaceId = localStorage.getItem('biko_active_workspace_id');
+      const workspaceId = localStorage.getItem('routeserve_active_workspace_id');
       if (!workspaceId) throw new Error('No active workspace selected');
 
       const { data: vehicle, error } = await supabase
@@ -53,7 +53,7 @@ export function useVehicleManagement() {
 
   const updateVehicle = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<VehicleFormData> }) => {
-      const workspaceId = localStorage.getItem('biko_active_workspace_id');
+      const workspaceId = localStorage.getItem('routeserve_active_workspace_id');
       if (!workspaceId) throw new Error('No active workspace selected');
 
       const { error } = await supabase
@@ -77,7 +77,7 @@ export function useVehicleManagement() {
 
   const deleteVehicle = useMutation({
     mutationFn: async (id: string) => {
-      const workspaceId = localStorage.getItem('biko_active_workspace_id');
+      const workspaceId = localStorage.getItem('routeserve_active_workspace_id');
       if (!workspaceId) throw new Error('No active workspace selected');
 
       const { error, count } = await supabase

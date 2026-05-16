@@ -87,7 +87,7 @@ export const DEFAULT_VEHICLE_CONFIGS: Record<string, DefaultVehicleConfig> = {
     ],
   },
 
-  // BIKO Shortcuts
+  // RouteServe Shortcuts
   BIKO_MOPED: {
     dimensions: { length_cm: 180, width_cm: 70, height_cm: 110 },
     payload: { gross_weight_kg: 250, max_payload_kg: 100 },

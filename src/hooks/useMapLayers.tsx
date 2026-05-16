@@ -25,7 +25,7 @@ const defaultLayers: MapLayersState = {
 export function useMapLayers() {
   const [layers, setLayers] = useState<MapLayersState>(() => {
     try {
-      const saved = localStorage.getItem('biko_map_layers');
+      const saved = localStorage.getItem('routeserve_map_layers');
       return saved ? { ...defaultLayers, ...JSON.parse(saved) } : defaultLayers;
     } catch {
       return defaultLayers;
@@ -33,7 +33,7 @@ export function useMapLayers() {
   });
 
   useEffect(() => {
-    localStorage.setItem('biko_map_layers', JSON.stringify(layers));
+    localStorage.setItem('routeserve_map_layers', JSON.stringify(layers));
   }, [layers]);
 
   const toggleLayer = (key: keyof MapLayersState) => {

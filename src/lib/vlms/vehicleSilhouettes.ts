@@ -43,7 +43,7 @@ export const VEHICLE_SILHOUETTES: Record<string, VehicleSilhouetteInfo> = {
     fallbackIcon: 'truck',
   },
 
-  // BIKO Shortcuts
+  // RouteServe Shortcuts
   BIKO_MINIVAN: {
     path: '/assets/vehicles/silhouettes/BIKO_MINIVAN.webp',
     fallbackIcon: 'van',

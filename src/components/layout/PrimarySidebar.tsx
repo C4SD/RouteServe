@@ -109,8 +109,8 @@ export function PrimarySidebar() {
       <div className="fixed left-0 top-0 h-screen w-16 bg-sidebar border-r border-sidebar-border/60 flex flex-col items-center py-6 z-50">
         {/* Logo/Brand */}
         <div className="mb-4 flex items-center justify-center">
-          <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-            <span className="text-primary-foreground font-bold text-sm">B</span>
+          <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-lg flex items-center justify-center shadow-sm">
+            <span className="text-white font-bold text-xs tracking-tight">RS</span>
           </div>
         </div>
 

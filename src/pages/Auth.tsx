@@ -121,13 +121,13 @@ function MicrosoftIcon({ className }: { className?: string }) {
 }
 
 // Logo component
-function BIKOLogo({ className }: { className?: string }) {
+function RouteServeLogo({ className }: { className?: string }) {
   return (
     <div className={cn('flex items-center gap-3', className)}>
       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center">
         <Building2 className="w-5 h-5 text-white" />
       </div>
-      <span className="text-xl font-semibold text-white">BIKO</span>
+      <span className="text-xl font-semibold text-white">RouteServe</span>
     </div>
   );
 }
@@ -504,7 +504,7 @@ export default function Auth() {
       const { success, error } = await verifyDriverOtp(otpEmail, otpValue);
 
       if (success) {
-        toast.success('Device Registered', { description: 'Welcome to BIKO Driver!' });
+        toast.success('Device Registered', { description: 'Welcome to RouteServe Driver!' });
         if (inviteToken) {
           navigate(`/invite/${inviteToken}`);
         } else {
@@ -807,7 +807,7 @@ export default function Auth() {
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold text-white">
-          Welcome to <span className="text-emerald-400">BIKO.</span>
+          Welcome to <span className="text-emerald-400">RouteServe.</span>
         </h1>
         <p className="text-zinc-400">Let&apos;s create your new account to get started.</p>
       </div>
@@ -1502,7 +1502,7 @@ export default function Auth() {
 
         <div className="relative z-10 flex-1 flex flex-col">
           {/* Logo */}
-          <BIKOLogo className="mb-12" />
+          <RouteServeLogo className="mb-12" />
 
           {/* Form Content */}
           <div className="flex-1 flex items-center">
@@ -1545,7 +1545,7 @@ export default function Auth() {
 
               {/* Feature highlights */}
               <div className="pt-4 border-t border-zinc-800 space-y-3">
-                <p className="text-sm text-zinc-500">What you can do with BIKO:</p>
+                <p className="text-sm text-zinc-500">What you can do with RouteServe:</p>
                 <div className="grid grid-cols-2 gap-2">
                   {['Fleet Management', 'Route Planning', 'Driver Tracking', 'Analytics'].map((feature) => (
                     <div

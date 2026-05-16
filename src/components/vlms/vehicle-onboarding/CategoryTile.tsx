@@ -29,7 +29,7 @@ export function CategoryTile({ category, isSelected, onSelect }: CategoryTilePro
   const IconComponent = resolveVehicleIcon(category.icon_name);
 
   const isEU = category.source === 'eu';
-  const isBIKO = category.source === 'biko';
+  const isRouteServe = category.source === 'biko';
 
   return (
     <Card
@@ -94,10 +94,10 @@ export function CategoryTile({ category, isSelected, onSelect }: CategoryTilePro
             className={cn(
               'text-xs',
               isEU && 'border-primary text-primary',
-              isBIKO && 'border-warning text-warning'
+              isRouteServe && 'border-warning text-warning'
             )}
           >
-            {isEU ? '🇪🇺 EU Standard' : '🚀 BIKO'}
+            {isEU ? '🇪🇺 EU Standard' : '🚀 RouteServe'}
           </Badge>
         </div>
       </CardContent>

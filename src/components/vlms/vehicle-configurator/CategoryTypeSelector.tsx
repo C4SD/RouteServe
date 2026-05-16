@@ -91,7 +91,7 @@ export function CategoryTypeSelector({
                   ))}
 
                 <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground mt-2">
-                  BIKO Quick Select
+                  RouteServe Quick Select
                 </div>
                 {categories
                   .filter(c => c.source === 'biko')
@@ -99,7 +99,7 @@ export function CategoryTypeSelector({
                     <SelectItem key={category.id} value={category.id}>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs bg-warning/10 text-warning px-1.5 py-0.5 rounded">
-                          BIKO
+                          RS
                         </span>
                         <span className="text-sm">{category.display_name || category.name}</span>
                       </div>

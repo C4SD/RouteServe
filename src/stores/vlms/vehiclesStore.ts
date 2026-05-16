@@ -98,7 +98,7 @@ export const useVehiclesStore = create<VehiclesState>()(
         try {
           const { filters } = get();
           const tableName = getVehiclesTableName();
-          const workspaceId = localStorage.getItem('biko_active_workspace_id');
+          const workspaceId = localStorage.getItem('routeserve_active_workspace_id');
           if (!workspaceId) throw new Error('No active workspace selected');
 
           // Type assertion for the table name
@@ -252,7 +252,7 @@ export const useVehiclesStore = create<VehiclesState>()(
           };
 
           // Get active workspace ID
-          const workspaceId = localStorage.getItem('biko_active_workspace_id');
+          const workspaceId = localStorage.getItem('routeserve_active_workspace_id');
           if (!workspaceId) throw new Error('No active workspace selected');
 
           // Convert empty strings to null for date fields and unique-constrained optional fields

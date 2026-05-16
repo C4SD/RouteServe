@@ -1,6 +1,6 @@
 /**
  * Vehicles Page - Multi-View with Collapsible Sidebar
- * Redesigned with BIKO branding and improved spacing
+ * Redesigned with RouteServe branding and improved spacing
  */
 
 import { useState } from 'react';

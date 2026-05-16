@@ -1,5 +1,5 @@
 /**
- * BIKO Design System - Color Token Mapping Utility
+ * RouteServe Design System - Color Token Mapping Utility
  *
  * This utility provides semantic color mappings to replace hardcoded Tailwind colors
  * throughout the application. All status, priority, and state-based colors should

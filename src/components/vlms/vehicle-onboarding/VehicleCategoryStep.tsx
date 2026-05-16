@@ -1,6 +1,6 @@
 /**
  * VLMS Vehicle Onboarding — Step 1: Category Selection
- * BIKO design system: shadcn Card components, semantic color tokens, rounded-lg.
+ * RouteServe design system: shadcn Card components, semantic color tokens, rounded-lg.
  * Clicking a card immediately advances to the sub-type step.
  */
 

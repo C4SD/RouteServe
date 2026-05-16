@@ -24,7 +24,7 @@ export default function OnboardingStepperSidebar({
       {/* Logo */}
       <div className="p-6 border-b border-zinc-800">
         <h1 className="text-2xl font-bold text-white">
-          BIKO<span className="text-emerald-400">.</span>
+          RouteServe<span className="text-emerald-400">.</span>
         </h1>
         <p className="text-sm text-zinc-500 mt-1">Workspace Setup</p>
       </div>

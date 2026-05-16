@@ -1,6 +1,6 @@
 /**
  * VLMS Vehicle Onboarding — Step 2: Sub-type Selection
- * BIKO design system: shadcn Card/Badge/Button, semantic color tokens, rounded-lg.
+ * RouteServe design system: shadcn Card/Badge/Button, semantic color tokens, rounded-lg.
  */
 
 import { useState } from 'react';

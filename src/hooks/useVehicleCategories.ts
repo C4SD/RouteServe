@@ -126,9 +126,9 @@ export function useEUCategories() {
 }
 
 /**
- * Hook to fetch BIKO categories only
+ * Hook to fetch RouteServe categories only
  */
-export function useBIKOCategories() {
+export function useRouteServeCategories() {
   return useVehicleCategories({ source: 'biko' });
 }
 

@@ -2,7 +2,7 @@
  * MapControls.tsx
  *
  * Map control buttons for zoom, bearing reset, locate, and layers
- * Follows BIKO design system with guaranteed contrast control surface
+ * Follows RouteServe design system with guaranteed contrast control surface
  */
 
 import { iconMap } from '@/map/icons/iconMap';

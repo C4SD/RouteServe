@@ -121,7 +121,7 @@ export default function ProfileCompletionPage() {
       });
 
       toast.success('Profile completed!', {
-        description: `Welcome to ${invitationContext.workspaceName || 'BIKO'}`,
+        description: `Welcome to ${invitationContext.workspaceName || 'RouteServe'}`,
       });
 
       // Redirect based on role

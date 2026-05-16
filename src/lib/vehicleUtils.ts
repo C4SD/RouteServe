@@ -15,7 +15,7 @@
  * - N3: Heavy trucks
  * - L1: Motorcycles/mopeds
  * - L2: Three-wheelers (keke, rickshaw)
- * - BIKO_*: Custom BIKO vehicle types
+ * - BIKO_*: Custom RouteServe vehicle types
  */
 export function getVehicleSilhouette(vehicleType?: string | null, make?: string | null, model?: string | null): string {
   const type = vehicleType?.toLowerCase() || '';
@@ -33,14 +33,14 @@ export function getVehicleSilhouette(vehicleType?: string | null, make?: string 
     'l1': '/assets/vehicles/silhouettes/L1.webp',
     'l2': '/assets/vehicles/silhouettes/L2.webp',
 
-    // BIKO taxonomy category codes (stored from onboarding wizard)
+    // RouteServe taxonomy category codes (stored from onboarding wizard)
     'light_mobility': '/assets/vehicles/silhouettes/L1.webp',
     'passenger': '/assets/vehicles/silhouettes/M1.webp',
     'lcv': '/assets/vehicles/silhouettes/N1.webp',
     'heavy_truck': '/assets/vehicles/silhouettes/N3.webp',
     'specialized': '/assets/vehicles/silhouettes/BIKO_COLDCHAIN.webp',
 
-    // BIKO taxonomy subtype codes
+    // RouteServe taxonomy subtype codes
     'motorcycle': '/assets/vehicles/silhouettes/L1.webp',
     'scooter': '/assets/vehicles/silhouettes/L1.webp',
     'moped': '/assets/vehicles/silhouettes/BIKO_MOPED.webp',

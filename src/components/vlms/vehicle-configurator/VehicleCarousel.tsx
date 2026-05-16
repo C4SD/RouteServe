@@ -89,7 +89,7 @@ export function VehicleCarousel({
                   </span>
                   {category.source === 'biko' && (
                     <span className="font-mono text-[10px] bg-warning/10 px-1.5 py-0.5 rounded text-warning">
-                      BIKO
+                      RS
                     </span>
                   )}
                 </div>

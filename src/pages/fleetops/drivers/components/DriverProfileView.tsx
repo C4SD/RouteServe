@@ -1,7 +1,7 @@
 /**
  * Driver Profile View - Employee Grid Inspired Layout
  * Full-featured driver profile with tabs and document management
- * Uses BIKO design system branding
+ * Uses RouteServe design system branding
  */
 
 import React, { useState } from 'react';
@@ -206,7 +206,7 @@ export function DriverProfileView({ driver, onBack, onEdit }: DriverProfileViewP
             <div className="grid grid-cols-3 gap-8 mb-8">
               {/* Left Column */}
               <div className="space-y-4">
-                <InfoField label="Employer" value={driver.employer || 'BIKO Logistics'} />
+                <InfoField label="Employer" value={driver.employer || 'RouteServe Logistics'} />
                 <InfoField label="Group Name" value={driver.groupName || 'Full Time'} />
                 <InfoField label="Full Name" value={driver.name} />
                 <InfoField

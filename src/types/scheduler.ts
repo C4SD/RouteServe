@@ -1,6 +1,6 @@
 /**
  * =====================================================
- * BIKO Scheduler Feature - TypeScript Type Definitions
+ * RouteServe Scheduler Feature - TypeScript Type Definitions
  * =====================================================
  * Comprehensive type system for the Scheduler planning cockpit
  */

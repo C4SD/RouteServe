@@ -1,5 +1,5 @@
 /**
- * BIKO Tactical Map V3 Design System
+ * RouteServe Tactical Map V3 Design System
  *
  * Consistent design tokens for the tactical map interface
  * Inspired by Tesla, Uber, and Palantir design systems
@@ -204,7 +204,7 @@ export const FLOATING_PANEL = {
  * ------------------------------------------------------------------
  * MAPLIBRE MAP SYSTEM - DESIGN TOKENS
  * ------------------------------------------------------------------
- * Added for the BIKO Map System Re-Foundation (Phase 1)
+ * Added for the RouteServe Map System Re-Foundation (Phase 1)
  * Following the product handover document specifications
  * ------------------------------------------------------------------
  */

@@ -1,7 +1,7 @@
 /**
  * VehicleViewToggle Component
  * Toggle between list, card (grid), and kanban views
- * Uses BIKO design system branding
+ * Uses RouteServe design system branding
  */
 
 import React from 'react';

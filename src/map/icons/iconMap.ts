@@ -45,7 +45,7 @@ import {
 
 /**
  * ------------------------------------------------------------------
- * BIKO MAP SYSTEM - CANONICAL ICON REGISTRY
+ * ROUTESERVE MAP SYSTEM - CANONICAL ICON REGISTRY
  * ------------------------------------------------------------------
  *
  * GOVERNANCE RULES (STRICTLY ENFORCED):

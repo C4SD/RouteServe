@@ -1,7 +1,7 @@
 /**
  * Driver Management Table View
  * Clean table layout for driver list with search, filter, and actions
- * Uses BIKO design system branding
+ * Uses RouteServe design system branding
  */
 
 import React, { useState } from 'react';

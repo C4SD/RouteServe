@@ -337,7 +337,7 @@ export function isEUCategory(category: VehicleCategory): boolean {
   return category.source === 'eu';
 }
 
-export function isBIKOCategory(category: VehicleCategory): boolean {
+export function isRouteServeCategory(category: VehicleCategory): boolean {
   return category.source === 'biko';
 }
 
@@ -357,7 +357,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
   {
     id: 'category',
     title: 'Select Vehicle Category',
-    description: 'Choose the vehicle classification (EU or BIKO)',
+    description: 'Choose the vehicle classification (EU or RouteServe)',
     icon: 'LayoutGrid',
   },
   {

@@ -231,7 +231,7 @@ export const MapIcons = {
               />
             </svg>
           ` : ''}
-          <div class="relative w-10 h-10 rounded-full flex items-center justify-center text-white text-lg font-semibold shadow-biko-md border-2 border-white ${selected ? 'ring-2 ring-biko-primary ring-offset-2' : ''}" 
+          <div class="relative w-10 h-10 rounded-full flex items-center justify-center text-white text-lg font-semibold shadow-md border-2 border-white ${selected ? 'ring-2 ring-emerald-400 ring-offset-2' : ''}" 
             style="background: ${statusColor};">
             🚚
           </div>
@@ -258,7 +258,7 @@ export const MapIcons = {
     return L.divIcon({
       html: `
         <div class="relative flex items-center justify-center" style="width: 32px; height: 32px;">
-          <div class="w-7 h-7 rounded-full flex items-center justify-center text-sm shadow-biko-md border-2 border-white" 
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-sm shadow-md border-2 border-white" 
             style="background: ${statusColor};">
             🤝
           </div>

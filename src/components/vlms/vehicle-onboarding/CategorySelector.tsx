@@ -70,7 +70,7 @@ export function CategorySelector() {
       <CardHeader>
         <CardTitle>Select Vehicle Category</CardTitle>
         <CardDescription>
-          Choose a vehicle classification to begin. Select from EU standards or BIKO shortcuts.
+          Choose a vehicle classification to begin. Select from EU standards or RouteServe shortcuts.
         </CardDescription>
       </CardHeader>
 
@@ -91,7 +91,7 @@ export function CategorySelector() {
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="all">All Categories</TabsTrigger>
             <TabsTrigger value="eu">EU Standards</TabsTrigger>
-            <TabsTrigger value="biko">BIKO Shortcuts</TabsTrigger>
+            <TabsTrigger value="biko">RouteServe Shortcuts</TabsTrigger>
           </TabsList>
 
           {/* All Categories */}
@@ -127,7 +127,7 @@ export function CategorySelector() {
                 {filteredBIKO.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-muted-foreground">
-                      🚀 BIKO Shortcuts
+                      🚀 RouteServe Shortcuts
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredBIKO.map((category) => (
@@ -201,7 +201,7 @@ export function CategorySelector() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">No BIKO categories found</p>
+                <p className="text-muted-foreground">No RouteServe categories found</p>
               </div>
             )}
           </TabsContent>

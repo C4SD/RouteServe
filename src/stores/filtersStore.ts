@@ -58,7 +58,7 @@ export const useFiltersStore = create<FilterState>()(
       resetFilters: () => set(initialState),
     }),
     {
-      name: 'biko-filters-storage',
+      name: 'routeserve-filters-storage',
       storage: createJSONStorage(() => localStorage),
       // Only persist filter values, not actions
       partialize: (state) => ({

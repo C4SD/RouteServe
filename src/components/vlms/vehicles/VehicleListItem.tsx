@@ -1,7 +1,7 @@
 /**
  * VehicleListItem Component
  * Horizontal card for list view display (inspired by reference image)
- * Uses BIKO design system branding
+ * Uses RouteServe design system branding
  */
 
 import React from 'react';

@@ -1,5 +1,5 @@
 /**
- * Phosphor Icons Map for BIKO Operational Map
+ * Phosphor Icons Map for RouteServe Operational Map
  *
  * Governance Rules:
  * 1. Icons identify ENTITY CLASS only (never state)

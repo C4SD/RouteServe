@@ -28,7 +28,7 @@ function useFieldUniqueness(
     setIsChecking(true);
     const timer = setTimeout(async () => {
       try {
-        const workspaceId = localStorage.getItem('biko_active_workspace_id');
+        const workspaceId = localStorage.getItem('routeserve_active_workspace_id');
         let query = (supabase as any)
           .from('vehicles')
           .select('id')

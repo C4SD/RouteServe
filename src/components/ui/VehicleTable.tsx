@@ -49,8 +49,8 @@ export function VehicleTable({ vehicles }: VehicleTableProps) {
   );
 
   return (
-    <div className="space-y-biko-4">
-      <div className="rounded-biko-md border shadow-biko-sm bg-biko-surface-1 overflow-hidden">
+    <div className="space-y-4">
+      <div className="rounded-md border shadow-sm bg-card overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>

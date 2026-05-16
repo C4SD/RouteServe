@@ -1,7 +1,7 @@
 /**
  * VehicleCard Component
  * Vertical card for grid view display
- * Uses BIKO design system branding
+ * Uses RouteServe design system branding
  */
 
 import React from 'react';

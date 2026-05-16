@@ -38,7 +38,7 @@ export function MapToolbar() {
       {/* Left: Workspace Identity */}
       <div className="flex items-center gap-2">
         <div className="font-semibold text-sm">
-          BIKO {workspace === 'fleetops' ? 'FleetOps' : 'Storefront'}
+          RouteServe {workspace === 'fleetops' ? 'FleetOps' : 'Storefront'}
         </div>
       </div>
 

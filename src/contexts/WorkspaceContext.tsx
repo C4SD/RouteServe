@@ -36,8 +36,8 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
-const STORAGE_KEY_MODULE = 'biko_workspace';
-const STORAGE_KEY_TENANT = 'biko_active_workspace_id';
+const STORAGE_KEY_MODULE = 'routeserve_workspace';
+const STORAGE_KEY_TENANT = 'routeserve_active_workspace_id';
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();

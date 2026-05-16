@@ -1,7 +1,7 @@
 /**
  * PageLayout Component - Standardized Page Layout Template
  *
- * This component provides a consistent layout structure for all pages in the BIKO application.
+ * This component provides a consistent layout structure for all pages in the RouteServe application.
  * It standardizes:
  * - Header font sizes and spacing
  * - Breadcrumb placement

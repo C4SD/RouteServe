@@ -27,6 +27,9 @@ dev-dist
 supabase/.temp/
 .supabase/
 
+# MCP config (may contain access tokens)
+.mcp.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -9,7 +9,7 @@ export function useScheduleExport() {
 
     // Header
     doc.setFontSize(18);
-    doc.text('BIKO Delivery Schedule', 14, 20);
+    doc.text('RouteServe Delivery Schedule', 14, 20);
 
     // Schedule Details
     doc.setFontSize(12);

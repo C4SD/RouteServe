@@ -309,7 +309,7 @@ export function useOnboardingWizard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onboarding-status'] });
       queryClient.invalidateQueries({ queryKey: ['user-role'] });
-      toast.success('Welcome to BIKO!', {
+      toast.success('Welcome to RouteServe!', {
         description: 'Your workspace is ready.',
       });
       navigate('/fleetops');

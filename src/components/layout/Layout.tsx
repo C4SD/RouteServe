@@ -90,7 +90,7 @@ const Layout = ({ children }: LayoutProps) => {
                 <Truck className="w-5 h-5 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">BIKO</h1>
+                <h1 className="text-xl font-bold text-foreground">RouteServe</h1>
                 <p className="text-sm text-muted-foreground">Fleet & Warehouse Operations</p>
               </div>
             </div>
