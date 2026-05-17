@@ -1,7 +1,7 @@
-project_id = "cenugzabuzglswikoewy"
+project_id = "nksxyuuyklokpsuqwicl"
 
 [auth.email.template.invite]
-subject = "You've been invited to BIKO"
+subject = "You've been invited to RouteServe"
 content_path = "./supabase/templates/invite.html"
 
 [functions.send-email-login-otp]

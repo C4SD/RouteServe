@@ -55,24 +55,28 @@ export function useAbility({ workspaceId }: UseAbilityOptions): AbilityState {
   // (handles both old text-column RPCs returning 'owner' and new role_id-based RPCs returning 'admin')
   const isAdmin = role === 'admin' || role === 'owner';
 
-  // If permission fetch failed, treat as "still loading" — never deny on error
-  const hasError = roleError || permissionsError;
-  const isLoading = roleLoading || permissionsLoading || hasError;
+  // Separate error from loading so RPC failures don't permanently hide UI.
+  // On error: stop "loading", deny by default (admin role still grants all if resolved).
+  const hasError = Boolean(roleError || permissionsError);
+  const isLoading = (roleLoading || permissionsLoading) && !hasError;
 
   const can = (permission: Permission): boolean => {
     if (isLoading) return false; // callers should check isLoading first
+    if (hasError) return false;
     if (isAdmin) return true;
     return permissionSet.has(permission);
   };
 
   const canAny = (...perms: Permission[]): boolean => {
     if (isLoading) return false;
+    if (hasError) return false;
     if (isAdmin) return true;
     return perms.some((p) => permissionSet.has(p));
   };
 
   const canAll = (...perms: Permission[]): boolean => {
     if (isLoading) return false;
+    if (hasError) return false;
     if (isAdmin) return true;
     return perms.every((p) => permissionSet.has(p));
   };
@@ -81,6 +85,7 @@ export function useAbility({ workspaceId }: UseAbilityOptions): AbilityState {
     role: role ?? null,
     permissions,
     isLoading,
+    hasError,
     can,
     canAny,
     canAll,

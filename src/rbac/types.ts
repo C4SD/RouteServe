@@ -55,6 +55,7 @@ export interface AbilityState {
   role: RbacRole | null;
   permissions: Permission[];
   isLoading: boolean;
+  hasError: boolean;
   can: (permission: Permission) => boolean;
   canAny: (...permissions: Permission[]) => boolean;
   canAll: (...permissions: Permission[]) => boolean;

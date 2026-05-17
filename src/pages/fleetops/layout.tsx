@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { Package, LayoutDashboard, Users, GitBranch, FileBarChart, Wrench, Radio, History } from 'lucide-react';
+import { Package, LayoutDashboard, Users, GitBranch, FileBarChart, Wrench, Radio, History, AlertTriangle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SecondarySidebar, NavigationGroup } from '@/components/layout/SecondarySidebar';
 import { useMemo } from 'react';
@@ -93,7 +93,7 @@ const navigationGroups: GatedNavGroup[] = [
 
 export function FleetOpsLayout() {
   const location = useLocation();
-  const { can } = useAbilityContext();
+  const { can, hasError, isLoading } = useAbilityContext();
 
   // Filter navigation by permission
   const filteredGroups: NavigationGroup[] = useMemo(() => {
@@ -142,6 +142,21 @@ export function FleetOpsLayout() {
 
   return (
     <AppLayout sidebar={sidebar} breadcrumbs={breadcrumbs}>
+      {hasError && !isLoading && (
+        <div
+          role="alert"
+          className="mb-4 flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-medium">Permissions failed to load</p>
+            <p className="text-destructive/80">
+              Some navigation items may be hidden. Check your network/console, or contact an admin
+              if the workspace RBAC functions aren't deployed.
+            </p>
+          </div>
+        </div>
+      )}
       <Outlet />
     </AppLayout>
   );
