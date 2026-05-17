@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase';
+import { decodeInviteToken } from '@/lib/inviteToken';
 import { Loader2, CheckCircle, XCircle, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -35,7 +36,7 @@ export default function AcceptInvite() {
 
       setState('accepting');
 
-      const { error } = await supabase.rpc('accept_invitation', { p_token: token });
+      const { error } = await supabase.rpc('accept_invitation', { p_token: decodeInviteToken(token) });
 
       if (error) {
         setErrorMsg(error.message || 'Failed to accept the invitation.');

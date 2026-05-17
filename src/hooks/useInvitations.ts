@@ -6,6 +6,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { encodeInviteToken } from '@/lib/inviteToken';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type {
@@ -395,12 +396,12 @@ export function getTimeUntilExpiry(expiresAt: string): string {
  */
 export function buildInvitationUrl(token: string): string {
   const baseUrl = window.location.origin;
-  return `${baseUrl}/invite/${token}`;
+  return `${baseUrl}/invite/${encodeInviteToken(token)}`;
 }
 
 /**
  * Build invitation URL for the MOD4 driver app
  */
 export function buildMod4InvitationUrl(token: string): string {
-  return `https://driverbiko.netlify.app/invite/${token}`;
+  return `https://driverbiko.netlify.app/invite/${encodeInviteToken(token)}`;
 }

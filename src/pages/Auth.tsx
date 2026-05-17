@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { decodeInviteToken } from '@/lib/inviteToken';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -149,7 +150,14 @@ export default function Auth() {
 
   // Default to OTP login mode when accessed via /login (driver PWA)
   const isLoginRoute = location.pathname === '/login';
-  const [mode, setMode] = useState<AuthMode>(isLoginRoute ? 'otp-login' : 'signup');
+  const [mode, setMode] = useState<AuthMode>(() => {
+    if (isLoginRoute) return 'otp-login';
+    // Start in reset-password immediately when arriving at /auth?reset=true without
+    // a token_hash — this prevents the redirect guard from bouncing an already-
+    // authenticated recovery session to home before the mode-setting effect fires.
+    if (searchParams.get('reset') === 'true' && !searchParams.get('token_hash')) return 'reset-password';
+    return 'signup';
+  });
   const [step, setStep] = useState<SignupStep>('credentials');
   const [otpStep, setOtpStep] = useState<OtpStep>('email');
   const [loading, setLoading] = useState(false);
@@ -207,13 +215,14 @@ export default function Auth() {
           });
           setMode('forgot-password');
         } else {
-          // Strip sensitive params from URL now that the session is live
-          window.history.replaceState({}, '', '/auth?reset=true');
+          // Strip sensitive params from URL now that the session is live.
+          // Use navigate so React Router's searchParams state updates correctly.
+          navigate('/auth?reset=true', { replace: true });
         }
         setVerifyingOtp(false);
       })();
     }
-  }, [recoveryTokenHash, recoveryType]);
+  }, [recoveryTokenHash, recoveryType, navigate]);
 
   // Pre-fill email from invitation when arriving with ?invite=TOKEN
   useEffect(() => {
@@ -221,7 +230,7 @@ export default function Auth() {
       const fetchInvitationEmail = async () => {
         try {
           const { data, error } = await supabase.rpc('get_invitation_by_token', {
-            p_token: inviteToken,
+            p_token: decodeInviteToken(inviteToken),
           });
           if (data && !error && data.email) {
             setFormData((prev) => ({ ...prev, email: data.email }));
@@ -1504,7 +1513,7 @@ export default function Auth() {
                   if (!data) { setErrors({ identifier: 'No account found for this phone number.' }); return; }
                   email = data as string;
                 }
-                await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth?reset=true` });
+                await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback` });
                 toast.success('Password reset email sent', { description: `Check ${email} for a reset link.` });
               }}
               className="text-cyan-400 hover:text-cyan-300 font-medium"

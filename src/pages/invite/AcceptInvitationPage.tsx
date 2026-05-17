@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useInvitationByToken, useAcceptInvitation } from '@/hooks/useInvitations';
+import { decodeInviteToken } from '@/lib/inviteToken';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,15 +35,17 @@ export default function AcceptInvitationPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { data: invitation, isLoading, error } = useInvitationByToken(token);
+  // Decode the base64url token from the URL back to a UUID for RPC calls
+  const uuidToken = token ? decodeInviteToken(token) : undefined;
+  const { data: invitation, isLoading } = useInvitationByToken(uuidToken);
   const acceptInvitation = useAcceptInvitation();
   const [accepted, setAccepted] = useState(false);
 
   const handleAccept = async () => {
-    if (!token) return;
+    if (!uuidToken) return;
 
     try {
-      const result = await acceptInvitation.mutateAsync(token);
+      const result = await acceptInvitation.mutateAsync(uuidToken);
       setAccepted(true);
 
       setTimeout(() => {

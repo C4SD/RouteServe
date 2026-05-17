@@ -1,6 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 
+function uuidToBase64Url(uuid: string): string {
+  const hex = uuid.replace(/-/g, '');
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -47,16 +59,19 @@ serve(async (req) => {
     }
 
     const appUrl = target_app === 'mod4'
-      ? (Deno.env.get('MOD4_URL') ?? 'https://driverbiko.netlify.app')
-      : (Deno.env.get('APP_URL') ?? 'https://appbiko.netlify.app');
-    const redirectTo = `${appUrl}/invite/${invitation_token}`;
+      ? (Deno.env.get('MOD4_URL') ?? 'https://mod4.netlify.app')
+      : (Deno.env.get('APP_URL') ?? 'https://routeserve.netlify.app');
+
+    // Encode UUID to compact base64url so the invite URL doesn't expose a raw UUID
+    const encodedToken = uuidToBase64Url(invitation_token);
+    const redirectTo = `${appUrl}/invite/${encodedToken}`;
 
     // Use Supabase's built-in invite which creates the user and sends a magic link email
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
       data: {
         invitation_token,
-        workspace_name: workspace_name || 'BIKO',
+        workspace_name: workspace_name || 'RouteServe',
         invited_by: caller.email,
       },
     });
