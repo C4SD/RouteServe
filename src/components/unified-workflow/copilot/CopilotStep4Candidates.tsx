@@ -211,6 +211,9 @@ export function CopilotStep4Candidates({
     const plan = generateCopilotPlan(planningCandidates, intent ?? DEFAULT_PLANNING_INTENT, {
       vehicles: vehicleResources,
       drivers: driverResources,
+      depot: startLocation?.lat != null && startLocation?.lng != null
+        ? { lat: startLocation.lat, lng: startLocation.lng }
+        : undefined,
     });
 
     onPlanGenerated(plan);
@@ -222,6 +225,7 @@ export function CopilotStep4Candidates({
     intent,
     availableVehicles,
     activeDrivers,
+    startLocation,
     onCandidatesResolved,
     onPlanGenerated,
   ]);

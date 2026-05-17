@@ -47,6 +47,7 @@ export interface DriverResource {
 export interface EngineContext {
   vehicles: VehicleResource[];
   drivers: DriverResource[];
+  depot?: { lat: number; lng: number };
 }
 
 // =====================================================
@@ -184,6 +185,49 @@ function toLetter(index: number): string {
 }
 
 // =====================================================
+// STEP 1b: INTRA-BATCH ROUTE OPTIMIZATION
+// =====================================================
+// Reorders candidates within a batch using nearest-neighbor TSP
+// starting from the depot (warehouse). Reduces total travel distance
+// compared to insertion order.
+
+function optimizeCandidateOrder(
+  candidates: PlanningCandidate[],
+  depot: { lat: number; lng: number }
+): PlanningCandidate[] {
+  if (candidates.length <= 1) return candidates;
+
+  const unvisited = [...candidates];
+  const ordered: PlanningCandidate[] = [];
+  let current = depot;
+
+  while (unvisited.length > 0) {
+    let nearestIdx = 0;
+    let nearestDist = haversineKm(
+      current.lat, current.lng,
+      unvisited[0].lat ?? 0, unvisited[0].lng ?? 0
+    );
+
+    for (let i = 1; i < unvisited.length; i++) {
+      const d = haversineKm(
+        current.lat, current.lng,
+        unvisited[i].lat ?? 0, unvisited[i].lng ?? 0
+      );
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearestIdx = i;
+      }
+    }
+
+    const next = unvisited.splice(nearestIdx, 1)[0];
+    ordered.push(next);
+    current = { lat: next.lat ?? current.lat, lng: next.lng ?? current.lng };
+  }
+
+  return ordered;
+}
+
+// =====================================================
 // STEP 2: CAPACITY SPLITTING
 // =====================================================
 // Split batches into segments if slot/weight/volume is exceeded.
@@ -259,9 +303,7 @@ function generateDispatchRuns(
   const runs: DispatchRunProposal[] = [];
   const unassigned: PlanningCandidate[] = [];
 
-  const availableVehicles = vehicles.filter(
-    (v) => v.status === 'available' || v.status !== 'maintenance'
-  );
+  const availableVehicles = vehicles.filter((v) => v.status === 'available');
   const availableDrivers = drivers.filter(
     (d) => d.status === 'available'
   );
@@ -566,6 +608,16 @@ export function generateCopilotPlan(
   // Route-aware grouping
   let batches = groupCandidates(readyCandidates, intent);
 
+  // Intra-batch route optimization — reorder candidates within each batch
+  // using nearest-neighbor TSP from the depot so visit order minimizes travel
+  if (context.depot) {
+    const depot = context.depot;
+    batches = batches.map((batch) => ({
+      ...batch,
+      candidates: optimizeCandidateOrder(batch.candidates, depot),
+    }));
+  }
+
   // Capacity splitting
   batches = splitBatchesByCapacity(batches, context.vehicles);
 
@@ -643,7 +695,7 @@ export function convertToPlanningCandidates(
     lng: fc.lng,
     requisition_ids: fc.requisition_ids,
     invoice_ids: fc.requisition_ids, // invoice_ids = requisition_ids in current data model
-    dispatch_ready: fc.requisition_ids.length > 0 || fc.status === 'packaged',
+    dispatch_ready: fc.requisition_ids.length > 0 || fc.status === 'packaged' || fc.slot_demand > 0,
     slot_demand: fc.slot_demand,
     total_weight: fc.weight_kg ?? 0,
     total_volume: fc.volume_m3 ?? 0,
