@@ -4,6 +4,10 @@ project_id = "nksxyuuyklokpsuqwicl"
 subject = "You've been invited to RouteServe"
 content_path = "./supabase/templates/invite.html"
 
+[auth.email.template.recovery]
+subject = "Reset your RouteServe password"
+content_path = "./supabase/templates/recovery.html"
+
 [functions.send-email-login-otp]
 verify_jwt = false
 

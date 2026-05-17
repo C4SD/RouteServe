@@ -164,6 +164,7 @@ export default function Auth() {
   const [resetEmail, setResetEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     email: '',
@@ -176,12 +177,43 @@ export default function Auth() {
   // Check for invitation token in URL
   const inviteToken = searchParams.get('invite');
   const isPasswordReset = searchParams.get('reset') === 'true';
+  const recoveryTokenHash = searchParams.get('token_hash');
+  const recoveryType = searchParams.get('type');
 
+  // Only set mode immediately when there's no token_hash to verify.
+  // When token_hash is present, the verifyOtp effect below sets mode after
+  // the session is established so the form isn't interactive too early.
   useEffect(() => {
-    if (isPasswordReset) {
+    if (isPasswordReset && !recoveryTokenHash) {
       setMode('reset-password');
     }
-  }, [isPasswordReset]);
+  }, [isPasswordReset, recoveryTokenHash]);
+
+  // Exchange the recovery token_hash from the email link for a session
+  // before showing the reset form. Show a loading state while this is in
+  // progress so the user cannot submit before the session exists.
+  useEffect(() => {
+    if (recoveryTokenHash && recoveryType === 'recovery') {
+      setVerifyingOtp(true);
+      setMode('reset-password');
+      (async () => {
+        const { error } = await supabase.auth.verifyOtp({
+          type: 'recovery',
+          token_hash: recoveryTokenHash,
+        });
+        if (error) {
+          toast.error('Reset link invalid or expired', {
+            description: error.message,
+          });
+          setMode('forgot-password');
+        } else {
+          // Strip sensitive params from URL now that the session is live
+          window.history.replaceState({}, '', '/auth?reset=true');
+        }
+        setVerifyingOtp(false);
+      })();
+    }
+  }, [recoveryTokenHash, recoveryType]);
 
   // Pre-fill email from invitation when arriving with ?invite=TOKEN
   useEffect(() => {
@@ -202,16 +234,16 @@ export default function Auth() {
     }
   }, [inviteToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Redirect if already logged in
+  // Redirect if already logged in (but not during password recovery flow)
   useEffect(() => {
-    if (user) {
+    if (user && mode !== 'reset-password' && !recoveryTokenHash) {
       if (inviteToken) {
         navigate(`/invite/${inviteToken}`);
       } else {
         navigate(isLoginRoute ? '/mod4/driver' : '/');
       }
     }
-  }, [user, navigate, inviteToken, isLoginRoute]);
+  }, [user, navigate, inviteToken, isLoginRoute, mode, recoveryTokenHash]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -426,6 +458,15 @@ export default function Auth() {
       return;
     }
 
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast.error('Reset link expired', {
+        description: 'Please request a new password reset link.',
+      });
+      setMode('forgot-password');
+      return;
+    }
+
     setLoading(true);
     try {
       const { error } = await updatePassword(newPassword);
@@ -437,6 +478,9 @@ export default function Auth() {
         });
         setNewPassword('');
         setConfirmNewPassword('');
+        // Sign out the recovery session so the user must authenticate with
+        // their new password.
+        await supabase.auth.signOut();
         navigate('/auth', { replace: true });
         switchToLogin();
       }
@@ -720,7 +764,18 @@ export default function Auth() {
     </div>
   );
 
-  const renderResetPassword = () => (
+  const renderResetPassword = () => {
+    if (verifyingOtp) {
+      return (
+        <div className="space-y-6 text-center">
+          <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
+          </div>
+          <p className="text-zinc-400">Verifying your reset link…</p>
+        </div>
+      );
+    }
+    return (
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold text-white">Create a new password</h1>
@@ -800,7 +855,8 @@ export default function Auth() {
         )}
       </Button>
     </div>
-  );
+    );
+  };
 
   // Render signup step 1: credentials
   const renderCredentialsStep = () => (

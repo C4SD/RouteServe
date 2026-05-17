@@ -31,7 +31,7 @@ CREATE TABLE vlms_vehicles (
   -- Basic Info
   make VARCHAR(100) NOT NULL,
   model VARCHAR(100) NOT NULL,
-  year INTEGER NOT NULL CHECK (year >= 1900 AND year <= EXTRACT(YEAR FROM CURRENT_DATE) + 1),
+  year INTEGER NOT NULL CHECK (year >= 1900 AND year <= 2200),
   vin VARCHAR(17) UNIQUE,
   license_plate VARCHAR(20) UNIQUE NOT NULL,
 

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reset your RouteServe password</title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: #1a1a1a;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #f5f5f5;
+      padding: 48px 16px;
+    }
+    .container {
+      max-width: 520px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e8e8e8;
+    }
+    .header {
+      background-color: #0f0f0f;
+      padding: 32px 40px;
+      text-align: left;
+    }
+    .logo-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background-color: #fe7f2d;
+      border-radius: 8px;
+      display: inline-block;
+    }
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+    }
+    .body {
+      padding: 40px 40px 32px;
+    }
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #fe7f2d;
+      margin-bottom: 16px;
+    }
+    .headline {
+      font-size: 26px;
+      font-weight: 700;
+      color: #0f0f0f;
+      line-height: 1.25;
+      letter-spacing: -0.5px;
+      margin-bottom: 16px;
+    }
+    .body-text {
+      font-size: 15px;
+      line-height: 1.65;
+      color: #4a4a4a;
+      margin-bottom: 12px;
+    }
+    .divider {
+      height: 1px;
+      background-color: #f0f0f0;
+      margin: 28px 0;
+    }
+    .info-box {
+      background-color: #fafafa;
+      border: 1px solid #f0f0f0;
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin: 20px 0;
+    }
+    .info-text {
+      font-size: 13px;
+      color: #4a4a4a;
+      line-height: 1.55;
+    }
+    .info-text strong {
+      color: #0f0f0f;
+    }
+    .cta-section {
+      margin: 32px 0;
+      text-align: center;
+    }
+    .cta-button {
+      display: inline-block;
+      background-color: #0f0f0f;
+      color: #ffffff !important;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 14px 36px;
+      border-radius: 8px;
+      letter-spacing: -0.2px;
+    }
+    .cta-note {
+      font-size: 12px;
+      color: #9a9a9a;
+      margin-top: 12px;
+    }
+    .footer {
+      background-color: #fafafa;
+      border-top: 1px solid #f0f0f0;
+      padding: 24px 40px;
+    }
+    .footer-text {
+      font-size: 12px;
+      color: #9a9a9a;
+      line-height: 1.6;
+    }
+    .footer-text a {
+      color: #fe7f2d;
+      text-decoration: none;
+    }
+    @media only screen and (max-width: 600px) {
+      .header, .body, .footer { padding-left: 24px; padding-right: 24px; }
+      .headline { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+
+      <!-- Header -->
+      <div class="header">
+        <div class="logo-mark">
+          <span class="logo-icon"></span>
+          <span class="logo-text">RouteServe</span>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="body">
+        <p class="eyebrow">Password Reset</p>
+        <h1 class="headline">Reset your password</h1>
+        <p class="body-text">
+          We received a request to reset the password for your RouteServe account. Click the button below to choose a new password.
+        </p>
+
+        <div class="cta-section">
+          <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery" class="cta-button">Reset Password</a>
+          <p class="cta-note">This link expires in 1 hour</p>
+        </div>
+
+        <div class="info-box">
+          <p class="info-text">
+            <strong>Didn't request this?</strong><br />
+            You can safely ignore this email — your password won't change unless you click the link above and create a new one.
+          </p>
+        </div>
+
+        <div class="divider"></div>
+
+        <p class="body-text" style="font-size: 13px; color: #9a9a9a;">
+          For your security, never share this link with anyone. RouteServe staff will never ask you for your password.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p class="footer-text">
+          RouteServe &mdash; Distribution Planning and Operations Platform<br />
+          You're receiving this because a password reset was requested for your account at <a href="{{ .SiteURL }}">routeserve.netlify.app</a>.<br />
+          <a href="{{ .SiteURL }}">Visit app</a> &nbsp;&middot;&nbsp; <a href="mailto:ca@cap4sd.com">Contact support</a>
+        </p>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

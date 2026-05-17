@@ -11,9 +11,10 @@ interface TeamSetupStepProps {
   wizard: ReturnType<typeof useOnboardingWizard>;
 }
 
+// RBAC v2 role codes — must match public.roles.code values
 const APP_ROLES = [
-  { value: 'operations_user', label: 'Operations User' },
-  { value: 'fleetops_user', label: 'Fleet Ops User' },
+  { value: 'ops_manager', label: 'Ops Manager' },
+  { value: 'fleet_manager', label: 'Fleet Manager' },
   { value: 'driver', label: 'Driver' },
   { value: 'viewer', label: 'Viewer' },
 ];
@@ -22,11 +23,11 @@ export default function TeamSetupStep({ wizard }: TeamSetupStepProps) {
   const { state, sendInvitations, skipStep, saveStepProgress } = wizard;
   const [showForm, setShowForm] = useState(false);
   const [invitations, setInvitations] = useState<TeamInvitation[]>([
-    { name: '', email: '', appRole: 'operations_user' },
+    { name: '', email: '', appRole: 'ops_manager' },
   ]);
 
   const addRow = () => {
-    setInvitations(prev => [...prev, { name: '', email: '', appRole: 'operations_user' }]);
+    setInvitations(prev => [...prev, { name: '', email: '', appRole: 'ops_manager' }]);
   };
 
   const removeRow = (index: number) => {

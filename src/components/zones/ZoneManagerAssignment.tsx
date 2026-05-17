@@ -56,11 +56,11 @@ export function ZoneManagerAssignment({
   const { data: eligibleUsers = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['zone-manager-users'],
     queryFn: async () => {
-      // Get eligible role IDs from the roles table
+      // Get eligible role IDs from the roles table (RBAC v2 codes)
       const { data: roleRows, error: roleError } = await supabase
         .from('roles')
         .select('id')
-        .in('code', ['zonal_manager', 'system_admin', 'operations_user', 'fleetops_user']);
+        .in('code', ['admin', 'fleet_manager', 'ops_manager']);
 
       if (roleError) throw roleError;
       const roleIds = (roleRows || []).map(r => r.id);

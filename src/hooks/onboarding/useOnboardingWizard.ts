@@ -265,7 +265,7 @@ export function useOnboardingWizard() {
         const { data, error } = await supabase.rpc('invite_user', {
           p_email: invite.email,
           p_workspace_id: state.workspaceId,
-          p_app_role: invite.appRole as any,
+          p_role_code: invite.appRole,
           p_workspace_role: invite.workspaceRole || 'member',
         });
         if (error) {
