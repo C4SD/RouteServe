@@ -57,7 +57,7 @@ import { useFacilities } from '@/hooks/useFacilities';
 import { useWarehouses } from '@/hooks/useWarehouses';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useDrivers } from '@/hooks/useDrivers';
-import { useCreatePreBatch, useConvertPreBatchToBatch } from '@/hooks/usePreBatch';
+import { useCreatePreBatch, useConvertPreBatchToBatch, useSaveCopilotPlan } from '@/hooks/usePreBatch';
 import { useReadyConsignments } from '@/hooks/useReadyConsignments';
 
 import type { FacilityCandidate } from './schedule/SourceOfTruthColumn';
@@ -229,6 +229,7 @@ export function UnifiedWorkflowDialog({
   // Mutations
   const createPreBatch = useCreatePreBatch();
   const convertToBatch = useConvertPreBatchToBatch();
+  const saveCopilotPlan = useSaveCopilotPlan();
 
   // Transform warehouses
   const warehouses = React.useMemo(() => {
@@ -567,6 +568,23 @@ export function UnifiedWorkflowDialog({
     actions,
     onOpenChange,
   ]);
+
+  // Handle copilot plan approval (Step 7 copilot) — creates one delivery_batch per dispatch run
+  const handleCopilotDispatch = React.useCallback(async () => {
+    if (!copilotPlan || !startLocationId) return;
+    try {
+      await saveCopilotPlan.mutateAsync({
+        plan: copilotPlan,
+        startLocationId,
+        notes: scheduleNotes,
+        facilityPackaging,
+      });
+      actions.resetWorkflow();
+      onOpenChange(false);
+    } catch {
+      // Error toast fired by mutation's onError
+    }
+  }, [copilotPlan, startLocationId, scheduleNotes, facilityPackaging, saveCopilotPlan, actions, onOpenChange]);
 
   // Handle next step — auto-commits suggested vehicles when leaving Schedule step (step 3 manual)
   const handleNextStep = React.useCallback(() => {
@@ -986,8 +1004,8 @@ export function UnifiedWorkflowDialog({
 
             {/* Copilot final step (step 7) — Approve & Dispatch */}
             {scheduleMode === 'copilot' && currentStep === 7 ? (
-              <Button onClick={handleConfirm} disabled={!canProceed || convertToBatch.isPending}>
-                {convertToBatch.isPending ? (
+              <Button onClick={handleCopilotDispatch} disabled={!canProceed || saveCopilotPlan.isPending}>
+                {saveCopilotPlan.isPending ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 ) : (
                   <Check className="h-4 w-4 mr-1" />

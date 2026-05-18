@@ -170,16 +170,16 @@ export function Step2Facilities({ selected, onSelectionChange, onNext, onBack }:
 
       {/* Invalid coordinates notice */}
       {invalidCount > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-amber-700 dark:text-amber-400">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <p className="text-xs">
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-amber-700 dark:text-amber-400">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <p className="text-sm leading-snug">
             {invalidCount} facilit{invalidCount > 1 ? 'ies' : 'y'} excluded — missing or zero coordinates.
           </p>
         </div>
       )}
 
       {/* List */}
-      <ScrollArea className="h-[340px] rounded-lg border">
+      <ScrollArea className="max-h-[420px] rounded-lg border">
         {loading ? (
           <div className="p-3 space-y-2">
             {[1, 2, 3, 4, 5, 6].map(i => (
@@ -187,7 +187,7 @@ export function Step2Facilities({ selected, onSelectionChange, onNext, onBack }:
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-12 text-center">
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] py-12 text-center">
             <Building2 className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="text-sm font-medium">No facilities match</p>
             <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters.</p>
@@ -202,7 +202,7 @@ export function Step2Facilities({ selected, onSelectionChange, onNext, onBack }:
                   onClick={() => toggle(f)}
                   className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors ${
                     isSelected
-                      ? 'bg-primary/8 text-primary'
+                      ? 'bg-primary/10 text-primary'
                       : 'hover:bg-muted/60'
                   }`}
                 >
@@ -226,7 +226,7 @@ export function Step2Facilities({ selected, onSelectionChange, onNext, onBack }:
         )}
       </ScrollArea>
 
-      <div className="flex justify-between pt-2">
+      <div className="flex justify-between pt-4">
         <Button variant="outline" onClick={onBack}>Back</Button>
         <Button onClick={onNext} disabled={selected.length === 0}>
           Continue with {selected.length} facilit{selected.length !== 1 ? 'ies' : 'y'}

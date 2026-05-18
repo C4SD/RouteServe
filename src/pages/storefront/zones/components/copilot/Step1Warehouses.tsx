@@ -79,12 +79,12 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
 
       <WarehouseFormDialog open={createOpen} onOpenChange={setCreateOpen} />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Input
           placeholder="Search by name, code, or state…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="flex-1"
+          className="flex-1 min-w-[200px]"
         />
         {validWarehouses.length > 0 && (
           <Button variant="outline" size="sm" onClick={selectAll}>
@@ -114,7 +114,7 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
                 <button
                   key={w.id}
                   onClick={() => toggle(w)}
-                  className={`text-left rounded-lg border p-4 transition-all hover:shadow-md ${
+                  className={`text-left rounded-lg border p-4 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                     isSelected
                       ? 'border-primary bg-primary/5 ring-1 ring-primary'
                       : 'border-border hover:border-primary/40'
@@ -148,7 +148,7 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
             {/* + Create Warehouse dashed card — always last in grid */}
             <button
               onClick={() => setCreateOpen(true)}
-              className="text-left rounded-lg border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-muted/20 transition-all min-h-[96px]"
+              className="text-left rounded-lg border-2 border-dashed p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-muted/20 transition-all min-h-[110px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               <Plus className="h-5 w-5" />
               <span className="text-sm font-medium">Create Warehouse</span>
@@ -156,10 +156,10 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
           </div>
 
           {invalidWarehouses.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
-              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <p className="text-xs font-medium">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3.5">
+              <div className="flex items-start gap-2 text-amber-700 dark:text-amber-400">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p className="text-sm font-medium leading-snug">
                   {invalidWarehouses.length} warehouse{invalidWarehouses.length > 1 ? 's' : ''} without coordinates cannot be used:
                   {' '}{invalidWarehouses.map(w => w.name).join(', ')}
                 </p>
@@ -169,7 +169,7 @@ export function Step1Warehouses({ selected, onSelectionChange, onNext }: Step1Wa
         </div>
       )}
 
-      <div className="flex justify-end pt-2">
+      <div className="flex justify-end pt-4">
         <Button onClick={onNext} disabled={selected.length === 0}>
           Continue with {selected.length} warehouse{selected.length !== 1 ? 's' : ''}
         </Button>

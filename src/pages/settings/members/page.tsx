@@ -13,8 +13,15 @@ import {
   ROLE_COLORS,
   type WorkspaceMemberV2,
 } from '@/hooks/settings/useWorkspaceMembers';
-import { useInviteUser, useWorkspaceInvitations, useRevokeInvitation } from '@/hooks/useInvitations';
+import {
+  useInviteUser,
+  useWorkspaceInvitations,
+  useRevokeInvitation,
+  useResendInvitation,
+  useDeleteInvitations,
+} from '@/hooks/useInvitations';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import type { UserInvitation, WorkspaceRole } from '@/types/onboarding';
 import {
   Table,
@@ -26,6 +33,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -60,12 +68,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, ChevronDown, MoreHorizontal, Trash2, UserPlus, Search, ShieldOff, ShieldCheck, Crown, Mail, CheckCircle2, Clock, XCircle, RotateCcw, RefreshCw } from 'lucide-react';
+import { Loader2, ChevronDown, MoreHorizontal, Trash2, UserPlus, Search, ShieldOff, ShieldCheck, Crown, Mail, CheckCircle2, Clock, XCircle, RefreshCw, KeyRound, SendHorizonal, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function SettingsMembersPage() {
-  const { workspaceId, workspaceName, role } = useWorkspace();
+  const { workspaceId, workspaceName } = useWorkspace();
   const ability = useAbility({ workspaceId });
   const { data: members = [], isLoading } = useWorkspaceMembersV2(workspaceId);
   const { data: invitations = [], isLoading: invitationsLoading } = useWorkspaceInvitations(workspaceId);
@@ -73,15 +81,18 @@ export default function SettingsMembersPage() {
   const removeMember = useRemoveWorkspaceMemberV2();
   const toggleStatus = useToggleMemberStatus();
   const revokeInvitation = useRevokeInvitation();
+  const resendInvitation = useResendInvitation();
+  const deleteInvitations = useDeleteInvitations();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<WorkspaceMemberV2 | null>(null);
   const [memberToToggle, setMemberToToggle] = useState<WorkspaceMemberV2 | null>(null);
+  const [memberToReset, setMemberToReset] = useState<WorkspaceMemberV2 | null>(null);
   const [invitationToRevoke, setInvitationToRevoke] = useState<UserInvitation | null>(null);
-  const inviteUser = useInviteUser();
+  const [selectedInvitationIds, setSelectedInvitationIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   const canManageMembers = ability.can('workspace.manage');
-  const isOwnerOrAdmin = role === 'owner' || role === 'admin';
 
   const isOwner = (member: WorkspaceMemberV2) => member.role_code === 'owner';
 
@@ -111,35 +122,90 @@ export default function SettingsMembersPage() {
 
   const handleReinvite = async (inv: UserInvitation) => {
     if (!workspaceId) return;
-    try {
-      await inviteUser.mutateAsync({
-        email: inv.email,
-        workspace_id: workspaceId,
-        role_code: inv.role_code,
-        workspace_role: inv.workspace_role as WorkspaceRole,
-      });
-      // Fetch the new token and send the email
-      const { data: pending } = await supabase
-        .from('pending_invitations_view')
-        .select('invitation_token')
-        .eq('workspace_id', workspaceId)
-        .eq('email', inv.email.toLowerCase())
-        .order('invited_at', { ascending: false })
-        .limit(1)
-        .single();
+    await resendInvitation.mutateAsync({
+      invitationId: inv.id,
+      workspaceId,
+      email: inv.email,
+      appRole: inv.role_code,
+      workspaceRole: inv.workspace_role as WorkspaceRole,
+      workspaceName: workspaceName ?? undefined,
+    });
+  };
 
-      if (pending?.invitation_token) {
-        await supabase.functions.invoke('invite-user', {
-          body: {
-            email: inv.email,
-            invitation_token: pending.invitation_token,
-            workspace_name: workspaceName,
-          },
-        });
-      }
-    } catch {
-      // Error toast handled by mutation
+  // ── Bulk invitation helpers ──────────────────────────────────────────────
+
+  const selectableInvitations = invitations.filter(
+    (inv) => inv.status !== 'accepted',
+  );
+
+  const allSelected =
+    selectableInvitations.length > 0 &&
+    selectableInvitations.every((inv) => selectedInvitationIds.has(inv.id));
+
+  const someSelected = selectedInvitationIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedInvitationIds(new Set());
+    } else {
+      setSelectedInvitationIds(new Set(selectableInvitations.map((inv) => inv.id)));
     }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedInvitationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedInvitations = invitations.filter((inv) => selectedInvitationIds.has(inv.id));
+
+  const handleBulkRevoke = async () => {
+    if (!workspaceId) return;
+    const toRevoke = selectedInvitations.filter(
+      (inv) => inv.status === 'pending' && new Date(inv.expires_at) > new Date(),
+    );
+    await Promise.all(
+      toRevoke.map((inv) => revokeInvitation.mutateAsync({ invitationId: inv.id, workspaceId })),
+    );
+    setSelectedInvitationIds(new Set());
+  };
+
+  const handleBulkResend = async () => {
+    if (!workspaceId) return;
+    await Promise.all(selectedInvitations.map((inv) => handleReinvite(inv)));
+    setSelectedInvitationIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (!workspaceId) return;
+    await deleteInvitations.mutateAsync({
+      invitationIds: [...selectedInvitationIds],
+      workspaceId,
+    });
+    setSelectedInvitationIds(new Set());
+    setShowBulkDeleteConfirm(false);
+  };
+
+  // ── Member reset password ────────────────────────────────────────────────
+
+  const handleResetPassword = async () => {
+    if (!memberToReset?.profile.email) return;
+    const email = memberToReset.profile.email;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?reset=true`,
+    });
+    if (error) {
+      toast.error('Failed to send reset email', { description: error.message });
+    } else {
+      toast.success('Password reset email sent', {
+        description: `A reset link was sent to ${email}.`,
+      });
+    }
+    setMemberToReset(null);
   };
 
   return (
@@ -263,6 +329,12 @@ export default function SettingsMembersPage() {
                                   </>
                                 )}
                               </DropdownMenuItem>
+                              {member.profile.email && (
+                                <DropdownMenuItem onClick={() => setMemberToReset(member)}>
+                                  <KeyRound className="h-4 w-4 mr-2" />
+                                  Reset Password
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive"
@@ -302,31 +374,97 @@ export default function SettingsMembersPage() {
               <p className="text-sm text-muted-foreground">No invitations sent yet</p>
             </div>
           ) : (
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Sent</TableHead>
-                    <TableHead>Expires</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invitations.map((inv) => (
-                    <InvitationRow
-                      key={inv.id}
-                      invitation={inv}
-                      onRevoke={() => setInvitationToRevoke(inv)}
-                      onReinvite={canManageMembers ? () => handleReinvite(inv) : undefined}
-                      isReinviting={inviteUser.isPending}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <>
+              {/* Bulk action bar */}
+              {someSelected && (
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <span className="text-sm text-muted-foreground">
+                    {selectedInvitationIds.size} selected
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5"
+                    onClick={handleBulkResend}
+                    disabled={resendInvitation.isPending}
+                  >
+                    {resendInvitation.isPending
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <SendHorizonal className="h-3.5 w-3.5" />}
+                    Resend
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5"
+                    onClick={handleBulkRevoke}
+                    disabled={
+                      revokeInvitation.isPending ||
+                      !selectedInvitations.some(
+                        (inv) => inv.status === 'pending' && new Date(inv.expires_at) > new Date(),
+                      )
+                    }
+                  >
+                    {revokeInvitation.isPending
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <XCircle className="h-3.5 w-3.5" />}
+                    Revoke
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-destructive hover:text-destructive"
+                    onClick={() => setShowBulkDeleteConfirm(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 ml-auto"
+                    onClick={() => setSelectedInvitationIds(new Set())}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[40px] pl-4">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Sent</TableHead>
+                      <TableHead>Expires</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invitations.map((inv) => (
+                      <InvitationRow
+                        key={inv.id}
+                        invitation={inv}
+                        isSelected={selectedInvitationIds.has(inv.id)}
+                        onSelect={() => toggleSelectOne(inv.id)}
+                        onRevoke={() => setInvitationToRevoke(inv)}
+                        onReinvite={canManageMembers ? () => handleReinvite(inv) : undefined}
+                        isReinviting={resendInvitation.isPending}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -409,6 +547,50 @@ export default function SettingsMembersPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Reset Password Confirmation */}
+      <AlertDialog open={!!memberToReset} onOpenChange={() => setMemberToReset(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send Password Reset</AlertDialogTitle>
+            <AlertDialogDescription>
+              Send a password reset email to{' '}
+              <strong>{memberToReset?.profile.email}</strong>?
+              They&apos;ll receive a link to set a new password.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleResetPassword}>
+              Send Reset Link
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Invitations Confirmation */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Invitations</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently delete {selectedInvitationIds.size} invitation
+              {selectedInvitationIds.size === 1 ? '' : 's'}? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-destructive text-destructive-foreground"
+              disabled={deleteInvitations.isPending}
+            >
+              {deleteInvitations.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Add Member Dialog */}
       {workspaceId && (
         <AddMemberDialogV2
@@ -433,11 +615,15 @@ const INVITATION_STATUS_CONFIG: Record<string, { label: string; className: strin
 
 function InvitationRow({
   invitation,
+  isSelected,
+  onSelect,
   onRevoke,
   onReinvite,
   isReinviting,
 }: {
   invitation: UserInvitation;
+  isSelected: boolean;
+  onSelect: () => void;
   onRevoke: () => void;
   onReinvite?: () => void;
   isReinviting?: boolean;
@@ -445,10 +631,20 @@ function InvitationRow({
   const cfg = INVITATION_STATUS_CONFIG[invitation.status] ?? INVITATION_STATUS_CONFIG.pending;
   const isPending = invitation.status === 'pending';
   const isExpired = isPending && new Date(invitation.expires_at) < new Date();
-  const canReinvite = !isPending || isExpired; // expired or revoked
+  const canReinvite = !isPending || isExpired;
+  const isSelectable = invitation.status !== 'accepted';
 
   return (
     <TableRow className={!isPending || isExpired ? 'opacity-60' : ''}>
+      <TableCell className="pl-4 w-[40px]">
+        {isSelectable && (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={onSelect}
+            aria-label={`Select ${invitation.email}`}
+          />
+        )}
+      </TableCell>
       <TableCell className="font-medium">{invitation.email}</TableCell>
       <TableCell>
         <Badge variant="secondary" className={ROLE_COLORS[invitation.role_code] || ROLE_COLORS.viewer}>
@@ -556,7 +752,7 @@ function AddMemberDialogV2({
   const handleInvite = async () => {
     if (!inviteEmail) return;
     try {
-      const invitationId = await inviteUser.mutateAsync({
+      await inviteUser.mutateAsync({
         email: inviteEmail,
         workspace_id: workspaceId,
         role_code: inviteRole,

@@ -89,7 +89,7 @@ export function Step4Generate({
   const outOfCoverage = result?.global_out_of_coverage.length ?? 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold">Generating Operational Structure</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
@@ -103,7 +103,7 @@ export function Step4Generate({
           <span className="text-muted-foreground">{currentPhaseLabel}</span>
           <span className="font-medium tabular-nums">{progress}%</span>
         </div>
-        <Progress value={progress} className="h-2" />
+        <Progress value={progress} className="h-2.5" />
       </div>
 
       {/* Phases checklist */}
@@ -147,9 +147,9 @@ export function Step4Generate({
 
       {/* Result summary */}
       {phase === 'done' && result && (
-        <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 p-5 space-y-3">
+        <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 p-5 space-y-4">
           <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-            <Zap className="h-5 w-5" />
+            <Zap className="h-5 w-5 shrink-0" />
             <span className="font-semibold">Structure Generated</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -159,11 +159,11 @@ export function Step4Generate({
               { label: 'Service Areas', value: totalSAs },
               { label: 'Out of coverage', value: outOfCoverage },
             ].map(({ label, value }) => (
-              <div key={label} className="text-center">
+              <div key={label} className="rounded-lg border bg-background/60 px-3 py-3 text-center">
                 <p className={`text-2xl font-bold ${label === 'Out of coverage' && value > 0 ? 'text-amber-600' : 'text-green-700 dark:text-green-400'}`}>
                   {value}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{label}</p>
               </div>
             ))}
           </div>
@@ -175,7 +175,7 @@ export function Step4Generate({
         </div>
       )}
 
-      <div className="flex justify-between pt-2">
+      <div className="flex justify-between pt-4">
         <Button variant="outline" onClick={onBack} disabled={phase !== 'done' && phase !== 'error' && phase !== 'idle'}>
           Back
         </Button>

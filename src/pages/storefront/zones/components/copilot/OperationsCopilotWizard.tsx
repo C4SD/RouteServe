@@ -34,7 +34,7 @@ const STEPS = [
 
 function Stepper({ current }: { current: number }) {
   return (
-    <div className="flex items-center gap-0">
+    <div className="flex items-center gap-1">
       {STEPS.map((step, i) => {
         const Icon = step.icon;
         const isActive = i === current - 1;
@@ -42,18 +42,21 @@ function Stepper({ current }: { current: number }) {
 
         return (
           <div key={step.label} className="flex items-center">
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : isDone
-                ? 'text-primary'
-                : 'text-muted-foreground'
-            }`}>
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{step.label}</span>
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-xs font-medium transition-colors min-h-[36px] ${
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : isDone
+                  ? 'text-primary'
+                  : 'text-muted-foreground'
+              }`}
+              aria-current={isActive ? 'step' : undefined}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="hidden md:inline">{step.label}</span>
             </div>
             {i < STEPS.length - 1 && (
-              <div className={`w-6 h-px mx-0.5 ${isDone ? 'bg-primary' : 'bg-border'}`} />
+              <div className={`w-5 h-[2px] mx-1 rounded-full ${isDone ? 'bg-primary' : 'bg-border'}`} />
             )}
           </div>
         );
@@ -233,33 +236,34 @@ export function OperationsCopilotWizard({ open, onOpenChange }: OperationsCopilo
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className={`flex flex-col gap-0 p-0 ${
+        className={`flex flex-col gap-0 p-0 overflow-hidden ${
           isFullscreen
-            ? 'max-w-[96vw] w-[96vw] h-[92vh] max-h-[92vh]'
-            : 'max-w-2xl'
+            ? 'max-w-[95vw] w-[95vw] h-[85vh] max-h-[85vh]'
+            : 'max-w-3xl max-h-[80vh]'
         }`}
         onInteractOutside={e => e.preventDefault()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
+        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
               <Bot className="h-5 w-5 text-primary" />
             </div>
-            <div>
-              <DialogTitle className="text-base font-semibold leading-none">
+            <div className="min-w-0">
+              <DialogTitle className="text-base font-semibold leading-tight truncate">
                 Operations Copilot
               </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
                 AI-assisted zone inference &amp; operational structure setup
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 shrink-0">
             <Stepper current={step} />
             <button
               onClick={handleClose}
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Close dialog"
+              className="inline-flex items-center justify-center h-9 w-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -267,7 +271,7 @@ export function OperationsCopilotWizard({ open, onOpenChange }: OperationsCopilo
         </div>
 
         {/* Body */}
-        <div className={`flex-1 min-h-0 overflow-auto ${step === 5 ? 'overflow-hidden' : ''}`}>
+        <div className={`flex-1 min-h-0 ${step === 5 ? 'overflow-hidden' : 'overflow-auto'}`}>
           <div className={`${step === 5 ? 'h-full flex flex-col p-4' : 'p-6'}`}>
             {step === 1 && (
               <Step1Warehouses

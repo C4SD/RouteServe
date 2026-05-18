@@ -20,6 +20,7 @@ import type {
   PreBatchStatus,
   ConvertPreBatchPayload,
 } from '@/types/unified-workflow';
+import type { CopilotPlan } from '@/types/scheduling-copilot';
 
 // =====================================================
 // QUERY KEY FACTORY
@@ -557,6 +558,136 @@ export function usePreBatchStats() {
     },
     enabled: !!workspaceId,
     staleTime: 1000 * 30,
+  });
+}
+
+// =====================================================
+// SAVE COPILOT PLAN (creates one delivery_batch per dispatch run)
+// =====================================================
+
+export function useSaveCopilotPlan() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
+
+  return useMutation({
+    mutationFn: async ({
+      plan,
+      startLocationId,
+      notes,
+      facilityPackaging,
+    }: {
+      plan: CopilotPlan;
+      startLocationId: string;
+      notes?: string | null;
+      facilityPackaging?: Record<string, unknown>;
+    }) => {
+      if (!workspaceId) throw new Error('No active workspace');
+
+      const normalizeUUID = (v: string | null | undefined) =>
+        !v || v === 'null' || v === 'undefined' ? null : v;
+
+      const warehouseId = normalizeUUID(startLocationId);
+      if (!warehouseId) throw new Error('Start location is required');
+
+      const createdBatchIds: string[] = [];
+
+      for (const run of plan.dispatch_runs) {
+        const vehicleId = normalizeUUID(run.vehicle_id);
+        if (!vehicleId) continue; // skip runs with no vehicle assigned
+
+        const driverId = normalizeUUID(run.driver_id);
+        const facilityIds = run.candidates.map((c) => c.facility_id);
+        const requisitionMap = run.candidates.reduce(
+          (acc, c) => {
+            if (c.requisition_ids.length > 0) acc[c.facility_id] = c.requisition_ids;
+            return acc;
+          },
+          {} as Record<string, string[]>
+        );
+        const allRequisitionIds = Object.values(requisitionMap).flat();
+
+        const { data: batch, error: batchError } = await supabase
+          .from('delivery_batches')
+          .insert({
+            name: `Copilot Run #${run.run_number} – ${run.planned_date}`,
+            workspace_id: workspaceId,
+            warehouse_id: warehouseId,
+            facility_ids: facilityIds,
+            scheduled_date: run.planned_date,
+            scheduled_time: `${run.planned_departure}:00`,
+            vehicle_id: vehicleId,
+            vehicle_ids: [vehicleId],
+            driver_id: driverId,
+            status: driverId ? 'assigned' : 'planned',
+            medication_type: 'Mixed',
+            total_quantity: facilityIds.length || 1,
+            notes: notes ?? null,
+            facility_packaging: facilityPackaging ?? null,
+          })
+          .select()
+          .single();
+
+        if (batchError) throw batchError;
+        createdBatchIds.push(batch.id);
+
+        if (allRequisitionIds.length > 0) {
+          const { error: reqError } = await supabase
+            .from('requisitions')
+            .update({
+              status: 'assigned_to_batch',
+              batch_id: batch.id,
+              assigned_to_batch_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .in('id', allRequisitionIds)
+            .eq('workspace_id', workspaceId);
+
+          if (reqError) {
+            console.error(`Failed to assign requisitions for run #${run.run_number}:`, reqError);
+          }
+        }
+
+        const { error: runError } = await supabase.from('dispatch_runs').insert({
+          workspace_id: workspaceId,
+          batch_id: batch.id,
+          status: 'pending',
+          vehicle_id: vehicleId,
+          vehicle_ids: [vehicleId],
+          driver_id: driverId,
+          stops_total: facilityIds.length,
+          stops_completed: 0,
+          distance_km: null,
+          duration_min: Math.round(run.estimated_duration_hours * 60),
+        });
+
+        if (runError) {
+          console.error(`Failed to create dispatch_run for run #${run.run_number}:`, runError);
+        }
+      }
+
+      if (createdBatchIds.length === 0) {
+        throw new Error(
+          'No runs could be dispatched. Ensure at least one run has a vehicle assigned.'
+        );
+      }
+
+      return createdBatchIds;
+    },
+    onSuccess: (batchIds) => {
+      queryClient.invalidateQueries({ queryKey: preBatchKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ['delivery-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['ready-consignments'] });
+      queryClient.invalidateQueries({ queryKey: ['requisitions'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['dispatch-runs'] });
+      toast.success(
+        `${batchIds.length} dispatch run${batchIds.length !== 1 ? 's' : ''} queued successfully`
+      );
+    },
+    onError: (error: Error) => {
+      console.error('Error saving copilot plan:', error);
+      toast.error(`Failed to dispatch plan: ${error.message}`);
+    },
   });
 }
 

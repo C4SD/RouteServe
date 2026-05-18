@@ -172,8 +172,8 @@ function StructureList({
                   return (
                     <div
                       key={zone.id}
-                      className={`flex items-center gap-2 pl-7 pr-2 py-1.5 cursor-pointer transition-colors ${
-                        isSelected ? 'bg-primary/8' : 'hover:bg-muted/40'
+                      className={`flex items-center gap-2 pl-7 pr-2 py-2 cursor-pointer transition-colors ${
+                        isSelected ? 'bg-primary/10' : 'hover:bg-muted/40'
                       }`}
                       onClick={() => onSelectZone(zone, structure.warehouse)}
                     >
@@ -200,7 +200,7 @@ function StructureList({
                 })}
 
                 {isExpanded && structure.out_of_coverage.length > 0 && (
-                  <div className="pl-7 pr-3 py-1.5 flex items-center gap-2">
+                  <div className="pl-7 pr-3 py-2 flex items-center gap-2">
                     <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
                     <span className="text-xs text-muted-foreground">
                       {structure.out_of_coverage.length} out of coverage
@@ -276,7 +276,7 @@ function InspectorPanel({
                 { label: 'Facilities', value: structure.zones.reduce((s, z) => s + z.facilities.length, 0) },
                 { label: 'Out of coverage', value: structure.out_of_coverage.length },
               ].map(({ label, value }) => (
-                <div key={label} className="rounded-lg border p-2.5 text-center">
+                <div key={label} className="rounded-lg border p-3 text-center">
                   <p className="text-xl font-bold">{value}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
                 </div>
@@ -361,7 +361,7 @@ function InspectorPanel({
           <Button
             size="sm"
             variant={zone.acceptance === 'accepted' ? 'default' : 'outline'}
-            className="flex-1 h-8 text-xs"
+            className="flex-1 h-9 text-xs"
             onClick={() => onToggleZoneAcceptance(zone.id)}
           >
             <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
@@ -370,7 +370,7 @@ function InspectorPanel({
           <Button
             size="sm"
             variant={zone.acceptance === 'rejected' ? 'destructive' : 'outline'}
-            className="flex-1 h-8 text-xs"
+            className="flex-1 h-9 text-xs"
             onClick={() => onResetZone(zone.id)}
           >
             <XCircle className="h-3.5 w-3.5 mr-1.5" />
@@ -390,7 +390,7 @@ function InspectorPanel({
               { label: 'Max dist', value: `${zone.metrics.max_distance_km} km` },
               { label: 'Confidence', value: `${Math.round(zone.confidence_score * 100)}%` },
             ].map(({ label, value }) => (
-              <div key={label} className="rounded-md border px-2.5 py-2">
+              <div key={label} className="rounded-md border px-3 py-2.5">
                 <p className="text-sm font-semibold">{value}</p>
                 <p className="text-xs text-muted-foreground">{label}</p>
               </div>
@@ -414,7 +414,7 @@ function InspectorPanel({
               </p>
               <div className="space-y-2">
                 {sa.policies.map(p => (
-                  <div key={p.id} className="flex justify-between items-center rounded-md border px-2.5 py-2">
+                  <div key={p.id} className="flex justify-between items-center rounded-md border px-3 py-2.5">
                     <span className="text-xs text-muted-foreground">{p.label}</span>
                     <Badge variant="secondary" className="text-xs capitalize">{p.value}</Badge>
                   </div>
@@ -439,8 +439,8 @@ function InspectorPanel({
                   return (
                     <div key={rg.id} className="rounded-md border overflow-hidden">
                       <button
-                        className={`w-full flex justify-between items-center px-2.5 py-2 text-left transition-colors ${
-                          isExpanded ? 'bg-primary/8' : 'hover:bg-muted/40'
+                        className={`w-full flex justify-between items-center px-3 py-2.5 text-left transition-colors ${
+                          isExpanded ? 'bg-primary/10' : 'hover:bg-muted/40'
                         }`}
                         onClick={() => onRouteGroupSelect(isExpanded ? null : rg)}
                       >
@@ -627,14 +627,14 @@ export function Step5Review({
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Top bar */}
-      <div className="flex items-center justify-between shrink-0">
-        <div>
+      <div className="flex items-start justify-between gap-4 shrink-0">
+        <div className="min-w-0">
           <h3 className="text-lg font-semibold">Review Generated Structure</h3>
           <p className="text-sm text-muted-foreground mt-0.5">
             Accept zones you want to persist. Rejected or pending zones will not be saved.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           {totalAccepted > 0 && (
             <Badge className="text-sm px-3 py-1 bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
               {totalAccepted} accepted
@@ -655,9 +655,9 @@ export function Step5Review({
       </div>
 
       {/* 3-column layout */}
-      <div className="flex gap-0 flex-1 min-h-0 border rounded-lg overflow-hidden">
+      <div className="flex gap-0 flex-1 min-h-0 border rounded-lg overflow-x-auto">
         {/* Left — structure list (fixed width, never overlaps map) */}
-        <div className="w-56 min-w-[180px] shrink-0 border-r bg-background flex flex-col overflow-hidden">
+        <div className="w-64 min-w-[220px] shrink-0 border-r bg-background flex flex-col overflow-hidden">
           <StructureList
             result={result}
             selectedZoneId={selectedZoneId}
@@ -669,7 +669,7 @@ export function Step5Review({
         </div>
 
         {/* Center — map (takes remaining space) */}
-        <div className="flex-1 min-w-0 bg-muted/10 overflow-hidden">
+        <div className="flex-1 min-w-[180px] bg-muted/10 overflow-hidden">
           <CopilotReviewMap
             result={result}
             selectedZoneId={selectedZoneId}
@@ -680,7 +680,7 @@ export function Step5Review({
         </div>
 
         {/* Right — inspector (fixed width) */}
-        <div className="w-72 min-w-[240px] shrink-0 border-l bg-background flex flex-col overflow-hidden">
+        <div className="w-80 min-w-[260px] shrink-0 border-l bg-background flex flex-col overflow-hidden">
           <div className="px-4 py-2.5 border-b shrink-0">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Inspector</span>
           </div>

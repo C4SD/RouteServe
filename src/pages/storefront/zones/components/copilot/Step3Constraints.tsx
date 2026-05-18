@@ -167,7 +167,11 @@ export function Step3Constraints({
                 AI-Recommended Configuration
               </span>
             </div>
-            <button onClick={() => setAiPanel(null)} className="text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => setAiPanel(null)}
+              aria-label="Dismiss AI recommendations"
+              className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -200,16 +204,16 @@ export function Step3Constraints({
 
 
       {/* Summary */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Warehouses', value: warehouseCount },
           { label: 'Facilities', value: facilityCount },
           { label: 'Avg per warehouse', value: avgPerWarehouse },
           { label: 'Estimated zones', value: estimatedZones },
         ].map(({ label, value }) => (
-          <div key={label} className="flex-1 min-w-24 rounded-lg border bg-muted/30 px-3 py-2.5 text-center">
+          <div key={label} className="rounded-lg border bg-muted/30 px-3 py-3 text-center">
             <p className="text-2xl font-bold">{value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+            <p className="text-xs text-muted-foreground mt-1">{label}</p>
           </div>
         ))}
       </div>
@@ -252,7 +256,7 @@ export function Step3Constraints({
       </div>
 
       {/* Info note */}
-      <div className="flex gap-2.5 rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+      <div className="flex gap-2.5 rounded-lg border bg-muted/20 p-3.5 text-sm text-muted-foreground">
         <Info className="h-4 w-4 shrink-0 mt-0.5" />
         <p>
           Facilities outside the max radius of all warehouses will be flagged as{' '}
@@ -261,7 +265,7 @@ export function Step3Constraints({
         </p>
       </div>
 
-      <div className="flex justify-between pt-2">
+      <div className="flex justify-between pt-4">
         <Button variant="outline" onClick={onBack}>Back</Button>
         <Button onClick={onNext}>Generate Operational Structure</Button>
       </div>

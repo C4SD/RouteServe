@@ -234,6 +234,40 @@ export function useRevokeInvitation() {
 }
 
 /**
+ * Delete one or more invitations permanently
+ */
+export function useDeleteInvitations() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      invitationIds,
+      workspaceId,
+    }: {
+      invitationIds: string[];
+      workspaceId: string;
+    }): Promise<void> => {
+      const { error } = await supabase
+        .from('user_invitations')
+        .delete()
+        .in('id', invitationIds)
+        .eq('workspace_id', workspaceId);
+
+      if (error) throw error;
+    },
+    onSuccess: (_, { workspaceId, invitationIds }) => {
+      toast.success('Invitations Deleted', {
+        description: `${invitationIds.length} invitation${invitationIds.length === 1 ? '' : 's'} deleted.`,
+      });
+      queryClient.invalidateQueries({ queryKey: invitationKeys.workspace(workspaceId) });
+    },
+    onError: (error: Error) => {
+      toast.error('Failed to Delete Invitations', { description: error.message });
+    },
+  });
+}
+
+/**
  * Accept an invitation
  */
 export function useAcceptInvitation() {
