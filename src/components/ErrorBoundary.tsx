@@ -38,11 +38,16 @@ class ErrorBoundary extends Component<Props, State> {
       error.message.includes('Loading chunk') ||
       error.name === 'ChunkLoadError'
     ) {
-      const reloadKey = 'chunk_error_reload';
-      const lastReload = sessionStorage.getItem(reloadKey);
-      // Only auto-reload once per session to avoid infinite loops
-      if (!lastReload) {
-        sessionStorage.setItem(reloadKey, Date.now().toString());
+      const countKey = 'chunk_reload_count';
+      const timeKey = 'chunk_reload_time';
+      const maxReloads = 3;
+      const cooldownMs = 10_000;
+      const reloadCount = parseInt(sessionStorage.getItem(countKey) ?? '0', 10);
+      const lastReloadTime = parseInt(sessionStorage.getItem(timeKey) ?? '0', 10);
+      const now = Date.now();
+      if (reloadCount < maxReloads && now - lastReloadTime > cooldownMs) {
+        sessionStorage.setItem(countKey, String(reloadCount + 1));
+        sessionStorage.setItem(timeKey, String(now));
         window.location.reload();
         return;
       }
@@ -92,6 +97,12 @@ class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  private handleClearCacheReload = () => {
+    sessionStorage.removeItem('chunk_reload_count');
+    sessionStorage.removeItem('chunk_reload_time');
+    window.location.reload();
+  };
+
   private handleCopyError = () => {
     const { error, errorInfo } = this.state;
     const errorDetails = `Error: ${error?.toString()}\n\nComponent Stack:\n${errorInfo?.componentStack}`;
@@ -118,6 +129,11 @@ class ErrorBoundary extends Component<Props, State> {
         return fallback;
       }
 
+      const isChunkError =
+        error?.message.includes('Failed to fetch dynamically imported module') ||
+        error?.message.includes('Loading chunk') ||
+        error?.name === 'ChunkLoadError';
+
       // Default error UI
       return (
         <div className="flex items-center justify-center min-h-screen bg-muted/20 p-4">
@@ -130,7 +146,9 @@ class ErrorBoundary extends Component<Props, State> {
                 <div>
                   <CardTitle>Something went wrong</CardTitle>
                   <CardDescription>
-                    An unexpected error occurred. Our team has been notified.
+                    {isChunkError
+                      ? 'A new version was deployed. Clear the cache and reload to continue.'
+                      : 'An unexpected error occurred. Our team has been notified.'}
                   </CardDescription>
                 </div>
               </div>
@@ -163,19 +181,24 @@ class ErrorBoundary extends Component<Props, State> {
               )}
 
               <div className="flex justify-end gap-3 pt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={this.handleReset}
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Try Again
-                </Button>
-                <Button
-                  onClick={this.handleReload}
-                >
-                  Reload Page
-                </Button>
+                {isChunkError ? (
+                  <Button onClick={this.handleClearCacheReload} className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4" />
+                    Clear Cache &amp; Reload
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={this.handleReset}
+                      className="flex items-center gap-2"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Try Again
+                    </Button>
+                    <Button onClick={this.handleReload}>Reload Page</Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -6,12 +6,13 @@
   branch = "main"
   publish = "dist"
 
-# Let missing assets return 404 instead of serving index.html
+# Let missing assets return 404 instead of serving index.html.
+# No force=true: Netlify serves existing files first; this rule only fires for missing paths,
+# preventing the SPA fallback from serving index.html as a JS module.
 [[redirects]]
   from = "/assets/*"
   to = "/assets/:splat"
   status = 404
-  force = true
 
 # SPA fallback - route all requests to index.html for client-side routing
 [[redirects]]
