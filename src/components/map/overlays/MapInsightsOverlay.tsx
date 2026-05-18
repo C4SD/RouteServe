@@ -94,19 +94,24 @@ function FacilityInsights({ facility, onClose }: { facility: FacilityClickPayloa
               value={formatDistance(facility.distanceToNextKm)}
             />
           )}
-          <MetricRow
-            icon={Route}
-            label="Sequence"
-            value={`#${facility.sequenceOrder} of ${facility.totalFacilities}`}
-          />
+          {facility.sequenceOrder != null && facility.totalFacilities != null && (
+            <MetricRow
+              icon={Route}
+              label="Sequence"
+              value={`#${facility.sequenceOrder} of ${facility.totalFacilities}`}
+            />
+          )}
         </div>
 
-        <Separator />
-
-        <div className="text-xs text-muted-foreground space-y-0.5">
-          <div>Route: {facility.routeName}</div>
-          <div>Warehouse: {facility.warehouseName}</div>
-        </div>
+        {(facility.routeName || facility.warehouseName) && (
+          <>
+            <Separator />
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {facility.routeName && <div>Route: {facility.routeName}</div>}
+              {facility.warehouseName && <div>Warehouse: {facility.warehouseName}</div>}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

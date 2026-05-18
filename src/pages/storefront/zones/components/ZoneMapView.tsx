@@ -192,34 +192,67 @@ export function ZoneMapView({ zones, onZoneSelect }: ZoneMapViewProps) {
 
     zones.forEach((zone, idx) => {
       const geometry = zone.metadata?.geometry;
-      if (!geometry?.coordinates) return;
-
       const color = (zone.metadata?.color as string) || ZONE_PALETTE[idx % ZONE_PALETTE.length];
+      const popupHtml = `
+        <div>
+          <strong>${zone.name}</strong><br/>
+          <span style="color:#666;font-size:12px">Code: ${zone.code || 'N/A'}</span><br/>
+          ${zone.description ? `<span style="font-size:11px;color:#888">${zone.description}</span>` : ''}
+        </div>
+      `;
 
-      try {
-        const layer = L.geoJSON(geometry as any, {
-          style: {
-            color,
-            weight: 2,
-            opacity: 0.7,
-            fillColor: color,
-            fillOpacity: 0.1,
-            dashArray: '6,4',
-          },
+      if (geometry?.coordinates) {
+        try {
+          const layer = L.geoJSON(geometry as any, {
+            style: {
+              color,
+              weight: 2,
+              opacity: 0.7,
+              fillColor: color,
+              fillOpacity: 0.1,
+              dashArray: '6,4',
+            },
+          })
+            .bindPopup(popupHtml)
+            .on('click', () => onZoneSelect(zone))
+            .addTo(map);
+
+          zoneLayersRef.current.push(layer);
+        } catch {
+          // Skip invalid geometry
+        }
+      } else if (zone.region_center?.lat && zone.region_center?.lng) {
+        // Zone has a center point but no polygon — render as a labelled circle marker
+        const circle = L.circleMarker([zone.region_center.lat, zone.region_center.lng], {
+          radius: 14,
+          fillColor: color,
+          color: '#fff',
+          weight: 2,
+          fillOpacity: 0.7,
         })
-          .bindPopup(`
-            <div>
-              <strong>${zone.name}</strong><br/>
-              <span style="color:#666;font-size:12px">Code: ${zone.code || 'N/A'}</span><br/>
-              ${zone.description ? `<span style="font-size:11px;color:#888">${zone.description}</span>` : ''}
-            </div>
-          `)
+          .bindPopup(popupHtml)
           .on('click', () => onZoneSelect(zone))
           .addTo(map);
 
-        zoneLayersRef.current.push(layer);
-      } catch {
-        // Skip invalid geometry
+        const label = L.marker([zone.region_center.lat, zone.region_center.lng], {
+          icon: L.divIcon({
+            className: '',
+            html: `<div style="
+              background:${color};color:white;border-radius:50%;
+              width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+              font-size:9px;font-weight:bold;border:2px solid white;
+              box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;text-align:center;
+              overflow:hidden;padding:2px;
+            ">${zone.code || zone.name.slice(0, 2).toUpperCase()}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          }),
+        })
+          .bindPopup(popupHtml)
+          .on('click', () => onZoneSelect(zone))
+          .addTo(map);
+
+        zoneLayersRef.current.push(circle, label);
       }
     });
   }, [mapReady, zones, showZones, onZoneSelect]);

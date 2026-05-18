@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { MapUtils } from '@/lib/mapUtils';
 import { calculateDistance } from '@/lib/routeOptimization';
 
 /** Find the closest point in a polyline to a given target (Leaflet [lat, lng] coords). */
@@ -47,16 +46,17 @@ export interface FacilityClickPayload {
   facilityLga?: string;
   lat: number;
   lng: number;
-  sequenceOrder: number;
-  totalFacilities: number;
-  routeId: string;
-  routeName: string;
-  warehouseName: string;
-  warehouseLat: number;
-  warehouseLng: number;
-  distanceToWarehouseKm: number;
-  distanceToPreviousKm: number | null;
-  distanceToNextKm: number | null;
+  // Route-specific context — present when clicked from a route polyline, absent for global facility markers
+  sequenceOrder?: number;
+  totalFacilities?: number;
+  routeId?: string;
+  routeName?: string;
+  warehouseName?: string;
+  warehouseLat?: number;
+  warehouseLng?: number;
+  distanceToWarehouseKm?: number | null;
+  distanceToPreviousKm?: number | null;
+  distanceToNextKm?: number | null;
 }
 
 interface RoutePolylinesLayerProps {
@@ -93,7 +93,7 @@ export function RoutePolylinesLayer({
   const layerRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
-    if (!MapUtils.isMapReady(map)) return;
+    if (!map) return;
 
     const renderRoutes = () => {
       if (!layerRef.current) return;

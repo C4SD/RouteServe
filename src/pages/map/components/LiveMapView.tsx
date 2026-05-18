@@ -1127,40 +1127,23 @@ export function LiveMapView({ onEntitySelect }: LiveMapViewProps) {
 
       {/* Stats badge */}
       {mapReady && (
-        <div className="absolute bottom-4 left-4 bg-card border px-3 py-2 rounded-md shadow-md space-x-3 text-xs">
-          {filters.showDrivers && (
-            <span>
-              <span className="font-medium">{counts.drivers}</span> Drivers
-              {counts.activeDrivers > 0 && (
-                <span className="text-green-600 ml-1">({counts.activeDrivers} active)</span>
-              )}
-            </span>
-          )}
-          {filters.showVehicles && (
-            <span>
-              <span className="font-medium">{counts.vehicles}</span> Vehicles
-            </span>
-          )}
-          {filters.showDeliveries && (
-            <span>
-              <span className="font-medium">{counts.deliveries}</span> Deliveries
-            </span>
-          )}
-          {filters.showFacilities && (
-            <span>
-              <span className="font-medium">{counts.facilities}</span> Facilities
-            </span>
-          )}
-          {filters.showWarehouses && (
-            <span>
-              <span className="font-medium">{counts.warehouses}</span> Warehouses
-            </span>
-          )}
-          {filters.showZones && (
-            <span>
-              <span className="font-medium">{counts.zones}</span> Zones
-            </span>
-          )}
+        <div className="absolute bottom-4 left-4 bg-card/95 backdrop-blur-sm border px-3 py-1.5 rounded-md shadow-md flex flex-wrap gap-x-3 gap-y-0.5 text-xs max-w-xs">
+          {([
+            { key: 'showFacilities', label: 'Facilities', count: counts.facilities },
+            { key: 'showWarehouses', label: 'Warehouses', count: counts.warehouses },
+            { key: 'showZones',      label: 'Zones',      count: counts.zones },
+            { key: 'showDrivers',    label: 'Drivers',    count: counts.drivers, extra: counts.activeDrivers > 0 ? `${counts.activeDrivers} active` : undefined },
+            { key: 'showVehicles',   label: 'Vehicles',   count: counts.vehicles },
+            { key: 'showDeliveries', label: 'Deliveries', count: counts.deliveries },
+          ] as const).map(({ key, label, count, extra }) => {
+            const visible = filters[key];
+            return (
+              <span key={key} className={visible ? 'text-foreground' : 'text-muted-foreground/50 line-through'}>
+                <span className="font-medium">{count}</span> {label}
+                {extra && visible && <span className="text-green-600 ml-1">({extra})</span>}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>

@@ -122,7 +122,13 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
         .select('route_id, sequence_order, facility_id')
         .in('route_id', routeIds)
         .order('sequence_order', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.error('[RouteMapView] route_facilities query failed:', error.message, error.code);
+        throw error;
+      }
+      if (!data?.length) {
+        console.warn('[RouteMapView] route_facilities returned no rows for', routeIds.length, 'routes — route lines will not draw');
+      }
       return (data || []) as Array<{ route_id: string; sequence_order: number; facility_id: string }>;
     },
     enabled: routeIds.length > 0,
@@ -210,6 +216,8 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
 
     mapRef.current = map;
     setMapReady(true);
+    // Ensure the map recalculates its size after CSS is fully applied (fixes 0-size on prod)
+    requestAnimationFrame(() => map.invalidateSize());
 
     // Track coordinates and zoom
     const updateCoords = () => {
@@ -425,13 +433,12 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
 
       marker.on('click', () => {
         setSelectedFacility({
-          facilityId: f.id,
           facilityName: f.name,
+          facilityType: f.type,
+          facilityLga: f.lga,
           lat: f.lat,
           lng: f.lng,
-          type: f.type,
-          lga: f.lga,
-        } as FacilityClickPayload);
+        });
         setSelectedRouteInsights(null);
       });
 
@@ -467,12 +474,12 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
   }, [mapReady, warehousesList, showWarehouses]);
 
   // ── Handlers ──
-  const handleFacilityClick = (payload: FacilityClickPayload) => {
+  const handleFacilityClick = useCallback((payload: FacilityClickPayload) => {
     setSelectedFacility(payload);
     setSelectedRouteInsights(null);
-  };
+  }, []);
 
-  const handleRouteClick = (routeId: string) => {
+  const handleRouteClick = useCallback((routeId: string) => {
     const route = routes?.find(r => r.id === routeId);
     if (!route) return;
 
@@ -505,7 +512,7 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
     setSelectedFacility(null);
 
     if (route && onRouteClick) onRouteClick(route);
-  };
+  }, [routes, facilitiesByRoute, onRouteClick]);
 
   const handleCloseInsights = () => {
     setSelectedFacility(null);

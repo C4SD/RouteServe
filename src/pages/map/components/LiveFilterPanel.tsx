@@ -23,6 +23,7 @@ import {
   Activity,
   Eye,
   EyeOff,
+  RotateCcw,
 } from 'lucide-react';
 import { useLiveMapStore } from '@/stores/liveMapStore';
 import { useLiveTrackingCtx } from '@/contexts/LiveTrackingContext';
@@ -186,6 +187,7 @@ function EntityToggleButton({ icon: Icon, active, count, color, onClick }: Entit
 export function LiveFilterPanel() {
   const filters = useLiveMapStore((s) => s.filters);
   const toggleFilter = useLiveMapStore((s) => s.toggleFilter);
+  const resetFilters = useLiveMapStore((s) => s.resetFilters);
   const selectEntity = useLiveMapStore((s) => s.selectEntity);
 
   const {
@@ -366,6 +368,15 @@ export function LiveFilterPanel() {
   }[activePanel];
 
   const isLayerVisible = filters[cfg.filterKey] as boolean;
+
+  const anyLayerHidden =
+    !filters.showDrivers ||
+    !filters.showVehicles ||
+    !filters.showDeliveries ||
+    !filters.showFacilities ||
+    !filters.showWarehouses ||
+    !filters.showZones ||
+    !filters.showRoutes;
 
   /* ── Handlers ─────────────────────────────────────────── */
   const handlePanelSwitch = (panel: ActivePanel) => {
@@ -586,6 +597,23 @@ export function LiveFilterPanel() {
 
         </div>
       </ScrollArea>
+
+      {/* Reset banner — shown when any layer is hidden */}
+      {anyLayerHidden && (
+        <div className="border-t px-3 py-1.5 flex items-center justify-between bg-muted/40">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <EyeOff className="h-3 w-3" />
+            Some layers are hidden
+          </span>
+          <button
+            onClick={resetFilters}
+            className="flex items-center gap-1 text-[11px] text-primary font-medium hover:underline"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Show all
+          </button>
+        </div>
+      )}
 
       {/* Entity tab bar */}
       <div className="border-t px-2 py-2">

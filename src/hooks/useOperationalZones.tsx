@@ -146,6 +146,44 @@ export function useZoneSummary(zoneId: string | null) {
   });
 }
 
+// Bulk LGA + facility counts for a list of zone IDs — one query each, grouped in JS.
+export function useZoneBulkStats(zoneIds: string[]) {
+  return useQuery({
+    queryKey: ['zone-bulk-stats', zoneIds.slice().sort().join(',')],
+    queryFn: async () => {
+      if (zoneIds.length === 0) return {} as Record<string, { lga_count: number; facility_count: number }>;
+
+      const [lgaRes, facRes] = await Promise.all([
+        supabase
+          .from('admin_units')
+          .select('zone_id')
+          .in('zone_id', zoneIds)
+          .eq('admin_level', 6)
+          .eq('is_active', true),
+        supabase
+          .from('facilities')
+          .select('zone_id')
+          .in('zone_id', zoneIds)
+          .is('deleted_at', null),
+      ]);
+
+      const stats: Record<string, { lga_count: number; facility_count: number }> = {};
+      for (const id of zoneIds) stats[id] = { lga_count: 0, facility_count: 0 };
+
+      for (const row of lgaRes.data ?? []) {
+        if (row.zone_id && stats[row.zone_id]) stats[row.zone_id].lga_count++;
+      }
+      for (const row of facRes.data ?? []) {
+        if (row.zone_id && stats[row.zone_id]) stats[row.zone_id].facility_count++;
+      }
+
+      return stats;
+    },
+    enabled: zoneIds.length > 0,
+    staleTime: 60_000,
+  });
+}
+
 export function useCreateZone() {
   const queryClient = useQueryClient();
   const { workspaceId } = useWorkspace();

@@ -128,16 +128,24 @@ async function fetchWarehousesForMap(workspaceId: string) {
   return data || [];
 }
 
-// Fetch operational zones with region centers
+// Fetch operational zones — include metadata so we can compute centroids for
+// zones that have polygon geometry but no region_center (user-created zones).
 async function fetchZonesForMap(workspaceId: string) {
   const { data, error } = await supabase
     .from('zones' as any)
-    .select('id, name, code, region_center, is_active')
+    .select('id, name, code, region_center, is_active, metadata')
     .eq('workspace_id', workspaceId)
-    .not('region_center', 'is', null);
+    .eq('is_active', true);
 
   if (error) throw error;
-  return (data || []) as { id: string; name: string; code: string | null; region_center: { lat: number; lng: number }; is_active: boolean }[];
+  return (data || []) as {
+    id: string;
+    name: string;
+    code: string | null;
+    region_center: { lat: number; lng: number } | null;
+    is_active: boolean;
+    metadata: Record<string, any> | null;
+  }[];
 }
 
 export function useLiveTracking(options: UseLiveTrackingOptions = {}) {
@@ -615,26 +623,41 @@ export function useLiveTracking(options: UseLiveTrackingOptions = {}) {
     [warehousesQuery.data, filters.showWarehouses]
   );
 
-  // Zone GeoJSON
+  // Zone GeoJSON — use region_center if available, otherwise compute centroid
+  // from the zone's polygon geometry (stored in metadata.geometry).
   const zoneGeoJSON = useMemo(
     (): MapFeatureCollection<ZoneMarkerProperties> => {
       if (!filters.showZones) return { type: 'FeatureCollection', features: [] };
       const zones = zonesQuery.data || [];
-      return {
-        type: 'FeatureCollection',
-        features: zones
-          .filter((z) => z.region_center?.lng && z.region_center?.lat)
-          .map((z) => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [z.region_center.lng, z.region_center.lat] },
-            properties: {
-              id: z.id,
-              name: z.name,
-              code: z.code,
-              isActive: z.is_active,
-            },
-          })),
-      };
+      const features: MapFeatureCollection<ZoneMarkerProperties>['features'] = [];
+
+      for (const z of zones) {
+        let lng: number | null = null;
+        let lat: number | null = null;
+
+        if (z.region_center?.lng && z.region_center?.lat) {
+          lng = z.region_center.lng;
+          lat = z.region_center.lat;
+        } else {
+          // Compute centroid from polygon geometry if available
+          const coords: [number, number][] | undefined =
+            z.metadata?.geometry?.coordinates?.[0];
+          if (coords && coords.length > 0) {
+            lng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+            lat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+          }
+        }
+
+        if (!lng || !lat) continue;
+
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lng, lat] },
+          properties: { id: z.id, name: z.name, code: z.code, isActive: z.is_active },
+        });
+      }
+
+      return { type: 'FeatureCollection', features };
     },
     [zonesQuery.data, filters.showZones]
   );
