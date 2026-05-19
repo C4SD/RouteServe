@@ -527,8 +527,9 @@ export function LiveMapView({ onEntitySelect }: LiveMapViewProps) {
     if (!map) return;
 
     const handleMapCanvasClick = (e: maplibregl.MapMouseEvent) => {
+      // Check if click hit any marker label layer (DOM markers handle their own clicks)
       const features = map.queryRenderedFeatures(e.point, {
-        layers: ['facility-markers', 'warehouse-markers'],
+        layers: ['facility-markers-labels', 'warehouse-markers-labels', 'zone-markers-area'],
       });
       if (features.length === 0) {
         setMarkerPopup(null);

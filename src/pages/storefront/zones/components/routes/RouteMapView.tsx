@@ -91,16 +91,18 @@ export function RouteMapView({ onRouteClick }: RouteMapViewProps) {
 
   // Fetch warehouses for map display
   const { data: warehousesList } = useQuery({
-    queryKey: ['warehouses-map'],
+    queryKey: ['warehouses-map', workspaceId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('warehouses')
         .select('id, name, lat, lng')
+        .eq('workspace_id', workspaceId!)
         .not('lat', 'is', null)
         .not('lng', 'is', null);
       if (error) throw error;
       return data || [];
     },
+    enabled: !!workspaceId,
     staleTime: 1000 * 60 * 5,
   });
 

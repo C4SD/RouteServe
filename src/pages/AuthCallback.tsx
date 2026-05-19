@@ -6,6 +6,21 @@ export default function AuthCallback() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get('token_hash');
+    const type = params.get('type');
+
+    // Recovery email links arrive as /auth/callback?token_hash=xxx&type=recovery.
+    // The Supabase client does not auto-exchange token_hash, so we call verifyOtp
+    // explicitly here before redirecting to the reset-password form.
+    if (tokenHash && type === 'recovery') {
+      supabase.auth.verifyOtp({ type: 'recovery', token_hash: tokenHash }).then(({ error }) => {
+        navigate(error ? '/auth' : '/auth?reset=true', { replace: true });
+      });
+      return;
+    }
+
+    // For OAuth and magic-link callbacks, rely on the auth state change event.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         // Unsubscribe before navigating so the subsequent SIGNED_IN event

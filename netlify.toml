@@ -6,6 +6,13 @@
   branch = "main"
   publish = "dist"
 
+[context.main.environment]
+  VITE_ENABLE_MOD4 = "true"
+  VITE_ENABLE_MAPLIBRE_MAPS = "true"
+  VITE_VEHICLE_CONSOLIDATION = "true"
+  VITE_ENABLE_INTELLIGENCE = "true"
+  VITE_ENABLE_ANALYTICS = "true"
+
 # Let missing assets return 404 instead of serving index.html.
 # No force=true: Netlify serves existing files first; this rule only fires for missing paths,
 # preventing the SPA fallback from serving index.html as a JS module.

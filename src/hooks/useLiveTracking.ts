@@ -687,12 +687,24 @@ export function useLiveTracking(options: UseLiveTrackingOptions = {}) {
     [facilitiesQuery.data]
   );
 
-  // Loading state
+  // Loading state — include facilities, warehouses, and zones
   const isLoading =
-    batchesQuery.isLoading || driversQuery.isLoading || vehiclesQuery.isLoading || activeDriverPositionsQuery.isLoading;
+    batchesQuery.isLoading ||
+    driversQuery.isLoading ||
+    vehiclesQuery.isLoading ||
+    activeDriverPositionsQuery.isLoading ||
+    facilitiesQuery.isLoading ||
+    warehousesQuery.isLoading ||
+    zonesQuery.isLoading;
 
-  // Error state
-  const error = batchesQuery.error || driversQuery.error || vehiclesQuery.error;
+  // Error state — include facilities, warehouses, and zones so failures are visible
+  const error =
+    batchesQuery.error ||
+    driversQuery.error ||
+    vehiclesQuery.error ||
+    facilitiesQuery.error ||
+    warehousesQuery.error ||
+    zonesQuery.error;
 
   return {
     // Raw data
