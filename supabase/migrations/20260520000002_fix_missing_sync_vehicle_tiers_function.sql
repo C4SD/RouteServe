@@ -2,14 +2,18 @@
 -- FIX: Recreate missing sync_vehicle_tiers_from_config function
 -- ============================================================================
 -- The function sync_vehicle_tiers_from_config(uuid, jsonb) is called by the
--- auto_sync_vehicle_tiers() AFTER INSERT/UPDATE trigger on vehicles. It is
--- absent from the live DB, causing 42883 (undefined_function) on every vehicle
--- creation or update. Root cause: migration 20251214131002 used DROP + CREATE
--- (not CREATE OR REPLACE), so if it failed after the DROP the function was lost.
+-- auto_sync_vehicle_tiers() trigger on vehicles. It is absent from the live DB,
+-- causing 42883 (undefined_function) on every vehicle create/update. Root cause:
+-- migration 20251214131002 used DROP + CREATE (not CREATE OR REPLACE), so if it
+-- failed after the DROP step the function was permanently lost.
 --
--- This migration also adds SECURITY DEFINER so the function can write to
--- vehicle_tiers regardless of the calling user's role (RLS on vehicle_tiers
--- was tightened in 20260326000005 to admins only).
+-- The trigger already exists — this migration only recreates the two functions.
+-- Avoiding trigger DDL (DROP/CREATE TRIGGER) prevents the AccessExclusiveLock
+-- on vehicles that caused the deadlock (40P01) when this was first run.
+--
+-- SECURITY DEFINER is added so the function can write vehicle_tiers regardless
+-- of the calling user's role (vehicle_tiers RLS was tightened to admins-only in
+-- migration 20260326000005).
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION public.sync_vehicle_tiers_from_config(
@@ -66,7 +70,6 @@ BEGIN
 END;
 $$;
 
--- Recreate the trigger function with SECURITY DEFINER + fixed search_path
 CREATE OR REPLACE FUNCTION public.auto_sync_vehicle_tiers()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -83,32 +86,10 @@ BEGIN
 END;
 $$;
 
--- Ensure the trigger exists on the canonical vehicles table
-DROP TRIGGER IF EXISTS trigger_auto_sync_vehicle_tiers ON public.vehicles;
-CREATE TRIGGER trigger_auto_sync_vehicle_tiers
-  AFTER INSERT OR UPDATE ON public.vehicles
-  FOR EACH ROW
-  EXECUTE FUNCTION public.auto_sync_vehicle_tiers();
-
--- Keep trigger on vlms_vehicles if the table still exists
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'vlms_vehicles'
-  ) THEN
-    DROP TRIGGER IF EXISTS trigger_auto_sync_vehicle_tiers ON public.vlms_vehicles;
-    CREATE TRIGGER trigger_auto_sync_vehicle_tiers
-      AFTER INSERT OR UPDATE ON public.vlms_vehicles
-      FOR EACH ROW
-      EXECUTE FUNCTION public.auto_sync_vehicle_tiers();
-  END IF;
-END $$;
-
 COMMENT ON FUNCTION public.sync_vehicle_tiers_from_config(uuid, jsonb) IS
   'Sync vehicle_tiers rows from tiered_config JSONB. Handles {tiers:[]} and [] formats. '
   'SECURITY DEFINER: bypasses vehicle_tiers RLS so the trigger works for all roles. Updated 2026-05-20.';
 
 COMMENT ON FUNCTION public.auto_sync_vehicle_tiers() IS
-  'AFTER INSERT/UPDATE trigger on vehicles/vlms_vehicles. Calls sync_vehicle_tiers_from_config '
-  'when tiered_config is set or changed. Updated 2026-05-20.';
+  'AFTER INSERT/UPDATE trigger function on vehicles/vlms_vehicles. Calls '
+  'sync_vehicle_tiers_from_config when tiered_config is set or changed. Updated 2026-05-20.';
