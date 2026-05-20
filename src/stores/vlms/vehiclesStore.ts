@@ -13,9 +13,14 @@ import { getVehiclesTableName } from '@/lib/featureFlags';
 type SafeArray<T> = (value: unknown) => T[];
 const safeArray: SafeArray<any> = (value) => Array.isArray(value) ? value : [];
 
-const normalizeStatus = (status?: string): 'available' | 'in-use' | 'maintenance' | 'out_of_service' | 'disposed' => {
+const normalizeStatus = (status?: string): 'available' | 'in-use' | 'maintenance' => {
   if (!status) return 'available';
-  return status === 'in_use' ? 'in-use' : status as any;
+  if (status === 'in_use' || status === 'in-use') return 'in-use';
+  if (status === 'maintenance') return 'maintenance';
+  // out_of_service and disposed are not valid DB enum values — treat as maintenance/available
+  if (status === 'out_of_service') return 'maintenance';
+  if (status === 'disposed') return 'maintenance';
+  return 'available';
 };
 
 export type ViewMode = 'list' | 'card' | 'kanban';
@@ -294,7 +299,7 @@ export const useVehiclesStore = create<VehiclesState>()(
             capacity: (data as any).capacity ?? 0, // Legacy field
             max_weight: (data as any).max_weight ?? (data as any).capacity_kg ?? (data as any).gross_weight_kg ?? 0,
             fuel_type: normalizeFuelType(data.fuel_type),
-            status: normalizeStatus(data.status) as 'available' | 'in-use' | 'maintenance',
+            status: normalizeStatus(data.status),
             created_by: userId,
             updated_by: userId,
           };
@@ -316,11 +321,21 @@ export const useVehiclesStore = create<VehiclesState>()(
 
           return result;
         } catch (error: any) {
-          console.error('Failed to create vehicle:', error);
-          const userMessage =
-            error?.code === '23505' && error?.message?.includes('plate_number')
-              ? 'A vehicle with this plate number already exists.'
-              : `Failed to create vehicle: ${error.message}`;
+          console.error('Failed to create vehicle:', { code: error?.code, message: error?.message, details: error?.details, hint: error?.hint });
+          const code = error?.code;
+          const msg = error?.message ?? '';
+          let userMessage: string;
+          if (code === '23505' && (msg.includes('plate_number') || msg.includes('license_plate'))) {
+            userMessage = 'A vehicle with this license plate already exists.';
+          } else if (code === '23503') {
+            userMessage = 'Account setup incomplete — your profile record is missing. Please contact support or sign out and back in.';
+          } else if (code === '42501' || code === 'PGRST301') {
+            userMessage = 'Permission denied: you are not an active member of this workspace.';
+          } else if (code === 'PGRST116') {
+            userMessage = 'Vehicle creation was blocked by a workspace access policy. Ensure your workspace is active.';
+          } else {
+            userMessage = `Failed to create vehicle: ${msg}${code ? ` (${code})` : ''}`;
+          }
           set({ error: userMessage, isLoading: false });
           toast.error(userMessage);
           throw error;
@@ -374,7 +389,7 @@ export const useVehiclesStore = create<VehiclesState>()(
             ...(cargo_capacity !== undefined ? { capacity: cargo_capacity } : {}),
             ...(tieredConfigValue !== undefined ? { tiered_config: tieredConfigValue } : {}),
             fuel_type: normalizeFuelType(data.fuel_type) as any,
-            status: data.status ? (normalizeStatus(data.status) as 'available' | 'in-use' | 'maintenance') : undefined,
+            status: data.status ? normalizeStatus(data.status) : undefined,
             updated_by: userId,
           };
 

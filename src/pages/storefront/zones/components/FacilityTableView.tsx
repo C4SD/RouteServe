@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   ArrowUpDown,
   Building2,
@@ -75,13 +76,17 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 function useFacilityAuditData() {
+  const { workspaceId } = useWorkspace();
+
   return useQuery({
-    queryKey: ['facility-audit-view'],
+    queryKey: ['facility-audit-view', workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
-      // 1. Fetch all facilities with zone info
+      // 1. Fetch facilities scoped to the current workspace
       const { data: facilities, error: facErr } = await supabase
         .from('facilities')
         .select('id, name, level_of_care, lga, lat, lng, type, programme, ip_name, zone_id, zones:zone_id(id, name)')
+        .eq('workspace_id', workspaceId!)
         .is('deleted_at', null)
         .order('name', { ascending: true });
 

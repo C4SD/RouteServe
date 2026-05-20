@@ -31,6 +31,7 @@ export interface AdminUnit {
   area_km2: number | null;
   metadata: Record<string, any>;
   zone_id: string | null;
+  warehouse_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

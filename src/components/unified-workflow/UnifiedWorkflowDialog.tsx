@@ -129,6 +129,7 @@ export function UnifiedWorkflowDialog({
   const parsedFacilities = useUnifiedWorkflowStore((state) => state.parsed_facilities);
   const policyContext = useUnifiedWorkflowStore((state) => state.policy_context);
   const facilityPackaging = useUnifiedWorkflowStore((state) => state.facility_packaging);
+  const packagingEnabled = useUnifiedWorkflowStore((state) => state.packaging_enabled);
   const routingFallbackUsed = useUnifiedWorkflowStore((state) => state.routing_fallback_used);
   const suggestedVehicleIds = useUnifiedWorkflowStore((state) => state.suggested_vehicle_ids);
 
@@ -716,20 +717,13 @@ export function UnifiedWorkflowDialog({
         );
 
       case 4:
-        if (scheduleMode === 'copilot') {
-          return (
-            <Step3PackagingCompletion
-              workingSet={workingSet}
-              facilityPackaging={facilityPackaging}
-              onSetFacilityPackaging={actions.setFacilityPackaging}
-            />
-          );
-        }
         return (
           <Step3PackagingCompletion
             workingSet={workingSet}
             facilityPackaging={facilityPackaging}
             onSetFacilityPackaging={actions.setFacilityPackaging}
+            packagingEnabled={packagingEnabled}
+            onTogglePackaging={actions.setPackagingEnabled}
           />
         );
 
@@ -892,6 +886,7 @@ export function UnifiedWorkflowDialog({
     parsedFacilities,
     policyContext,
     facilityPackaging,
+    packagingEnabled,
     routingFallbackUsed,
     operationalSnapshot,
     vehicleIds,

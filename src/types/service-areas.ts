@@ -54,6 +54,7 @@ export interface CreateServiceAreaInput {
   priority?: ServicePriority;
   sla_hours?: number;
   facility_ids: string[];
+  metadata?: Record<string, any>;
 }
 
 export interface UpdateServiceAreaInput {

@@ -9,7 +9,7 @@ import {
   Layers, Thermometer, Activity, CircleDot, BadgeCheck, Zap,
   Copy, Check, RefreshCw, AlertCircle, LayoutGrid,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -602,6 +602,69 @@ function VehicleContent({ vehicle }: { vehicle: LiveVehicle }) {
   const speedKmh = Math.round((vehicle.speed || 0) * 3.6);
   const fmtTime = (d: Date) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(d);
 
+  // Self-fetch batch + facility details when vehicle has an active batch
+  const { data: batchDetail, isLoading: batchLoading } = useQuery({
+    queryKey: ['vehicle-batch-detail', vehicle.batchId],
+    queryFn: async () => {
+      const { data: batch } = await supabase
+        .from('delivery_batches')
+        .select(`
+          id, name, status, facility_ids, optimized_route, current_stop_index,
+          driver:drivers!delivery_batches_driver_id_fkey(id, name, phone),
+          warehouse:warehouses(id, name)
+        `)
+        .eq('id', vehicle.batchId!)
+        .single();
+
+      if (!batch) return null;
+
+      const facilityIds: string[] = (batch as any).facility_ids || [];
+      let facilityDetails: { id: string; name: string; address: string | null }[] = [];
+      if (facilityIds.length > 0) {
+        const { data: facs } = await supabase
+          .from('facilities')
+          .select('id, name, address')
+          .in('id', facilityIds);
+        facilityDetails = facs || [];
+      }
+
+      return { ...(batch as any), facilityDetails };
+    },
+    enabled: !!vehicle.batchId,
+    staleTime: 30000,
+  });
+
+  const stops = useMemo(() => {
+    if (!batchDetail) return [];
+    const { facility_ids, optimized_route, facilityDetails, current_stop_index, status } = batchDetail;
+    const facilityMap = new Map((facilityDetails as any[]).map((f) => [f.id, f]));
+    const routeStopMap: Record<string, any> = {};
+    if ((optimized_route as any)?.stops) {
+      for (const s of (optimized_route as any).stops) routeStopMap[s.id] = s;
+    }
+    const currentIdx: number = current_stop_index ?? 0;
+
+    return ((facility_ids as string[]) || []).map((id, idx) => {
+      const fac = facilityMap.get(id) as any;
+      const rs = routeStopMap[id];
+      const stopStatus =
+        idx < currentIdx ? 'completed' :
+        idx === currentIdx && status === 'in-progress' ? 'current' :
+        'pending';
+      return {
+        id,
+        name: rs?.name || fac?.name || `Stop ${idx + 1}`,
+        address: rs?.address || fac?.address || null,
+        idx,
+        stopStatus,
+      };
+    });
+  }, [batchDetail]);
+
+  const completedCount = stops.filter((s) => s.stopStatus === 'completed').length;
+  const totalCount = stops.length;
+  const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
   return (
     <div className="divide-y">
       {/* Identity */}
@@ -658,24 +721,112 @@ function VehicleContent({ vehicle }: { vehicle: LiveVehicle }) {
         </Section>
       </div>
 
-      {/* Assignment */}
-      <div className="px-4 py-4 space-y-3">
-        <Section title="Assignment">
-          {vehicle.driverName ? (
-            <Row icon={User} label="Driver" value={vehicle.driverName} />
-          ) : (
-            <div className="text-sm text-muted-foreground">No driver assigned</div>
-          )}
-          {vehicle.batchId && (
-            <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 space-y-1">
-              <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
-                <Package className="h-3 w-3" />Active Delivery
+      {/* Active Delivery */}
+      {vehicle.batchId ? (
+        <div className="px-4 py-4 space-y-3">
+          <Section title="Active Delivery">
+            {batchLoading ? (
+              <PanelSkeleton rows={4} />
+            ) : batchDetail ? (
+              <div className="space-y-3">
+                {/* Batch header */}
+                <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold text-sm leading-snug">{batchDetail.name}</span>
+                    <DeliveryStatusBadge status={batchDetail.status} />
+                  </div>
+                  {(batchDetail.driver as any)?.name && (
+                    <Row icon={User} label="Driver" value={(batchDetail.driver as any).name} />
+                  )}
+                  {(batchDetail.warehouse as any)?.name && (
+                    <Row icon={Package} label="From" value={(batchDetail.warehouse as any).name} />
+                  )}
+                </div>
+
+                {/* Progress */}
+                {totalCount > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{completedCount} of {totalCount} stops done</span>
+                      <span className="font-medium text-foreground">{progressPct}%</span>
+                    </div>
+                    <Progress value={progressPct} className="h-1.5" />
+                    <div className="grid grid-cols-3 gap-1.5 mt-1">
+                      <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded px-2 py-1 text-center">
+                        <div className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{completedCount}</div>
+                        <div className="text-[10px] text-muted-foreground">Done</div>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 rounded px-2 py-1 text-center">
+                        <div className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                          {stops.filter((s) => s.stopStatus === 'current').length}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">Current</div>
+                      </div>
+                      <div className="bg-muted/50 rounded px-2 py-1 text-center">
+                        <div className="text-sm font-bold">{stops.filter((s) => s.stopStatus === 'pending').length}</div>
+                        <div className="text-[10px] text-muted-foreground">Pending</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stop list */}
+                {stops.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                      Facilities ({stops.length})
+                    </p>
+                    <div className="space-y-1 max-h-64 overflow-y-auto pr-0.5">
+                      {stops.map((stop) => (
+                        <div
+                          key={stop.id}
+                          className={`flex items-start gap-2 p-2 rounded-lg text-xs transition-colors ${
+                            stop.stopStatus === 'current'
+                              ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800'
+                              : stop.stopStatus === 'completed'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/20'
+                                : 'bg-muted/30'
+                          }`}
+                        >
+                          <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                            stop.stopStatus === 'completed' ? 'bg-emerald-500 text-white' :
+                            stop.stopStatus === 'current'   ? 'bg-blue-500 text-white' :
+                            'bg-muted-foreground/20 text-muted-foreground'
+                          }`}>
+                            {stop.stopStatus === 'completed'
+                              ? <CheckCircle className="h-3 w-3" />
+                              : stop.idx + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{stop.name}</p>
+                            {stop.address && (
+                              <p className="text-muted-foreground truncate mt-0.5">{stop.address}</p>
+                            )}
+                          </div>
+                          {stop.stopStatus === 'current' && (
+                            <span className="text-[10px] text-blue-600 font-medium shrink-0 mt-0.5">Now</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="font-mono text-xs text-muted-foreground">{vehicle.batchId.slice(0, 16)}…</div>
-            </div>
-          )}
-        </Section>
-      </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">Could not load delivery details</div>
+            )}
+          </Section>
+        </div>
+      ) : (
+        <div className="px-4 py-4">
+          <Section title="Assignment">
+            {vehicle.driverName
+              ? <Row icon={User} label="Driver" value={vehicle.driverName} />
+              : <div className="text-sm text-muted-foreground">No active assignment</div>
+            }
+          </Section>
+        </div>
+      )}
     </div>
   );
 }

@@ -164,6 +164,7 @@ const initialState: UnifiedWorkflowState = {
 
   // Step 3: Packaging
   facility_packaging: {},
+  packaging_enabled: true,
 
   // Routing diagnostics
   routing_fallback_used: false,
@@ -470,6 +471,10 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               'unified/setFacilityPackaging'
             );
           }
+        },
+
+        setPackagingEnabled: (enabled: boolean) => {
+          set({ packaging_enabled: enabled }, false, 'unified/setPackagingEnabled');
         },
 
         // =====================================================
@@ -812,6 +817,9 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
             }
 
             case 4: {
+              // If packaging is disabled, skip all validation and allow proceeding
+              if (!state.packaging_enabled) return true;
+
               // Copilot: packaging step — all working-set facilities must have packaging defined
               if (state.schedule_mode === 'copilot') {
                 if (state.working_set.length === 0) return false;
@@ -900,6 +908,7 @@ export const useUnifiedWorkflowStore = create<UnifiedWorkflowStore>()(
               break;
 
             case 4: {
+              if (!state.packaging_enabled) break;
               const pendingFacilities = state.working_set.filter(
                 (ws) =>
                   !state.facility_packaging[ws.facility_id] ||
@@ -1131,6 +1140,7 @@ export const useCanProceed = () =>
       }
 
       case 4:
+        if (!state.packaging_enabled) return true;
         // Both copilot and manual: packaging check
         if (state.working_set.length === 0) return false;
         return state.working_set.every(
@@ -1212,6 +1222,7 @@ export const useValidationErrors = () =>
         break;
 
       case 4: {
+        if (!state.packaging_enabled) break;
         const pending = state.working_set.filter(
           (ws) =>
             !state.facility_packaging[ws.facility_id] ||
@@ -1285,6 +1296,7 @@ export const useWorkflowActions = () => {
       updateParsedFacility: state.updateParsedFacility,
       setPolicyContext: state.setPolicyContext,
       setFacilityPackaging: state.setFacilityPackaging,
+      setPackagingEnabled: state.setPackagingEnabled,
       savePreBatch: state.savePreBatch,
       loadPreBatch: state.loadPreBatch,
       // Copilot intent

@@ -110,7 +110,7 @@ export function useZoneSummary(zoneId: string | null) {
         return res.count || 0;
       };
 
-      const [facilityCount, fleetCount, lgaCount] = await Promise.all([
+      const [facilityCount, fleetCount, lgaCount, warehouseCount] = await Promise.all([
         safeCount(
           supabase
             .from('facilities')
@@ -129,13 +129,20 @@ export function useZoneSummary(zoneId: string | null) {
             .from('admin_units')
             .select('id', { count: 'exact', head: true })
             .eq('zone_id', zoneId)
-            .eq('admin_level', 6) // LGA level
+            .eq('admin_level', 6)
+            .eq('is_active', true)
+        ),
+        safeCount(
+          supabase
+            .from('warehouses')
+            .select('id', { count: 'exact', head: true })
+            .eq('zone_id', zoneId)
             .eq('is_active', true)
         ),
       ]);
 
       return {
-        warehouse_count: 0, // warehouses table has no zone_id column
+        warehouse_count: warehouseCount,
         lga_count: lgaCount,
         facility_count: facilityCount,
         fleet_count: fleetCount,

@@ -333,6 +333,7 @@ export interface UnifiedWorkflowState {
 
   // Step 3: Packaging (per-facility packaging declarations)
   facility_packaging: Record<string, FacilityPackagingData>;
+  packaging_enabled: boolean;
 
   // Routing diagnostics
   routing_fallback_used: boolean;
@@ -488,6 +489,7 @@ export interface UnifiedWorkflowActions {
 
   // Step 3: Packaging
   setFacilityPackaging: (facilityId: string, data: FacilityPackagingData | null) => void;
+  setPackagingEnabled: (enabled: boolean) => void;
 
   // Step 2 -> Pre-batch
   savePreBatch: () => Promise<string>;

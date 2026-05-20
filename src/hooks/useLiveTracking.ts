@@ -43,7 +43,7 @@ async function fetchActiveBatches(workspaceId: string) {
       warehouse:warehouses(id, name, address, lat, lng)
     `)
     .eq('workspace_id', workspaceId)
-    .in('status', ['assigned', 'in-progress'])
+    .in('status', ['planned', 'assigned', 'in-progress'])
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -160,7 +160,7 @@ export function useLiveTracking(options: UseLiveTrackingOptions = {}) {
 
   // Fetch base data
   const batchesQuery = useQuery({
-    queryKey: ['delivery-batches', 'active', workspaceId],
+    queryKey: ['delivery-batches', 'active-planned', workspaceId],
     queryFn: () => fetchActiveBatches(workspaceId!),
     enabled: isEnabled,
     refetchInterval: 30000,

@@ -107,7 +107,7 @@ export function VehicleForm({ vehicle, onSubmit, onCancel, isSubmitting }: Vehic
           purchase_price: vehicle.purchase_price || undefined,
           vendor_name: vehicle.vendor_name || '',
           warranty_expiry: vehicle.warranty_expiry || '',
-          status: vehicle.status as any,
+          status: (vehicle.status === 'in-use' ? 'in_use' : vehicle.status) as any,
           current_location_id: vehicle.current_location_id || '',
           current_driver_id: vehicle.current_driver_id || '',
           current_mileage: vehicle.current_mileage,

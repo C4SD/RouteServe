@@ -27,11 +27,13 @@ import {
   LayoutGrid,
   Pencil,
   Eye,
+  PackageX,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
   Select,
@@ -601,6 +603,8 @@ export interface Step3PackagingCompletionProps {
   workingSet: WorkingSetItem[];
   facilityPackaging: Record<string, FacilityPackagingData>;
   onSetFacilityPackaging: (facilityId: string, data: FacilityPackagingData | null) => void;
+  packagingEnabled: boolean;
+  onTogglePackaging: (enabled: boolean) => void;
 }
 
 const PAGE_SIZE = 10;
@@ -609,6 +613,8 @@ export function Step3PackagingCompletion({
   workingSet,
   facilityPackaging,
   onSetFacilityPackaging,
+  packagingEnabled,
+  onTogglePackaging,
 }: Step3PackagingCompletionProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'packaged' | 'pending'>('all');
@@ -749,49 +755,78 @@ export function Step3PackagingCompletion({
     <div className="flex flex-col min-h-full">
       {/* ── Summary bar ── */}
       <div className="border-b px-6 py-4 flex-shrink-0 bg-background">
-        <div className="flex items-center flex-wrap gap-4">
-          {/* Facility counts */}
-          <div className="flex items-center gap-4 pr-4 border-r">
-            <div>
-              <p className="text-2xl font-bold leading-none">{allRows.length}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Facilities Selected</p>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center flex-wrap gap-4">
+            {/* Facility counts */}
+            <div className={cn('flex items-center gap-4 pr-4 border-r', !packagingEnabled && 'opacity-40')}>
+              <div>
+                <p className="text-2xl font-bold leading-none">{allRows.length}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Facilities Selected</p>
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                  <span className="text-sm font-semibold text-green-600">{packagedCount}</span>
+                  <span className="text-xs text-muted-foreground">Packaged</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+                  <span className="text-sm font-semibold text-orange-600">{pendingCount}</span>
+                  <span className="text-xs text-muted-foreground">Pending</span>
+                </div>
+              </div>
             </div>
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                <span className="text-sm font-semibold text-green-600">{packagedCount}</span>
-                <span className="text-xs text-muted-foreground">Packaged</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <AlertCircle className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
-                <span className="text-sm font-semibold text-orange-600">{pendingCount}</span>
-                <span className="text-xs text-muted-foreground">Pending</span>
-              </div>
+
+            {/* Metric cards */}
+            <div className={cn('flex items-center gap-5 flex-wrap', !packagingEnabled && 'opacity-40')}>
+              {[
+                { Icon: Boxes, label: 'Total Packages', value: globalTotals.total_packages, color: 'text-blue-500' },
+                { Icon: Scale, label: 'Total Weight', value: `${globalTotals.total_weight.toFixed(0)} kg`, color: 'text-purple-500' },
+                { Icon: BoxIcon, label: 'Total Volume', value: `${globalTotals.total_volume.toFixed(2)} m³`, color: 'text-teal-500' },
+                { Icon: LayoutGrid, label: 'Est. Slots', value: Math.ceil(globalTotals.total_slots), color: 'text-orange-500' },
+                { Icon: Truck, label: 'Est. Vehicles (Van)', value: globalTotals.estimatedVehicles, color: 'text-indigo-500' },
+              ].map(({ Icon, label, value, color }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <Icon className={cn('h-4 w-4 flex-shrink-0', color)} />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground leading-none">{label}</p>
+                    <p className="text-sm font-bold leading-tight">{value}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Metric cards */}
-          <div className="flex items-center gap-5 flex-wrap">
-            {[
-              { Icon: Boxes, label: 'Total Packages', value: globalTotals.total_packages, color: 'text-blue-500' },
-              { Icon: Scale, label: 'Total Weight', value: `${globalTotals.total_weight.toFixed(0)} kg`, color: 'text-purple-500' },
-              { Icon: BoxIcon, label: 'Total Volume', value: `${globalTotals.total_volume.toFixed(2)} m³`, color: 'text-teal-500' },
-              { Icon: LayoutGrid, label: 'Est. Slots', value: Math.ceil(globalTotals.total_slots), color: 'text-orange-500' },
-              { Icon: Truck, label: 'Est. Vehicles (Van)', value: globalTotals.estimatedVehicles, color: 'text-indigo-500' },
-            ].map(({ Icon, label, value, color }) => (
-              <div key={label} className="flex items-center gap-2">
-                <Icon className={cn('h-4 w-4 flex-shrink-0', color)} />
-                <div>
-                  <p className="text-[10px] text-muted-foreground leading-none">{label}</p>
-                  <p className="text-sm font-bold leading-tight">{value}</p>
-                </div>
-              </div>
-            ))}
+          {/* Packaging toggle */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <label htmlFor="packaging-toggle" className="text-sm font-medium cursor-pointer select-none">
+              Packaging
+            </label>
+            <Switch
+              id="packaging-toggle"
+              checked={packagingEnabled}
+              onCheckedChange={onTogglePackaging}
+            />
           </div>
         </div>
       </div>
 
       {/* ── Main body ── */}
+      {!packagingEnabled ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="text-center space-y-3 py-16 px-8 max-w-sm">
+            <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <PackageX className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-semibold text-base">Packaging skipped</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Packaging declarations are turned off for this dispatch. You can enable them using the toggle above.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Facility table */}
         <div className={cn('flex flex-col min-w-0', panelOpen ? 'flex-1' : 'w-full')}>
@@ -1085,9 +1120,10 @@ export function Step3PackagingCompletion({
           </div>
         )}
       </div>
+      )}
 
       {/* ── Validation warning bar ── */}
-      {pendingCount > 0 && (
+      {packagingEnabled && pendingCount > 0 && (
         <div className="border-t bg-orange-50 px-6 py-2.5 flex items-center gap-2 flex-shrink-0">
           <AlertCircle className="h-4 w-4 text-orange-500 flex-shrink-0" />
           <p className="text-xs text-orange-700">

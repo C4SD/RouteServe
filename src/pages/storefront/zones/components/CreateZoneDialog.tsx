@@ -80,11 +80,11 @@ export function CreateZoneDialog({ open, onOpenChange }: CreateZoneDialogProps) 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-[900px] max-h-[90vh] overflow-hidden"
+        className="sm:max-w-[900px] h-[90vh] flex flex-col overflow-hidden p-0"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <form onSubmit={handleSubmit} className="flex flex-col h-full">
-          <DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 px-6 pt-6 pb-0">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Create New Zone</DialogTitle>
             <DialogDescription>
               Add a new operational zone to organize warehouses, LGAs, and facilities.
@@ -170,7 +170,7 @@ export function CreateZoneDialog({ open, onOpenChange }: CreateZoneDialogProps) 
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-2 pt-4 border-t">
+          <div className="flex justify-end gap-2 py-4 border-t mt-auto bg-background px-0">
             <Button
               type="button"
               variant="outline"

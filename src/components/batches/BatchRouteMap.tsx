@@ -173,15 +173,29 @@ export function BatchRouteMap({
           'line-dasharray': [3, 3],
         },
       });
-      // Main route line
+      // Solid road route line (shown when real road route is available)
       map.addLayer({
         id: 'tether-lines',
         type: 'line',
         source: 'tethers',
+        layout: { visibility: 'none' },
         paint: {
           'line-color': tw.blue[500],
           'line-width': 3,
           'line-opacity': 0.8,
+        },
+      });
+      // Dashed fallback line (shown while road route is loading)
+      map.addLayer({
+        id: 'tether-lines-fallback',
+        type: 'line',
+        source: 'tethers',
+        layout: { visibility: 'none' },
+        paint: {
+          'line-color': tw.blue[500],
+          'line-width': 2,
+          'line-opacity': 0.5,
+          'line-dasharray': [2, 2],
         },
       });
 
@@ -223,12 +237,10 @@ export function BatchRouteMap({
       });
 
       // Cursor hint on hover
-      map.on('mouseenter', 'tether-lines', () => {
-        map.getCanvas().style.cursor = 'pointer';
-      });
-      map.on('mouseleave', 'tether-lines', () => {
-        map.getCanvas().style.cursor = '';
-      });
+      for (const id of ['tether-lines', 'tether-lines-fallback'] as const) {
+        map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+      }
       map.on('mouseenter', 'alt-route-lines', () => {
         map.getCanvas().style.cursor = 'pointer';
       });
@@ -422,13 +434,13 @@ export function BatchRouteMap({
         }
       }
 
-      // Set dashed style for straight-line, solid for road
+      // Toggle between solid road layer and dashed fallback layer
       const isRoad = !!(roadRoute && roadRoute.geometry.length > 1);
-      const tetherLayer = map.getLayer('tether-lines');
-      if (tetherLayer) {
-        map.setPaintProperty('tether-lines', 'line-dasharray', isRoad ? null : [2, 2]);
-        map.setPaintProperty('tether-lines', 'line-width', isRoad ? 3 : 2);
-        map.setPaintProperty('tether-lines', 'line-opacity', isRoad ? 0.8 : 0.5);
+      if (map.getLayer('tether-lines')) {
+        map.setLayoutProperty('tether-lines', 'visibility', isRoad ? 'visible' : 'none');
+      }
+      if (map.getLayer('tether-lines-fallback')) {
+        map.setLayoutProperty('tether-lines-fallback', 'visibility', isRoad ? 'none' : 'visible');
       }
     } else if (tetherMode === 'cardinal' && warehouse) {
       // Cardinal mode: depot → each facility individually
@@ -490,10 +502,9 @@ export function BatchRouteMap({
         }
       });
 
-      // Reset tether style for cardinal
-      map.setPaintProperty('tether-lines', 'line-dasharray', null);
-      map.setPaintProperty('tether-lines', 'line-width', 3);
-      map.setPaintProperty('tether-lines', 'line-opacity', 0.8);
+      // Cardinal mode uses solid road-style lines — show solid layer, hide fallback
+      if (map.getLayer('tether-lines')) map.setLayoutProperty('tether-lines', 'visibility', 'visible');
+      if (map.getLayer('tether-lines-fallback')) map.setLayoutProperty('tether-lines-fallback', 'visibility', 'none');
     } else if (tetherMode === 'alternatives') {
       // Show all alternative routes
       if (alternativeRoutes.length > 0) {
@@ -524,6 +535,9 @@ export function BatchRouteMap({
           geometry: { type: 'LineString', coordinates: roadRoute.geometry },
         });
       }
+      // In alternatives mode, always show the solid layer (fallback has no role here)
+      if (map.getLayer('tether-lines')) map.setLayoutProperty('tether-lines', 'visibility', 'visible');
+      if (map.getLayer('tether-lines-fallback')) map.setLayoutProperty('tether-lines-fallback', 'visibility', 'none');
     }
 
     tetherSource.setData({ type: 'FeatureCollection', features: tetherFeatures });

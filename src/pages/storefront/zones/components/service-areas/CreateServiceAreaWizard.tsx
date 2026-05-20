@@ -42,7 +42,7 @@ const STEP_LABELS: Record<Step, string> = {
 
 interface FormData {
   zone_id: string;
-  warehouse_id: string;
+  warehouse_ids: string[];
   name: string;
   service_type: ServiceType;
   delivery_frequency: DeliveryFrequency | '';
@@ -55,7 +55,7 @@ interface FormData {
 
 const INITIAL_FORM: FormData = {
   zone_id: '',
-  warehouse_id: '',
+  warehouse_ids: [],
   name: '',
   service_type: 'general',
   delivery_frequency: '',
@@ -91,12 +91,21 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
   const isLastStep = currentStepIndex === STEPS.length - 1;
 
   const selectedZone = zones?.find(z => z.id === form.zone_id);
-  const selectedWarehouse = warehouses.find(w => w.id === form.warehouse_id);
+  const selectedWarehouses = warehouses.filter(w => form.warehouse_ids.includes(w.id));
+
+  const toggleWarehouse = (warehouseId: string) => {
+    setForm(prev => ({
+      ...prev,
+      warehouse_ids: prev.warehouse_ids.includes(warehouseId)
+        ? prev.warehouse_ids.filter(id => id !== warehouseId)
+        : [...prev.warehouse_ids, warehouseId],
+    }));
+  };
 
   const canProceed = (): boolean => {
     switch (step) {
       case 'zone': return !!form.zone_id;
-      case 'warehouse': return !!form.warehouse_id;
+      case 'warehouse': return form.warehouse_ids.length > 0;
       case 'config': return !!form.name && !!form.service_type;
       case 'facilities': return form.facility_ids.length > 0;
       case 'review': return true;
@@ -117,10 +126,11 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
   };
 
   const handleSubmit = async () => {
+    const [primaryWarehouseId, ...additionalWarehouseIds] = form.warehouse_ids;
     await createMutation.mutateAsync({
       name: form.name,
       zone_id: form.zone_id,
-      warehouse_id: form.warehouse_id,
+      warehouse_id: primaryWarehouseId,
       service_type: form.service_type,
       description: form.description || undefined,
       max_distance_km: form.max_distance_km ? Number(form.max_distance_km) : undefined,
@@ -128,6 +138,9 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
       priority: form.priority,
       sla_hours: form.sla_hours ? Number(form.sla_hours) : undefined,
       facility_ids: form.facility_ids,
+      ...(additionalWarehouseIds.length > 0 && {
+        metadata: { warehouse_ids: form.warehouse_ids },
+      }),
     });
     setForm(INITIAL_FORM);
     setStep('zone');
@@ -226,26 +239,53 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
           {/* Step: Warehouse */}
           {step === 'warehouse' && (
             <div className="space-y-4">
-              <Label>Select Service Owner (Warehouse)</Label>
-              <div className="grid gap-3 md:grid-cols-2">
-                {warehouses.map((wh) => (
-                  <Card
-                    key={wh.id}
-                    className={`cursor-pointer transition-all ${
-                      form.warehouse_id === wh.id
-                        ? 'ring-2 ring-primary'
-                        : 'hover:shadow-md'
-                    }`}
-                    onClick={() => setForm(prev => ({ ...prev, warehouse_id: wh.id }))}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Select Service Owner(s)</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {form.warehouse_ids.length === 0
+                      ? 'Select one or more warehouses'
+                      : `${form.warehouse_ids.length} warehouse${form.warehouse_ids.length !== 1 ? 's' : ''} selected`}
+                  </p>
+                </div>
+                {form.warehouse_ids.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground"
+                    onClick={() => setForm(prev => ({ ...prev, warehouse_ids: [] }))}
                   >
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">{wh.name}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-xs text-muted-foreground">{wh.address || 'No address'}</p>
-                    </CardContent>
-                  </Card>
-                ))}
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {warehouses.map((wh) => {
+                  const isSelected = form.warehouse_ids.includes(wh.id);
+                  return (
+                    <Card
+                      key={wh.id}
+                      className={`cursor-pointer transition-all ${
+                        isSelected ? 'ring-2 ring-primary bg-primary/5' : 'hover:shadow-md'
+                      }`}
+                      onClick={() => toggleWarehouse(wh.id)}
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleWarehouse(wh.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <CardTitle className="text-sm">{wh.name}</CardTitle>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-xs text-muted-foreground">{wh.address || 'No address'}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -494,9 +534,22 @@ export function CreateServiceAreaWizard({ open, onOpenChange }: CreateServiceAre
                     <span className="text-muted-foreground">Zone</span>
                     <span className="font-medium">{selectedZone?.name || '—'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Warehouse</span>
-                    <span className="font-medium">{selectedWarehouse?.name || '—'}</span>
+                  <div className="flex justify-between items-start">
+                    <span className="text-muted-foreground">
+                      {selectedWarehouses.length === 1 ? 'Warehouse' : 'Warehouses'}
+                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      {selectedWarehouses.length === 0
+                        ? <span className="font-medium">—</span>
+                        : selectedWarehouses.map((wh, i) => (
+                          <span key={wh.id} className="font-medium text-right">
+                            {wh.name}{i === 0 && selectedWarehouses.length > 1 && (
+                              <Badge variant="secondary" className="ml-1.5 text-xs">primary</Badge>
+                            )}
+                          </span>
+                        ))
+                      }
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Service Type</span>

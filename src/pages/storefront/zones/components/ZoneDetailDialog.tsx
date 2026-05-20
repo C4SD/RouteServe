@@ -1,17 +1,19 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Users, Edit, Trash2, TrendingUp, Globe } from 'lucide-react';
+import { MapPin, Users, Edit, Trash2, TrendingUp, Globe, Building2 } from 'lucide-react';
 import { OperationalZone } from '@/types/zones';
-import { useZoneSummary } from '@/hooks/useOperationalZones';
+import { useZoneSummary, useDeleteZone } from '@/hooks/useOperationalZones';
 import { useAllLGAsWithZones } from '@/hooks/useAdminUnits';
 import { useFacilities } from '@/hooks/useFacilities';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { useDeleteZone } from '@/hooks/useOperationalZones';
 
 interface ZoneDetailDialogProps {
   zone: OperationalZone;
@@ -22,10 +24,24 @@ interface ZoneDetailDialogProps {
 
 export function ZoneDetailDialog({ zone, open, onOpenChange, onEditRequest }: ZoneDetailDialogProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  
+  const { workspaceId } = useWorkspace();
+
   const { data: summary, isLoading: summaryLoading } = useZoneSummary(zone.id);
-  const { data: lgas, isLoading: lgasLoading } = useAllLGAsWithZones({ zone_id: zone.id });
+  const { data: lgas, isLoading: lgasLoading } = useAllLGAsWithZones({ zone_id: zone.id, workspaceId: workspaceId ?? undefined });
   const { data: facilitiesData, isLoading: facilitiesLoading } = useFacilities({ zone_id: zone.id });
+
+  const { data: zoneWarehouses, isLoading: warehousesLoading } = useQuery({
+    queryKey: ['zone-warehouses', zone.id, workspaceId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('warehouses')
+        .select('id, name, code, city, state')
+        .eq('zone_id', zone.id);
+      if (error) return [];
+      return data as { id: string; name: string; code: string | null; city: string | null; state: string | null }[];
+    },
+    enabled: !!zone.id,
+  });
 
   const deleteZone = useDeleteZone();
 
@@ -87,15 +103,37 @@ export function ZoneDetailDialog({ zone, open, onOpenChange, onEditRequest }: Zo
           </div>
 
           <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="warehouses">
+                Warehouses
+                {(zoneWarehouses?.length ?? 0) > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
+                    {zoneWarehouses!.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="lgas">LGAs</TabsTrigger>
               <TabsTrigger value="facilities">Facilities</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4 mt-4">
               {/* Summary Stats */}
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Warehouses</CardTitle>
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    {warehousesLoading ? (
+                      <Skeleton className="h-8 w-16" />
+                    ) : (
+                      <div className="text-2xl font-bold">{zoneWarehouses?.length || 0}</div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">LGAs</CardTitle>
@@ -191,6 +229,53 @@ export function ZoneDetailDialog({ zone, open, onOpenChange, onEditRequest }: Zo
               )}
             </TabsContent>
 
+            {/* ── Warehouses Tab ─────────────────────────────────────────── */}
+            <TabsContent value="warehouses" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Warehouses in {zone.name}
+                  </CardTitle>
+                  <CardDescription>
+                    {zoneWarehouses?.length || 0} warehouse(s) serving this zone
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {warehousesLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2].map((i) => (
+                        <Skeleton key={i} className="h-16 w-full" />
+                      ))}
+                    </div>
+                  ) : zoneWarehouses && zoneWarehouses.length > 0 ? (
+                    <div className="space-y-3">
+                      {zoneWarehouses.map((warehouse) => {
+                        const lgaCount = (lgas || []).filter((l: any) => l.warehouse_id === warehouse.id).length;
+                        return (
+                          <div key={warehouse.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div>
+                              <p className="font-medium">{warehouse.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {warehouse.code && `${warehouse.code} · `}
+                                {[warehouse.city, warehouse.state].filter(Boolean).join(', ') || 'No location'}
+                                {' · '}{lgaCount} LGA{lgaCount !== 1 ? 's' : ''} bound
+                              </p>
+                            </div>
+                            <Badge variant="secondary">Warehouse</Badge>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-center py-8">
+                      No warehouses assigned to this zone yet. Use Edit to add warehouses.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="lgas" className="mt-4">
               <Card>
                 <CardHeader>
@@ -208,20 +293,28 @@ export function ZoneDetailDialog({ zone, open, onOpenChange, onEditRequest }: Zo
                     </div>
                   ) : lgas && lgas.length > 0 ? (
                     <div className="space-y-3">
-                      {lgas.map((lga) => (
-                        <div
-                          key={lga.id}
-                          className="flex items-center justify-between p-3 border rounded-lg"
-                        >
-                          <div>
-                            <p className="font-medium">{lga.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              State: {(lga as any).parent?.name || 'N/A'}
-                              {lga.population && ` • Population: ${lga.population.toLocaleString()}`}
-                            </p>
+                      {lgas.map((lga) => {
+                        const servingWarehouse = zoneWarehouses?.find(w => w.id === (lga as any).warehouse_id);
+                        return (
+                          <div
+                            key={lga.id}
+                            className="flex items-center justify-between p-3 border rounded-lg"
+                          >
+                            <div>
+                              <p className="font-medium">{lga.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                State: {(lga as any).parent?.name || 'N/A'}
+                                {lga.population && ` • Population: ${lga.population.toLocaleString()}`}
+                              </p>
+                            </div>
+                            {servingWarehouse && (
+                              <Badge variant="outline" className="text-xs shrink-0 ml-2">
+                                {servingWarehouse.name}
+                              </Badge>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-muted-foreground text-center py-8">
