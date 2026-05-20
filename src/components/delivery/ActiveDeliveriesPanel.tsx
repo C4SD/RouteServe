@@ -11,35 +11,34 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface ActiveDeliveriesPanelProps {
   batches: DeliveryBatch[];
   selectedBatchId: string | null;
-  statusFilter: 'all' | 'assigned' | 'in-progress' | 'completed' | 'delayed';
+  statusFilter: 'all' | 'planned' | 'assigned' | 'in-progress' | 'completed' | 'delayed';
   onBatchClick?: (batchId: string) => void;
-  onFilterChange?: (filter: 'all' | 'assigned' | 'in-progress' | 'completed' | 'delayed') => void;
+  onFilterChange?: (filter: 'all' | 'planned' | 'assigned' | 'in-progress' | 'completed' | 'delayed') => void;
 }
 
-const ActiveDeliveriesPanel = ({ 
-  batches, 
+const ActiveDeliveriesPanel = ({
+  batches,
   selectedBatchId,
   statusFilter,
   onBatchClick,
-  onFilterChange 
+  onFilterChange
 }: ActiveDeliveriesPanelProps) => {
   const { data: drivers = [], isLoading: driversLoading } = useDrivers();
   const { data: vehicles = [], isLoading: vehiclesLoading } = useVehicles();
-  // Filter batches based on status filter
+  // Filter batches based on status filter — "all" includes every status
   const filteredBatches = batches.filter(batch => {
-    if (statusFilter === 'all') {
-      return batch.status === 'in-progress' || batch.status === 'assigned' || batch.status === 'completed';
-    }
+    if (statusFilter === 'all') return true;
     return batch.status === statusFilter;
   });
 
   // Count batches by status for tabs
   const statusCounts = {
-    all: batches.filter(b => b.status === 'in-progress' || b.status === 'assigned' || b.status === 'completed').length,
+    all: batches.length,
+    planned: batches.filter(b => b.status === 'planned').length,
     assigned: batches.filter(b => b.status === 'assigned').length,
     'in-progress': batches.filter(b => b.status === 'in-progress').length,
     completed: batches.filter(b => b.status === 'completed').length,
-    delayed: 0, // Would need actual delay logic
+    delayed: 0,
   };
 
   const getPriorityColor = (priority: string) => {
@@ -55,7 +54,18 @@ const ActiveDeliveriesPanel = ({
     switch (status) {
       case 'in-progress': return 'bg-success';
       case 'assigned': return 'bg-primary';
+      case 'planned': return 'bg-secondary text-secondary-foreground';
       default: return 'bg-muted-foreground';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'in-progress': return '🚛 In Progress';
+      case 'assigned': return '📋 Assigned';
+      case 'planned': return '📝 Planned';
+      case 'completed': return '✓ Completed';
+      default: return status;
     }
   };
 
@@ -85,12 +95,12 @@ const ActiveDeliveriesPanel = ({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 mb-4">
           <Truck className="h-5 w-5" />
-          Active Deliveries
+          Deliveries
         </CardTitle>
         
         {/* Status Filter Tabs */}
         <div className="flex gap-1 flex-wrap">
-          {(['all', 'assigned', 'in-progress', 'completed', 'delayed'] as const).map((status) => (
+          {(['all', 'planned', 'assigned', 'in-progress', 'completed'] as const).map((status) => (
             <button
               key={status}
               onClick={() => onFilterChange?.(status)}
@@ -100,9 +110,9 @@ const ActiveDeliveriesPanel = ({
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
-              {status === 'all' ? 'All' : 
+              {status === 'all' ? 'All' :
                status === 'in-progress' ? 'In Progress' :
-               status.charAt(0).toUpperCase() + status.slice(1)} 
+               status.charAt(0).toUpperCase() + status.slice(1)}
               <span className="ml-1.5 opacity-70">({statusCounts[status]})</span>
             </button>
           ))}
@@ -120,7 +130,7 @@ const ActiveDeliveriesPanel = ({
             ) : filteredBatches.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Package className="h-12 w-12 mb-3 opacity-50" />
-                <p className="text-sm">No active deliveries</p>
+                <p className="text-sm">No deliveries found</p>
               </div>
             ) : (
               filteredBatches.map((batch) => {
@@ -146,7 +156,7 @@ const ActiveDeliveriesPanel = ({
                             <div className="font-semibold mb-1">{batch.name}</div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge className={getStatusColor(batch.status)}>
-                                {batch.status === 'in-progress' ? '🚛 In Progress' : '📋 Assigned'}
+                                {getStatusLabel(batch.status)}
                               </Badge>
                               <Badge variant="outline" className={getPriorityColor(batch.priority)}>
                                 {batch.priority}
@@ -209,6 +219,11 @@ const ActiveDeliveriesPanel = ({
                             </div>
                           )}
                           
+                          {batch.status === 'planned' && (
+                            <div className="text-xs text-muted-foreground">
+                              Scheduled — not yet assigned
+                            </div>
+                          )}
                           {batch.status === 'assigned' && (
                             <div className="text-xs text-muted-foreground">
                               Ready to depart from {batch.warehouseName}

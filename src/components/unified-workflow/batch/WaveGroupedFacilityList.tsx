@@ -277,7 +277,7 @@ function WaveGroupedContent({
                       {fIdx + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">{facility.facility_name}</p>
+                      <p className="text-xs font-medium break-words leading-snug">{facility.facility_name}</p>
                     </div>
                     <Badge variant="outline" className="text-[10px] px-1 py-0 flex-shrink-0">
                       <Package className="h-2.5 w-2.5 mr-0.5" />
@@ -324,7 +324,7 @@ function FlatSequenceContent({ facilities }: { facilities: WorkingSetItem[] }) {
               {idx + 1}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{facility.facility_name}</p>
+              <p className="text-sm font-medium break-words leading-snug">{facility.facility_name}</p>
             </div>
             <Badge variant="outline" className="text-xs px-1.5 py-0">
               <Package className="h-3 w-3 mr-1" />

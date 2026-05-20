@@ -315,8 +315,16 @@ export function DashboardMapLibre({
   }, [selectedBatchId, batches, warehouses, mapLoaded]);
 
   return (
-    <div className={cn('relative', className)}>
+    <div className={cn('relative bg-muted/20', className)}>
       <div ref={containerRef} className="absolute inset-0" />
+      {!mapLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/30 z-10">
+          <div className="flex flex-col items-center gap-2 text-muted-foreground text-sm">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            Loading map…
+          </div>
+        </div>
+      )}
     </div>
   );
 }

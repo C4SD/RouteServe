@@ -55,13 +55,13 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
   const { data: zoneWarehouses } = useQuery({
     queryKey: ['zone-warehouses', zone.id, workspaceId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('warehouses')
         .select('id, name, code, city, state')
         .eq('zone_id', zone.id)
         .eq('workspace_id', workspaceId!);
       if (error) throw error;
-      return data as { id: string; name: string; code: string | null; city: string | null; state: string | null }[];
+      return (data ?? []) as { id: string; name: string; code: string | null; city: string | null; state: string | null }[];
     },
     enabled: !!workspaceId,
   });
@@ -70,14 +70,14 @@ export function EditZoneDialog({ zone, open, onOpenChange }: EditZoneDialogProps
   const { data: allWarehousesData } = useQuery({
     queryKey: ['warehouses-for-zone', workspaceId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('warehouses')
         .select('id, name, code, city, state, zone_id')
         .eq('workspace_id', workspaceId!)
-        .eq('is_active', true)
+        .neq('is_active', false)
         .order('name');
       if (error) throw error;
-      return data as { id: string; name: string; code: string | null; city: string | null; state: string | null; zone_id: string | null }[];
+      return (data ?? []) as unknown as { id: string; name: string; code: string | null; city: string | null; state: string | null; zone_id: string | null }[];
     },
     enabled: !!workspaceId,
   });

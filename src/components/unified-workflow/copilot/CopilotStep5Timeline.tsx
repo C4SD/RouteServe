@@ -245,10 +245,10 @@ function RunCard({ run, vehicles, drivers, onUpdateRun }: RunCardProps) {
             </p>
             {run.candidates.map((c, i) => (
               <div key={c.facility_id} className="flex items-center gap-2 text-xs py-1">
-                <span className="text-muted-foreground w-4">{i + 1}.</span>
-                <span className="font-medium">{c.facility_name}</span>
-                {c.lga && <span className="text-muted-foreground">{c.lga}</span>}
-                <span className="text-muted-foreground ml-auto">
+                <span className="shrink-0 text-muted-foreground w-4">{i + 1}.</span>
+                <span className="flex-1 min-w-0 font-medium break-words leading-snug">{c.facility_name}</span>
+                {c.lga && <span className="shrink-0 text-muted-foreground">{c.lga}</span>}
+                <span className="shrink-0 text-muted-foreground ml-auto">
                   {c.slot_demand} slot{c.slot_demand !== 1 ? 's' : ''}
                 </span>
               </div>

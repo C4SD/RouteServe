@@ -29,7 +29,7 @@ const CommandCenter = ({ facilities, warehouses, batches }: CommandCenterProps) 
   const navigate = useNavigate();
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'assigned' | 'in-progress' | 'completed' | 'delayed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'planned' | 'assigned' | 'in-progress' | 'completed' | 'delayed'>('all');
   const [dateRange, setDateRange] = useState<{ start: string | null; end: string | null }>({
     start: null,
     end: null

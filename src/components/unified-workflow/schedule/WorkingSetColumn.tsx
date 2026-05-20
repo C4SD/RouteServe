@@ -226,68 +226,75 @@ function WorkingSetCard({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       className={cn(
-        'group flex items-center gap-2 p-2 rounded-lg border bg-card',
-        'transition-all duration-150',
+        'flex items-stretch rounded-lg border bg-card transition-all duration-150',
         isDragging && 'opacity-50 scale-95',
         isDragOver && 'border-primary border-dashed bg-primary/5'
       )}
     >
-      {/* Drag Handle */}
-      <div className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground">
-        <GripVertical className="h-4 w-4" />
+      {/* Drag handle — full-height left strip */}
+      <div className="flex items-center px-1.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground border-r border-border/50 rounded-l-lg">
+        <GripVertical className="h-4 w-4 shrink-0" />
       </div>
 
-      {/* Sequence Number */}
-      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-medium flex items-center justify-center">
-        {index + 1}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm truncate">{item.facility_name}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          {item.lga && (
-            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-              <MapPin className="h-3 w-3" />
-              {item.lga}
-            </span>
-          )}
-          {item.slot_demand > 0 && (
-            <Badge variant="outline" className="text-xs px-1 py-0 h-4">
-              {item.slot_demand} slots
-            </Badge>
-          )}
+      {/* Card body */}
+      <div className="flex-1 min-w-0 px-2.5 py-2">
+        {/* Row 1: number + name (wraps) + remove button */}
+        <div className="flex items-start gap-2">
+          <span className="shrink-0 w-5 h-5 mt-0.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center leading-none">
+            {index + 1}
+          </span>
+          <p className="flex-1 min-w-0 text-sm font-medium leading-snug break-words">
+            {item.facility_name}
+          </p>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 h-6 w-6 -mt-0.5 -mr-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            onClick={onRemove}
+            title="Remove"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
         </div>
-      </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          disabled={isFirst}
-          onClick={onMoveUp}
-        >
-          <ChevronUp className="h-3 w-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          disabled={isLast}
-          onClick={onMoveDown}
-        >
-          <ChevronDown className="h-3 w-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-destructive hover:text-destructive"
-          onClick={onRemove}
-        >
-          <X className="h-3 w-3" />
-        </Button>
+        {/* Row 2: LGA + slots (left) · reorder buttons (right) */}
+        <div className="flex items-center justify-between gap-2 mt-1.5 pl-7">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {item.lga && (
+              <span className="text-xs text-muted-foreground flex items-center gap-0.5 truncate">
+                <MapPin className="h-3 w-3 shrink-0" />
+                {item.lga}
+              </span>
+            )}
+            {item.slot_demand > 0 && (
+              <Badge variant="outline" className="shrink-0 text-xs px-1.5 py-0 h-4">
+                {item.slot_demand} slots
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground disabled:opacity-30"
+              disabled={isFirst}
+              onClick={onMoveUp}
+              title="Move up"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground disabled:opacity-30"
+              disabled={isLast}
+              onClick={onMoveDown}
+              title="Move down"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

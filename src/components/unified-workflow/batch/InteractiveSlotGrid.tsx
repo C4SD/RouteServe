@@ -307,7 +307,7 @@ function SlotCell({
         <Button
           variant="ghost"
           size="icon"
-          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground shadow-sm"
           onClick={onUnassign}
         >
           <X className="h-3 w-3" />

@@ -17,6 +17,7 @@ import {
   Package,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
   SlidersHorizontal,
   CheckCircle2,
   Circle,
@@ -59,6 +60,7 @@ interface VehicleCardData {
   hasWarning: boolean;
   position: [number, number];
   batchName?: string;
+  batchId?: string | null;
   lastUpdate: Date;
 }
 
@@ -184,7 +186,7 @@ function EntityToggleButton({ icon: Icon, active, count, color, onClick }: Entit
 
 /* ── Main component ──────────────────────────────────── */
 
-export function LiveFilterPanel() {
+export function LiveFilterPanel({ onTripSelect }: { onTripSelect?: (batchId: string | null, label?: string) => void }) {
   const filters = useLiveMapStore((s) => s.filters);
   const toggleFilter = useLiveMapStore((s) => s.toggleFilter);
   const resetFilters = useLiveMapStore((s) => s.resetFilters);
@@ -209,6 +211,7 @@ export function LiveFilterPanel() {
   const [warehouseTab, setWarehouseTab] = useState<StatusTab>('all');
   const [zoneTab, setZoneTab]           = useState<StatusTab>('all');
   const [collapsed, setCollapsed] = useState(false);
+  const [activeTripCardId, setActiveTripCardId] = useState<string | null>(null);
 
   const cfg = panelConfig[activePanel];
 
@@ -221,6 +224,7 @@ export function LiveFilterPanel() {
       status: getVehicleStatus(v), vehicleType: v.type, hasWarning: false,
       position: v.position,
       batchName: v.batchId ? `Batch ${v.batchId.slice(0, 8)}` : undefined,
+      batchId: v.batchId,
       lastUpdate: v.lastUpdate,
     }));
     const dc: VehicleCardData[] = drivers
@@ -232,6 +236,7 @@ export function LiveFilterPanel() {
         status: getDriverStatus(d), vehicleType: 'driver', hasWarning: d.status === 'DELAYED',
         position: d.position,
         batchName: d.batchId ? `Batch ${d.batchId.slice(0, 8)}` : undefined,
+        batchId: d.batchId,
         lastUpdate: d.lastUpdate,
       }));
     return [...vc, ...dc];
@@ -276,7 +281,7 @@ export function LiveFilterPanel() {
   /* ── Delivery list ───────────────────────────────────── */
   const filteredDeliveries = useMemo(() => {
     let r = deliveries;
-    if (deliveryTab === 'active')    r = r.filter((d) => d.status === 'in-progress' || d.status === 'assigned');
+    if (deliveryTab === 'active')    r = r.filter((d) => d.status === 'planned' || d.status === 'assigned' || d.status === 'in-progress');
     if (deliveryTab === 'completed') r = r.filter((d) => d.status === 'completed');
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -287,7 +292,7 @@ export function LiveFilterPanel() {
 
   const deliveryTabCounts = useMemo(() => ({
     all: deliveries.length,
-    active: deliveries.filter((d) => d.status === 'in-progress' || d.status === 'assigned').length,
+    active: deliveries.filter((d) => d.status === 'planned' || d.status === 'assigned' || d.status === 'in-progress').length,
     completed: deliveries.filter((d) => d.status === 'completed').length,
   }), [deliveries]);
 
@@ -541,13 +546,27 @@ export function LiveFilterPanel() {
           {activePanel === 'vehicles' && (
             filteredVehicleCards.length === 0
               ? <EmptyState icon={Truck} message="No vehicles found" />
-              : filteredVehicleCards.map((card) => (
-                <VehicleCard
-                  key={`${card.type}-${card.id}`}
-                  card={card}
-                  onClick={() => selectEntity(card.id, card.type === 'vehicle' ? 'vehicle' : 'driver')}
-                />
-              ))
+              : filteredVehicleCards.map((card) => {
+                const cardKey = `${card.type}-${card.id}`;
+                const isActive = activeTripCardId === cardKey;
+                return (
+                  <VehicleCard
+                    key={cardKey}
+                    card={card}
+                    onClick={() => selectEntity(card.id, card.type === 'vehicle' ? 'vehicle' : 'driver')}
+                    isExpanded={isActive}
+                    onTripToggle={() => {
+                      if (isActive) {
+                        setActiveTripCardId(null);
+                        onTripSelect?.(null);
+                      } else {
+                        setActiveTripCardId(cardKey);
+                        onTripSelect?.(card.batchId || null, card.label);
+                      }
+                    }}
+                  />
+                );
+              })
           )}
 
           {/* Drivers */}
@@ -721,10 +740,18 @@ function EmptyState({ icon: Icon, message }: { icon: React.ComponentType<{ class
 
 /* ── Vehicle Card ─────────────────────────────────────── */
 
-function VehicleCard({ card, onClick }: { card: VehicleCardData; onClick: () => void }) {
+function VehicleCard({ card, onClick, isExpanded, onTripToggle }: {
+  card: VehicleCardData;
+  onClick: () => void;
+  isExpanded: boolean;
+  onTripToggle: () => void;
+}) {
   const cfg = vehicleStatusConfig[card.status];
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors group">
+    <div
+      className={cn('w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors group cursor-pointer', isExpanded && 'bg-accent/30')}
+      onClick={onClick}
+    >
       <div className="relative shrink-0">
         <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center',
           card.status === 'driving' || card.status === 'delayed' ? 'bg-emerald-50 border border-emerald-200' : 'bg-muted/60 border border-border')}>
@@ -748,11 +775,19 @@ function VehicleCard({ card, onClick }: { card: VehicleCardData; onClick: () => 
         <Badge variant="outline" className={cn('text-[10px] h-5 px-1.5 border font-medium', cfg.labelClass)}>
           {cfg.label}
         </Badge>
-        <span className="text-[10px] text-emerald-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-          TRIP <ChevronRight className="h-3 w-3" />
-        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onTripToggle(); }}
+          className={cn(
+            'text-[10px] font-medium flex items-center gap-0.5 transition-all rounded px-1',
+            isExpanded
+              ? 'text-blue-600 opacity-100'
+              : 'text-emerald-600 opacity-0 group-hover:opacity-100 hover:bg-emerald-50',
+          )}
+        >
+          TRIP {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </button>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -797,18 +832,21 @@ function DriverCard({ driver, onClick }: { driver: LiveDriver; onClick: () => vo
 /* ── Delivery Card ────────────────────────────────────── */
 
 function DeliveryCard({ delivery, onClick }: { delivery: LiveDelivery; onClick: () => void }) {
-  const isActive = delivery.status === 'in-progress' || delivery.status === 'assigned';
+  const isRunning = delivery.status === 'in-progress' || delivery.status === 'assigned';
+  const isPlanned = delivery.status === 'planned';
   const pct = Math.round(delivery.progress);
   return (
     <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors group">
       <div className="relative shrink-0">
         <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center',
-          isActive ? 'bg-green-50 border border-green-200' : 'bg-muted/60 border border-border')}>
-          <Package className={cn('h-5 w-5', isActive ? 'text-green-600' : 'text-muted-foreground')} />
+          isRunning ? 'bg-green-50 border border-green-200'
+          : isPlanned ? 'bg-blue-50 border border-blue-200'
+          : 'bg-muted/60 border border-border')}>
+          <Package className={cn('h-5 w-5', isRunning ? 'text-green-600' : isPlanned ? 'text-blue-600' : 'text-muted-foreground')} />
         </div>
         <span className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card',
-          isActive ? 'bg-green-500' : 'bg-gray-400')}>
-          {isActive && <span className="absolute inset-0 rounded-full animate-ping opacity-75 bg-green-500" />}
+          isRunning ? 'bg-green-500' : isPlanned ? 'bg-blue-400' : 'bg-gray-400')}>
+          {isRunning && <span className="absolute inset-0 rounded-full animate-ping opacity-75 bg-green-500" />}
         </span>
       </div>
       <div className="flex-1 min-w-0">
@@ -828,8 +866,10 @@ function DeliveryCard({ delivery, onClick }: { delivery: LiveDelivery; onClick: 
       </div>
       <div className="shrink-0 flex flex-col items-end gap-1">
         <Badge variant="outline" className={cn('text-[10px] h-5 px-1.5 border font-medium',
-          isActive ? 'text-green-700 bg-green-50 border-green-200' : 'text-gray-600 bg-gray-50 border-gray-200')}>
-          {isActive ? 'Active' : 'Done'}
+          isRunning ? 'text-green-700 bg-green-50 border-green-200'
+          : isPlanned ? 'text-blue-700 bg-blue-50 border-blue-200'
+          : 'text-gray-600 bg-gray-50 border-gray-200')}>
+          {isRunning ? 'Active' : isPlanned ? 'Planned' : 'Done'}
         </Badge>
         <span className="text-[10px] text-muted-foreground/70 font-mono">{pct}%</span>
       </div>

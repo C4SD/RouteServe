@@ -6,32 +6,40 @@ import { useState, useCallback } from 'react';
 import { LiveMapView } from '../components/LiveMapView';
 import { LiveFilterPanel } from '../components/LiveFilterPanel';
 import { EntityDetailPanel } from '../components/EntityDetailPanel';
+import { TripDetailPanel } from '../components/TripDetailPanel';
 import { useLiveMapStore } from '@/stores/liveMapStore';
 import { LiveTrackingProvider, useLiveTrackingCtx } from '@/contexts/LiveTrackingContext';
 import type { EntityType } from '@/types/live-map';
 
 function LiveMapPageInner() {
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
+  const [tripPanel, setTripPanel] = useState<{ batchId: string | null; label?: string } | null>(null);
   const selectedEntity = useLiveMapStore((s) => s.selectedEntity);
   const clearSelection = useLiveMapStore((s) => s.clearSelection);
 
-  const { getDriver, getVehicle, getDelivery, getFacility } = useLiveTrackingCtx();
+  const { getDriver, getVehicle, getDelivery } = useLiveTrackingCtx();
 
-  // Handle entity selection from map
   const handleEntitySelect = useCallback(
-    (entityId: string, entityType: EntityType) => {
+    (_entityId: string, _entityType: EntityType) => {
       setDetailPanelOpen(true);
     },
     []
   );
 
-  // Close detail panel
   const handleCloseDetail = useCallback(() => {
     setDetailPanelOpen(false);
     clearSelection();
   }, [clearSelection]);
 
-  // Get selected entity data (facility/warehouse fetch their own rich data inside the panel)
+  const handleTripSelect = useCallback((batchId: string | null, label?: string) => {
+    // label undefined = explicit close; label present = open (batchId may be null for unassigned vehicles)
+    if (label === undefined) {
+      setTripPanel(null);
+    } else {
+      setTripPanel({ batchId, label });
+    }
+  }, []);
+
   const selectedEntityData = selectedEntity
     ? selectedEntity.type === 'driver'
       ? getDriver(selectedEntity.id)
@@ -39,20 +47,29 @@ function LiveMapPageInner() {
         ? getVehicle(selectedEntity.id)
         : selectedEntity.type === 'delivery'
           ? getDelivery(selectedEntity.id)
-          : null // facility/warehouse self-fetch
+          : null
     : null;
 
   return (
     <div className="absolute inset-0 flex overflow-hidden">
       {/* Filter sidebar */}
-      <LiveFilterPanel />
+      <LiveFilterPanel onTripSelect={handleTripSelect} />
+
+      {/* Trip detail panel — slides in between filter and map */}
+      {tripPanel && (
+        <TripDetailPanel
+          batchId={tripPanel.batchId}
+          vehicleLabel={tripPanel.label}
+          onClose={() => setTripPanel(null)}
+        />
+      )}
 
       {/* Map container */}
       <div className="flex-1 relative overflow-hidden">
         <LiveMapView onEntitySelect={handleEntitySelect} />
       </div>
 
-      {/* Detail panel (slides in from right) */}
+      {/* Entity detail panel (slides in from right) */}
       {detailPanelOpen && selectedEntity && (
         <EntityDetailPanel
           entityId={selectedEntity.id}

@@ -179,14 +179,13 @@ export default function SettingsGeneralPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workspace_countries')
-        .select('id, country_id, is_primary, countries(id, name, iso_code)')
+        .select('id, country_id, is_primary')
         .eq('workspace_id', workspaceId!);
       if (error) throw error;
       return (data || []) as Array<{
         id: string;
         country_id: string;
         is_primary: boolean;
-        countries: { id: string; name: string; iso_code: string } | null;
       }>;
     },
     enabled: !!workspaceId,
@@ -194,6 +193,12 @@ export default function SettingsGeneralPage() {
 
   // Check which countries have OSM boundaries already imported
   const linkedCountryIdsList = workspaceCountries.map((wc) => wc.country_id);
+
+  // Enrich workspace countries with country details resolved from allCountries
+  const enrichedWorkspaceCountries = workspaceCountries.map((wc) => ({
+    ...wc,
+    countries: allCountries.find((c) => c.id === wc.country_id) ?? null,
+  }));
   const { data: boundaryCountsRaw = [] } = useQuery({
     queryKey: ['boundary-counts', workspaceId, linkedCountryIdsList.join(',')],
     queryFn: async () => {
@@ -751,11 +756,11 @@ export default function SettingsGeneralPage() {
               description="Countries where this workspace operates. The primary country determines default boundaries and map center."
             >
               <div className="space-y-3">
-                {workspaceCountries.length === 0 ? (
+                {enrichedWorkspaceCountries.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No countries configured yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {workspaceCountries.map((wc) => {
+                    {enrichedWorkspaceCountries.map((wc) => {
                       const hasBoundaries = (boundaryCounts[wc.country_id] || 0) > 0;
                       const isoCode = wc.countries?.iso_code || '';
                       const adminConfig = COUNTRY_ADMIN_LEVELS[isoCode];

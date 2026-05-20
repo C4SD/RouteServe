@@ -54,10 +54,8 @@ import {
 import type { WorkingSetItem, AiOptimizationOptions } from '@/types/unified-workflow';
 import type { RoutePoint } from '@/types/scheduler';
 import type { DispatchRunProjection, ExecutionWaveProjection } from '@/types/unified-workflow';
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import { useTheme } from 'next-themes';
-import { getMapLibreStyle } from '@/lib/mapConfig';
+import { BatchRouteMap } from '@/components/batches/BatchRouteMap';
+import type { Facility } from '@/types';
 
 export interface FacilityWithCoords {
   id: string;
@@ -128,14 +126,13 @@ export function Step4Route({
   onOptimize,
   executionWaves = [],
 }: Step4RouteProps) {
-  const { theme } = useTheme();
-  const mapContainerRef = React.useRef<HTMLDivElement>(null);
-  const mapRef = React.useRef<maplibregl.Map | null>(null);
-  const markersRef = React.useRef<Map<string, maplibregl.Marker>>(new Map());
+  const [isMapFullscreen, setIsMapFullscreen] = React.useState(false);
 
   // Selected run for optimization
   const [selectedRunId, setSelectedRunId] = React.useState<string | null>(null);
   const [selectedOptMode, setSelectedOptMode] = React.useState<OptimizationMode>('shortest_distance');
+  // Selected stop in the sequence (for tact-map focus + per-stop metrics)
+  const [selectedStopIndex, setSelectedStopIndex] = React.useState<number | null>(null);
 
   // Derive all runs from waves
   const allRuns = React.useMemo(
@@ -165,6 +162,19 @@ export function Step4Route({
 
   const hasRoute = optimizedRoute.length > 0;
 
+  // Ordered stop list (respects optimized order when available)
+  const orderedStops = React.useMemo(() => {
+    if (selectedRun) return displayFacilities;
+    if (hasRoute && optimizedRoute.length > 0) {
+      return optimizedRoute
+        .map(pt => facilities.find(f => f.facility_id === pt.facility_id))
+        .filter((f): f is WorkingSetItem => !!f);
+    }
+    return facilities;
+  }, [selectedRun, displayFacilities, hasRoute, optimizedRoute, facilities]);
+
+  const selectedStop = selectedStopIndex !== null ? (orderedStops[selectedStopIndex] ?? null) : null;
+
   // Format helpers
   const durationLabel = React.useMemo(() => {
     if (!estimatedDurationMin) return '—';
@@ -182,155 +192,30 @@ export function Step4Route({
     return selectedRun.return_time;
   }, [selectedRun]);
 
-  // Map bounds
-  const bounds = React.useMemo(() => {
-    const points: [number, number][] = [];
-    if (startLocation?.lat && startLocation?.lng) {
-      points.push([startLocation.lng, startLocation.lat]);
-    }
-    displayFacilities.forEach(item => {
-      const f = facilityMap.get(item.facility_id);
-      if (f?.lat && f?.lng) points.push([f.lng, f.lat]);
-    });
+  // Convert facilities for BatchRouteMap
+  const mapFacilities = React.useMemo<Facility[]>(() => {
+    return displayFacilities
+      .map(item => {
+        const coords = facilityMap.get(item.facility_id);
+        if (!coords?.lat || !coords?.lng) return null;
+        return {
+          id: item.facility_id,
+          name: item.facility_name,
+          address: '',
+          lat: coords.lat,
+          lng: coords.lng,
+          warehouse_code: '',
+          state: '',
+        } as Facility;
+      })
+      .filter(Boolean) as Facility[];
+  }, [displayFacilities, facilityMap]);
 
-    if (points.length === 0) return { center: [8.52, 12.0] as [number, number], zoom: 10 };
-    if (points.length === 1) return { center: points[0], zoom: 12 };
-
-    const lngs = points.map(p => p[0]);
-    const lats = points.map(p => p[1]);
-    return {
-      sw: [Math.min(...lngs) - 0.02, Math.min(...lats) - 0.02] as [number, number],
-      ne: [Math.max(...lngs) + 0.02, Math.max(...lats) + 0.02] as [number, number],
-    };
-  }, [startLocation, displayFacilities, facilityMap]);
-
-  // Initialize map
-  React.useEffect(() => {
-    if (!mapContainerRef.current) return;
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: getMapLibreStyle(theme as 'light' | 'dark' | 'system' | undefined),
-      center: 'center' in bounds ? bounds.center : [(bounds.sw[0] + bounds.ne[0]) / 2, (bounds.sw[1] + bounds.ne[1]) / 2],
-      zoom: 'zoom' in bounds ? bounds.zoom : 10,
-      attributionControl: false,
-    });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-    mapRef.current = map;
-    map.on('load', () => {
-      if ('sw' in bounds && 'ne' in bounds) {
-        map.fitBounds([bounds.sw, bounds.ne], { padding: 30, maxZoom: 14 });
-      }
-    });
-    return () => {
-      markersRef.current.forEach(m => m.remove());
-      markersRef.current.clear();
-      map.remove();
-      mapRef.current = null;
-    };
-  }, [theme]);
-
-  // Update markers and route
-  React.useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const update = () => {
-      markersRef.current.forEach(m => m.remove());
-      markersRef.current.clear();
-
-      const routeCoords: [number, number][] = [];
-      if (startLocation?.lat && startLocation?.lng) {
-        routeCoords.push([startLocation.lng, startLocation.lat]);
-      }
-
-      if (hasRoute && optimizedRoute.length > 0) {
-        optimizedRoute.forEach(p => {
-          if (p.lat && p.lng) routeCoords.push([p.lng, p.lat]);
-        });
-      } else {
-        displayFacilities.forEach(item => {
-          const f = facilityMap.get(item.facility_id);
-          if (f?.lat && f?.lng) routeCoords.push([f.lng, f.lat]);
-        });
-      }
-
-      const lineCoords = routeGeometry && routeGeometry.length >= 2 ? routeGeometry : routeCoords;
-
-      if (lineCoords.length >= 2 && map.isStyleLoaded()) {
-        if (map.getLayer('route-line')) map.removeLayer('route-line');
-        if (map.getSource('route')) map.removeSource('route');
-
-        map.addSource('route', {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            properties: {},
-            geometry: { type: 'LineString', coordinates: lineCoords },
-          },
-        });
-        map.addLayer({
-          id: 'route-line',
-          type: 'line',
-          source: 'route',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: {
-            'line-color': hasRoute ? '#10b981' : '#6b7280',
-            'line-width': 4,
-            'line-opacity': 0.8,
-          },
-        });
-      }
-
-      // Start marker
-      if (startLocation?.lat && startLocation?.lng) {
-        const el = document.createElement('div');
-        el.innerHTML = `<div style="width:34px;height:34px;background:#3b82f6;border:3px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:15px;">🏭</div>`;
-        const popup = new maplibregl.Popup({ offset: 25, closeButton: false }).setHTML(
-          `<div style="padding:4px"><strong>${startLocation.name ?? 'Warehouse'}</strong><div style="font-size:11px;color:#666">Start Location</div></div>`,
-        );
-        markersRef.current.set(
-          'start',
-          new maplibregl.Marker({ element: el })
-            .setLngLat([startLocation.lng, startLocation.lat])
-            .setPopup(popup)
-            .addTo(map),
-        );
-      }
-
-      const displayOrder = hasRoute && optimizedRoute.length > 0
-        ? optimizedRoute
-            .map((pt, idx) => {
-              const f = displayFacilities.find(x => x.facility_id === pt.facility_id);
-              return f ? { ...f, displayIndex: idx } : null;
-            })
-            .filter((x): x is NonNullable<typeof x> => !!x)
-        : displayFacilities.map((f, idx) => ({ ...f, displayIndex: idx }));
-
-      displayOrder.forEach(item => {
-        const coord = facilityMap.get(item.facility_id);
-        if (!coord?.lat || !coord?.lng) return;
-        const el = document.createElement('div');
-        el.innerHTML = `<div style="width:28px;height:28px;background:${hasRoute ? '#10b981' : '#6b7280'};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);color:white;font-size:11px;font-weight:600;">${item.displayIndex + 1}</div>`;
-        const popup = new maplibregl.Popup({ offset: 20, closeButton: false }).setHTML(
-          `<div style="padding:4px;min-width:110px"><div style="font-size:11px;color:${hasRoute ? '#10b981' : '#666'};font-weight:600">Stop ${item.displayIndex + 1}</div><strong style="font-size:12px">${item.facility_name}</strong><div style="font-size:10px;color:#666;margin-top:2px">${item.slot_demand ?? 0} slots</div></div>`,
-        );
-        markersRef.current.set(
-          item.facility_id,
-          new maplibregl.Marker({ element: el })
-            .setLngLat([coord.lng, coord.lat])
-            .setPopup(popup)
-            .addTo(map),
-        );
-      });
-
-      if ('sw' in bounds && 'ne' in bounds) {
-        map.fitBounds([bounds.sw, bounds.ne], { padding: 30, maxZoom: 14, duration: 500 });
-      }
-    };
-
-    if (map.isStyleLoaded()) update();
-    else map.once('styledata', update);
-  }, [startLocation, displayFacilities, facilityMap, bounds, hasRoute, optimizedRoute, routeGeometry]);
+  // Convert startLocation to depot format for BatchRouteMap
+  const depot = React.useMemo(() => {
+    if (!startLocation?.lat || !startLocation?.lng) return null;
+    return { lat: startLocation.lat, lng: startLocation.lng, name: startLocation.name ?? 'Warehouse' };
+  }, [startLocation]);
 
   // Sync optimization mode with options
   const handleModeChange = (mode: OptimizationMode) => {
@@ -372,7 +257,7 @@ export function Step4Route({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr_260px] gap-0">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[240px_1fr_300px] gap-0 overflow-hidden">
         {/* ----------------------------------------
             Left: Generated Runs
         ---------------------------------------- */}
@@ -431,83 +316,155 @@ export function Step4Route({
         </div>
 
         {/* ----------------------------------------
-            Center: Selected Run Map
+            Center col — Row 1: Runs/Waves  |  Row 2: Tact Map
         ---------------------------------------- */}
         <div className="flex flex-col min-h-0">
-          {/* Map header */}
-          {selectedRun && (
-            <div className="px-4 py-2.5 border-b bg-muted/20 flex items-center gap-3">
-              <Truck className="h-4 w-4 text-muted-foreground" />
+
+          {/* ── Row 1: Runs / Waves ── */}
+          <div className="flex flex-col border-b" style={{ height: '220px' }}>
+            <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center justify-between flex-shrink-0">
               <div>
-                <p className="text-xs font-medium">
-                  Run {selectedRun.run_index} · {selectedRun.vehicle_label}
-                </p>
+                <h3 className="text-xs font-semibold">Runs</h3>
                 <p className="text-[10px] text-muted-foreground">
-                  {selectedRun.departure_time} → {selectedRun.return_time} · {selectedRun.facility_ids.length} stops
+                  {hasWaves
+                    ? `${allRuns.length} run${allRuns.length !== 1 ? 's' : ''} across ${executionWaves.length} wave${executionWaves.length !== 1 ? 's' : ''}`
+                    : 'No runs — assign vehicles in Batch step'}
                 </p>
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              {selectedRun && (
                 <Button
                   onClick={onOptimize}
                   disabled={isOptimizing || displayFacilities.length === 0}
                   size="sm"
-                  className="h-8 text-xs"
+                  className="h-7 text-xs"
                 >
                   {isOptimizing ? (
-                    <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Optimizing…</>
+                    <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Optimizing…</>
                   ) : hasRoute ? (
-                    <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-optimize Run</>
+                    <><RefreshCw className="h-3 w-3 mr-1" />Re-optimize Run</>
                   ) : (
-                    <><Play className="h-3.5 w-3.5 mr-1.5" />Optimize Run</>
+                    <><Play className="h-3 w-3 mr-1" />Optimize Run</>
                   )}
                 </Button>
-              </div>
+              )}
             </div>
-          )}
 
-          {/* Map */}
-          <div className="flex-1 relative min-h-[300px]">
-            {facilities.length === 0 ? (
-              <div className="h-full flex items-center justify-center bg-muted">
-                <div className="text-center text-muted-foreground">
-                  <Route className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No facilities to display</p>
+            <ScrollArea className="flex-1">
+              <div className="p-3 space-y-2">
+                {!hasWaves && (
+                  <div className="flex flex-col items-center justify-center py-6 text-muted-foreground text-center">
+                    <Route className="h-7 w-7 mb-1.5 opacity-30" />
+                    <p className="text-xs">No runs generated</p>
+                    <p className="text-[10px] mt-0.5">Go back to Batch step and assign vehicles</p>
+                  </div>
+                )}
+
+                {executionWaves.map(wave => (
+                  <div key={wave.id} className="space-y-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1">
+                      {wave.label}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {wave.runs.map(run => (
+                        <RunCard
+                          key={run.id}
+                          run={run}
+                          isSelected={selectedRunId === run.id}
+                          onSelect={() => setSelectedRunId(prev => prev === run.id ? null : run.id)}
+                          compact
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {!hasWaves && facilities.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1">
+                      All Facilities
+                    </p>
+                    {facilities.map((f, idx) => (
+                      <div key={f.facility_id} className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-card text-xs">
+                        <span className="w-4 h-4 rounded-full bg-muted flex items-center justify-center font-medium text-muted-foreground text-[10px]">
+                          {idx + 1}
+                        </span>
+                        <span className="flex-1 truncate">{f.facility_name}</span>
+                        <Badge variant="outline" className="text-[10px] px-1">{f.slot_demand}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* ── Row 2: Route Preview ── */}
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Route Preview sub-header */}
+            <div className="px-3 py-1.5 border-b bg-muted/20 flex items-center gap-2 flex-shrink-0">
+              <MapIconLucide className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              {selectedRun ? (
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <p className="text-xs font-medium truncate">
+                    Run {selectedRun.run_index} · {selectedRun.vehicle_label}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    {selectedRun.departure_time} → {selectedRun.return_time} · {selectedRun.facility_ids.length} stops
+                  </span>
                 </div>
-              </div>
-            ) : (
-              <div ref={mapContainerRef} className="absolute inset-0" />
-            )}
+              ) : (
+                <p className="text-xs font-medium">Route Preview</p>
+              )}
+            </div>
 
-            {/* No run selected overlay */}
-            {!selectedRun && hasWaves && facilities.length > 0 && (
-              <div className="absolute inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center pointer-events-none">
-                <div className="text-center text-muted-foreground">
-                  <MapPin className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm font-medium">Select a run to optimize its route</p>
-                  <p className="text-xs mt-1">Click any run in the left panel</p>
+            {/* Map canvas */}
+            <div
+              className={cn(
+                'flex-1 relative',
+                isMapFullscreen ? 'fixed inset-0 z-50' : '',
+              )}
+              style={{ minHeight: '260px' }}
+            >
+              {facilities.length === 0 ? (
+                <div className="h-full flex items-center justify-center bg-muted">
+                  <div className="text-center text-muted-foreground">
+                    <Route className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">No facilities to display</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <BatchRouteMap
+                  facilities={mapFacilities}
+                  warehouse={depot}
+                  enableControls
+                  isFullscreen={isMapFullscreen}
+                  onToggleFullscreen={() => setIsMapFullscreen(prev => !prev)}
+                />
+              )}
 
-            {/* No waves — show global optimize */}
-            {!hasWaves && facilities.length > 0 && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-                <Button
-                  onClick={onOptimize}
-                  disabled={isOptimizing}
-                  size="sm"
-                  className="shadow-lg"
-                >
-                  {isOptimizing ? (
-                    <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Optimizing…</>
-                  ) : hasRoute ? (
-                    <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-optimize Route</>
-                  ) : (
-                    <><Play className="h-3.5 w-3.5 mr-1.5" />Optimize Route</>
-                  )}
-                </Button>
-              </div>
-            )}
+              {!selectedRun && hasWaves && facilities.length > 0 && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none">
+                  <div className="flex items-center gap-1.5 bg-background/90 border rounded-full px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+                    <MapPin className="h-3 w-3" />
+                    Select a run above to optimize its route
+                  </div>
+                </div>
+              )}
+
+              {!hasWaves && facilities.length > 0 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+                  <Button onClick={onOptimize} disabled={isOptimizing} size="sm" className="shadow-lg">
+                    {isOptimizing ? (
+                      <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Optimizing…</>
+                    ) : hasRoute ? (
+                      <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Re-optimize Route</>
+                    ) : (
+                      <><Play className="h-3.5 w-3.5 mr-1.5" />Optimize Route</>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -560,44 +517,93 @@ export function Step4Route({
 
               <Separator />
 
-              {/* Stop sequence for selected run */}
+              {/* Per-stop details when a stop is focused */}
+              {selectedStop && (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                    <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                    Stop {selectedStopIndex! + 1} — {selectedStop.facility_name}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-background rounded p-2">
+                      <p className="text-muted-foreground">Slots</p>
+                      <p className="font-semibold">{selectedStop.slot_demand ?? '—'}</p>
+                    </div>
+                    <div className="bg-background rounded p-2">
+                      <p className="text-muted-foreground">Weight</p>
+                      <p className="font-semibold">
+                        {selectedStop.weight_kg ? `${selectedStop.weight_kg} kg` : '—'}
+                      </p>
+                    </div>
+                    {selectedStop.lga && (
+                      <div className="col-span-2 bg-background rounded p-2">
+                        <p className="text-muted-foreground">LGA</p>
+                        <p className="font-semibold truncate">{selectedStop.lga}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Stop sequence — click any stop to focus the tact map */}
               <div>
-                <p className="text-xs font-medium mb-2">
-                  {selectedRun ? `Stop Sequence — Run ${selectedRun.run_index}` : 'Stop Sequence'}
-                </p>
-                <div className="space-y-1.5">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium">
+                    {selectedRun ? `Stop Sequence — Run ${selectedRun.run_index}` : 'Stop Sequence'}
+                  </p>
+                  {selectedStopIndex !== null && (
+                    <button
+                      onClick={() => setSelectedStopIndex(null)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {/* Origin */}
                   <div className="flex items-center gap-2 p-2 rounded bg-primary/5 text-xs">
-                    <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">S</span>
+                    <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center flex-shrink-0">S</span>
                     <span className="font-medium flex-1 truncate">{startLocationName || 'Warehouse'}</span>
-                    <Badge variant="secondary" className="text-[10px]">Origin</Badge>
+                    <Badge variant="secondary" className="text-[10px] flex-shrink-0">Origin</Badge>
                   </div>
 
-                  {(selectedRun
-                    ? displayFacilities
-                    : hasRoute && optimizedRoute.length > 0
-                      ? optimizedRoute
-                          .map(pt => facilities.find(f => f.facility_id === pt.facility_id))
-                          .filter((f): f is WorkingSetItem => !!f)
-                      : facilities
-                  ).map((f, idx) => (
-                    <div key={f.facility_id} className="flex items-center gap-2 p-2 rounded border text-xs">
+                  {orderedStops.map((f, idx) => (
+                    <button
+                      key={f.facility_id}
+                      onClick={() => setSelectedStopIndex(prev => prev === idx ? null : idx)}
+                      className={cn(
+                        'w-full flex items-center gap-2 p-2 rounded border text-xs text-left transition-colors',
+                        selectedStopIndex === idx
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                          : 'border-border hover:bg-muted/50',
+                      )}
+                    >
                       <span className={cn(
-                        'w-5 h-5 rounded-full text-[10px] flex items-center justify-center',
-                        hasRoute ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground',
+                        'w-5 h-5 rounded-full text-[10px] flex items-center justify-center flex-shrink-0',
+                        selectedStopIndex === idx
+                          ? 'bg-primary text-primary-foreground'
+                          : hasRoute ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground',
                       )}>
                         {idx + 1}
                       </span>
                       <span className="flex-1 truncate">{f.facility_name}</span>
                       {f.slot_demand > 0 && (
-                        <Badge variant="outline" className="text-[10px] px-1">{f.slot_demand}</Badge>
+                        <Badge
+                          variant={selectedStopIndex === idx ? 'default' : 'outline'}
+                          className="text-[10px] px-1 flex-shrink-0"
+                        >
+                          {f.slot_demand}
+                        </Badge>
                       )}
-                    </div>
+                    </button>
                   ))}
 
+                  {/* Return */}
                   <div className="flex items-center gap-2 p-2 rounded border border-dashed opacity-50 text-xs">
-                    <span className="w-5 h-5 rounded-full bg-muted text-muted-foreground text-[10px] flex items-center justify-center">R</span>
+                    <span className="w-5 h-5 rounded-full bg-muted text-muted-foreground text-[10px] flex items-center justify-center flex-shrink-0">R</span>
                     <span className="flex-1 truncate">{startLocationName || 'Warehouse'}</span>
-                    <Badge variant="outline" className="text-[10px]">Return</Badge>
+                    <Badge variant="outline" className="text-[10px] flex-shrink-0">Return</Badge>
                   </div>
                 </div>
               </div>
@@ -617,11 +623,40 @@ function RunCard({
   run,
   isSelected,
   onSelect,
+  compact = false,
 }: {
   run: DispatchRunProjection;
   isSelected: boolean;
   onSelect: () => void;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <button
+        onClick={onSelect}
+        title={`Run ${run.run_index} · ${run.vehicle_label ?? 'Unassigned'} · ${run.departure_time}→${run.return_time}`}
+        className={cn(
+          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-left transition-colors text-xs',
+          isSelected
+            ? 'border-primary bg-primary/5 text-primary'
+            : 'border-border bg-card hover:bg-muted/50',
+        )}
+      >
+        <span className={cn(
+          'w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0',
+          isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+        )}>
+          {run.run_index}
+        </span>
+        <span className="font-medium truncate max-w-[120px]">{run.vehicle_label ?? 'Unassigned'}</span>
+        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+          {run.facility_ids.length}s
+        </span>
+        {isSelected && <CheckCircle className="h-3 w-3 text-primary flex-shrink-0" />}
+      </button>
+    );
+  }
+
   return (
     <button
       onClick={onSelect}

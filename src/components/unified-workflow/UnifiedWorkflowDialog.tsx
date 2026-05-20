@@ -917,7 +917,7 @@ export function UnifiedWorkflowDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0"
+        className="max-w-[1320px] w-[95vw] max-h-[90vh] flex flex-col p-0 gap-0"
         onInteractOutside={(e) => e.preventDefault()}
       >
         {/* Header */}

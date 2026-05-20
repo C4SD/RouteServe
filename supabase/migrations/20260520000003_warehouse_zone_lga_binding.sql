@@ -1,7 +1,15 @@
+-- Add zone_id to warehouses so each warehouse can be assigned to a zone.
 -- Add warehouse_id to admin_units so each LGA can be bound to a specific
 -- warehouse within the same zone.
 -- Zone → Warehouse 1, Warehouse 2
 -- LGA/Facility → bound to one warehouse within that zone
+
+ALTER TABLE public.warehouses
+  ADD COLUMN IF NOT EXISTS zone_id UUID
+    REFERENCES public.zones(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_warehouses_zone_id
+  ON public.warehouses(zone_id);
 
 ALTER TABLE public.admin_units
   ADD COLUMN IF NOT EXISTS warehouse_id UUID

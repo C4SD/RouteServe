@@ -67,24 +67,38 @@ export default function LocationManagement() {
   // State selection for district import
   const [selectedStateOsmIds, setSelectedStateOsmIds] = useState<Set<number>>(new Set());
 
-  // Fetch workspace countries
-  const { data: workspaceCountries = [] } = useQuery({
+  // Fetch all countries for name/iso lookup
+  const { data: allCountries = [] } = useQuery({
+    queryKey: ['countries'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('countries')
+        .select('id, name, iso_code')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch workspace countries (no embedded join — resolved client-side)
+  const { data: workspaceCountriesRaw = [] } = useQuery({
     queryKey: ['workspace-countries', workspaceId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workspace_countries')
-        .select('id, country_id, is_primary, countries(id, name, iso_code)')
+        .select('id, country_id, is_primary')
         .eq('workspace_id', workspaceId!);
       if (error) throw error;
-      return (data || []) as Array<{
-        id: string;
-        country_id: string;
-        is_primary: boolean;
-        countries: { id: string; name: string; iso_code: string } | null;
-      }>;
+      return (data || []) as Array<{ id: string; country_id: string; is_primary: boolean }>;
     },
     enabled: !!workspaceId,
   });
+
+  const workspaceCountries = workspaceCountriesRaw.map((wc) => ({
+    ...wc,
+    countries: allCountries.find((c) => c.id === wc.country_id) ?? null,
+  }));
 
   const effectiveCountryId =
     selectedCountryId ||

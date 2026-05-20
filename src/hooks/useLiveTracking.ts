@@ -40,7 +40,7 @@ async function fetchActiveBatches(workspaceId: string) {
       *,
       driver:drivers!delivery_batches_driver_id_fkey(id, name, phone),
       vehicle:vehicles(id, plate_number, type, make, model, capacity),
-      warehouse:warehouses(id, name, address, lat, lng)
+      warehouse:warehouses!warehouse_id(id, name, address, lat, lng)
     `)
     .eq('workspace_id', workspaceId)
     .in('status', ['planned', 'assigned', 'in-progress'])
