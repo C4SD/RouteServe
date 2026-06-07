@@ -173,8 +173,8 @@ export function useInviteUser() {
       return data as string;
     },
     onSuccess: (_, params) => {
-      toast.success('Invitation Sent', {
-        description: `An invitation has been sent to ${params.email}`,
+      toast.success('Invitation Created', {
+        description: `Sending invitation email to ${params.email}…`,
       });
 
       // Invalidate invitation queries
@@ -350,24 +350,24 @@ export function useResendInvitation() {
 
       if (error) throw error;
 
-      // Fetch the new token so we can send the email
+      // Fetch the new token directly by ID (avoids JOIN-based RLS issues on the view)
       const { data: invitation } = await supabase
-        .from('pending_invitations_view')
+        .from('user_invitations')
         .select('invitation_token')
-        .eq('workspace_id', workspaceId)
-        .eq('email', email.toLowerCase())
-        .order('invited_at', { ascending: false })
-        .limit(1)
+        .eq('id', data)
         .single();
 
       if (invitation?.invitation_token) {
-        await supabase.functions.invoke('invite-user', {
+        const { error: emailError } = await supabase.functions.invoke('invite-user', {
           body: {
             email,
             invitation_token: invitation.invitation_token,
             workspace_name: workspaceName,
           },
         });
+        if (emailError) throw new Error('Invitation created but email could not be sent.');
+      } else {
+        throw new Error('Invitation created but email could not be sent.');
       }
 
       return data as string;

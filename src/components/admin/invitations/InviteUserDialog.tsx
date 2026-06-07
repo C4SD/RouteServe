@@ -71,14 +71,11 @@ export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSucces
         personal_message: personalMessage || undefined,
       });
 
-      // 2. Fetch the invitation token via pending_invitations_view (bypasses RLS)
+      // 2. Fetch the invitation token directly by ID (avoids JOIN-based RLS issues on the view)
       const { data: invitation } = await supabase
-        .from('pending_invitations_view')
+        .from('user_invitations')
         .select('invitation_token')
-        .eq('workspace_id', workspaceId)
-        .eq('email', email)
-        .order('invited_at', { ascending: false })
-        .limit(1)
+        .eq('id', invitationId)
         .single();
 
       if (invitation?.invitation_token) {
@@ -106,6 +103,12 @@ export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSucces
             duration: 10000,
           });
         }
+      } else {
+        // Token fetch failed — invitation exists in DB but email couldn't be sent
+        toast.warning('Invitation created but email could not be sent', {
+          description: 'Use Resend from the Invitations list to try again.',
+          duration: 10000,
+        });
       }
 
       // Reset form and close dialog

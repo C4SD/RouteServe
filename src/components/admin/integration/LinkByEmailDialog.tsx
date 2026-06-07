@@ -35,21 +35,18 @@ export function LinkByEmailDialog({ workspaceId, trigger, onSuccess }: LinkByEma
     if (!email) return;
 
     try {
-      await inviteUser.mutateAsync({
+      const invitationId = await inviteUser.mutateAsync({
         email,
         workspace_id: workspaceId,
         app_role: 'driver',
         workspace_role: 'member',
       });
 
-      // Fetch the invitation token to send the email
+      // Fetch the invitation token directly by ID (avoids JOIN-based RLS issues on the view)
       const { data: invitation } = await supabase
-        .from('pending_invitations_view')
+        .from('user_invitations')
         .select('invitation_token')
-        .eq('workspace_id', workspaceId)
-        .eq('email', email.toLowerCase())
-        .order('invited_at', { ascending: false })
-        .limit(1)
+        .eq('id', invitationId)
         .single();
 
       if (invitation?.invitation_token) {
@@ -76,6 +73,11 @@ export function LinkByEmailDialog({ workspaceId, trigger, onSuccess }: LinkByEma
             duration: 10000,
           });
         }
+      } else {
+        toast.warning('Invitation created but email could not be sent', {
+          description: 'Use Resend from the Invitations list to try again.',
+          duration: 10000,
+        });
       }
 
       setEmail('');
