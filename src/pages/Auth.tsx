@@ -156,6 +156,9 @@ export default function Auth() {
     // a token_hash — this prevents the redirect guard from bouncing an already-
     // authenticated recovery session to home before the mode-setting effect fires.
     if (searchParams.get('reset') === 'true' && !searchParams.get('token_hash')) return 'reset-password';
+    // AuthCallback navigates here with state when a recovery token is expired/invalid,
+    // or after a successful password reset.  Show login, not signup.
+    if ((location.state as { defaultMode?: string } | null)?.defaultMode === 'login') return 'login';
     return 'signup';
   });
   const [step, setStep] = useState<SignupStep>('credentials');
@@ -196,6 +199,17 @@ export default function Auth() {
       setMode('reset-password');
     }
   }, [isPasswordReset, recoveryTokenHash]);
+
+  // When navigated here in-place (component stays mounted) with a defaultMode hint
+  // from AuthCallback, update mode accordingly.
+  useEffect(() => {
+    const stateMode = (location.state as { defaultMode?: string } | null)?.defaultMode;
+    if (stateMode === 'login') {
+      setMode('login');
+      setStep('credentials');
+      setErrors({});
+    }
+  }, [location.state]);
 
   // Exchange the recovery token_hash from the email link for a session
   // before showing the reset form. Show a loading state while this is in
@@ -243,16 +257,18 @@ export default function Auth() {
     }
   }, [inviteToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Redirect if already logged in (but not during password recovery flow)
+  // Redirect if already logged in (but not during password recovery flow).
+  // Also skip during verifyingOtp: the recovery session is established but
+  // the user hasn't had a chance to set their password yet.
   useEffect(() => {
-    if (user && mode !== 'reset-password' && !recoveryTokenHash) {
+    if (user && mode !== 'reset-password' && !recoveryTokenHash && !verifyingOtp) {
       if (inviteToken) {
         navigate(`/invite/${inviteToken}`);
       } else {
         navigate(isLoginRoute ? '/mod4/driver' : '/');
       }
     }
-  }, [user, navigate, inviteToken, isLoginRoute, mode, recoveryTokenHash]);
+  }, [user, navigate, inviteToken, isLoginRoute, mode, recoveryTokenHash, verifyingOtp]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -487,10 +503,13 @@ export default function Auth() {
         });
         setNewPassword('');
         setConfirmNewPassword('');
-        // Sign out the recovery session so the user must authenticate with
-        // their new password.
+        // Sign out the recovery session so the user must authenticate with their
+        // new password. signOut is awaited first so that the SIGNED_OUT event
+        // (user→null) is batched with the subsequent mode change — this prevents
+        // the redirect guard from firing while user is still truthy but mode is
+        // already 'login'.
         await supabase.auth.signOut();
-        navigate('/auth', { replace: true });
+        navigate('/auth', { replace: true, state: { defaultMode: 'login' } });
         switchToLogin();
       }
     } catch {

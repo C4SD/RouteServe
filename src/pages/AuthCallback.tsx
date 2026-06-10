@@ -15,7 +15,12 @@ export default function AuthCallback() {
     // explicitly here before redirecting to the reset-password form.
     if (tokenHash && type === 'recovery') {
       supabase.auth.verifyOtp({ type: 'recovery', token_hash: tokenHash }).then(({ error }) => {
-        navigate(error ? '/auth' : '/auth?reset=true', { replace: true });
+        if (error) {
+          // Link expired or already used — send to login form, not signup form.
+          navigate('/auth', { replace: true, state: { defaultMode: 'login' } });
+        } else {
+          navigate('/auth?reset=true', { replace: true });
+        }
       });
       return;
     }
@@ -33,7 +38,18 @@ export default function AuthCallback() {
         navigate('/');
       }
     });
-    return () => subscription.unsubscribe();
+
+    // Safety timeout: if neither event fires within 10 s (e.g. no token in URL,
+    // or the SDK fails silently), fall back to the login form.
+    const timeout = setTimeout(() => {
+      subscription.unsubscribe();
+      navigate('/auth', { replace: true, state: { defaultMode: 'login' } });
+    }, 10_000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [navigate]);
 
   return (
