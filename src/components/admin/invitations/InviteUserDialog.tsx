@@ -73,7 +73,7 @@ export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSucces
       });
 
       // 2. Send invitation email via Edge Function
-      const { error: emailError } = await supabase.functions.invoke('invite-user', {
+      const { data: fnData, error: emailError } = await supabase.functions.invoke('invite-user', {
         body: {
           email,
           invitation_token: result.invitation_token,
@@ -81,7 +81,10 @@ export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSucces
         },
       });
 
-      if (emailError) {
+      // invoke() only sets `error` on network failures; check the response body too
+      const fnFailed = emailError || (fnData && !fnData.success);
+
+      if (fnFailed) {
         // Email failed but invitation was created — show link for manual sharing
         const inviteUrl = buildInvitationUrl(result.invitation_token);
         toast.warning('Invitation created but email could not be sent', {

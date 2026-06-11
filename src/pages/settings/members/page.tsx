@@ -752,28 +752,19 @@ function AddMemberDialogV2({
   const handleInvite = async () => {
     if (!inviteEmail) return;
     try {
-      await inviteUser.mutateAsync({
+      // RPC returns { id, invitation_token } directly — no separate view query needed
+      const result = await inviteUser.mutateAsync({
         email: inviteEmail,
         workspace_id: workspaceId,
         role_code: inviteRole,
         workspace_role: 'member',
       });
 
-      // Fetch token and send email
-      const { data: invitation } = await supabase
-        .from('pending_invitations_view')
-        .select('invitation_token')
-        .eq('workspace_id', workspaceId)
-        .eq('email', inviteEmail.toLowerCase())
-        .order('invited_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (invitation?.invitation_token) {
+      if (result.invitation_token) {
         await supabase.functions.invoke('invite-user', {
           body: {
             email: inviteEmail,
-            invitation_token: invitation.invitation_token,
+            invitation_token: result.invitation_token,
             workspace_name: workspaceName,
           },
         });
