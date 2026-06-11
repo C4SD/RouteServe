@@ -201,10 +201,12 @@ export default function Login() {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                    <label htmlFor="driver-email" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
                       Email
                     </label>
                     <Input
+                      id="driver-email"
+                      name="email"
                       type="email"
                       placeholder="driver@example.com"
                       value={email}
@@ -214,7 +216,7 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                    <label htmlFor="driver-pin" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
                       Your 4-digit PIN
                     </label>
                     <div className="flex justify-center">

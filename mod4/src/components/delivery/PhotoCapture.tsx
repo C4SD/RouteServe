@@ -94,9 +94,11 @@ export function PhotoCapture({ onPhotoChange, className }: PhotoCaptureProps) {
 
   return (
     <div className={cn("space-y-3", className)}>
-      <label className="text-sm font-medium text-foreground">Delivery Photo</label>
-      
+      <label htmlFor="delivery-photo" className="text-sm font-medium text-foreground">Delivery Photo</label>
+
       <input
+        id="delivery-photo"
+        name="delivery-photo"
         ref={fileInputRef}
         type="file"
         accept="image/*"

@@ -108,9 +108,9 @@ const DeliveryList = ({ deliveries, onDeliveryUpdate }: DeliveryListProps) => {
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Status Filter</label>
+              <label htmlFor="status-filter" className="text-sm font-medium">Status Filter</label>
               <Select value={deliveryStatus} onValueChange={setDeliveryStatus}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger id="status-filter" className="w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -124,9 +124,9 @@ const DeliveryList = ({ deliveries, onDeliveryUpdate }: DeliveryListProps) => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Priority Filter</label>
+              <label htmlFor="priority-filter" className="text-sm font-medium">Priority Filter</label>
               <Select value={deliveryPriority} onValueChange={setDeliveryPriority}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger id="priority-filter" className="w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

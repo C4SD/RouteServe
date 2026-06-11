@@ -274,8 +274,8 @@ export function DeliverySheet({
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Reason for skipping <span className="text-destructive">*</span></label>
-                    <Textarea placeholder="Enter reason..." value={skipReason} onChange={(e) => setSkipReason(e.target.value)} className="min-h-[120px] resize-none" required />
+                    <label htmlFor="skip-reason" className="text-sm font-medium text-foreground">Reason for skipping <span className="text-destructive">*</span></label>
+                    <Textarea id="skip-reason" name="skip-reason" placeholder="Enter reason..." value={skipReason} onChange={(e) => setSkipReason(e.target.value)} className="min-h-[120px] resize-none" required />
                   </div>
                   <Button variant="destructive" className="w-full h-14 text-base font-semibold" disabled={!skipReason.trim() || isSubmitting} onClick={handleSkipDelivery}>
                     {isSubmitting ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <X className="w-5 h-5 mr-2" />}

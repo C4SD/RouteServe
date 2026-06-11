@@ -120,6 +120,8 @@ export function PlaybackBar({
 
               <div className="flex-1 relative">
                 <input
+                  id="playback-scrubber"
+                  name="playback-scrubber"
                   type="range"
                   min={startTime}
                   max={endTime}

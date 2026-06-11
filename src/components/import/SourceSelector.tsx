@@ -231,6 +231,7 @@ export function SourceSelector({
           </Button>
           <input
             ref={fileInputRef}
+            name="file-upload"
             type="file"
             multiple
             accept={accept}
@@ -271,6 +272,7 @@ export function SourceSelector({
         </Button>
         <input
           ref={addMoreInputRef}
+          name="file-upload-more"
           type="file"
           multiple
           accept={accept}

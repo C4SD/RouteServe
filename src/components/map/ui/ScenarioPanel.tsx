@@ -23,9 +23,9 @@ export function ScenarioPanel() {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-xs font-medium">Fleet Capacity</label>
+                    <label htmlFor="fleet-capacity" className="text-xs font-medium">Fleet Capacity</label>
                     <div className="flex items-center gap-2">
-                        <input type="range" className="w-full h-1 bg-secondary rounded-lg appearance-none cursor-pointer" />
+                        <input id="fleet-capacity" name="fleet-capacity" type="range" className="w-full h-1 bg-secondary rounded-lg appearance-none cursor-pointer" />
                         <span className="text-xs w-8 text-right">100%</span>
                     </div>
                 </div>

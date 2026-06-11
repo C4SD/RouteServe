@@ -782,10 +782,12 @@ export function CopilotStep3Intent({
           {showAdvanced && (
             <div className="mt-3 grid grid-cols-3 gap-4 rounded-lg border p-4 bg-muted/20">
               <div>
-                <label className="text-xs text-muted-foreground mb-1.5 block">
+                <label htmlFor="max-run-duration" className="text-xs text-muted-foreground mb-1.5 block">
                   Max run duration (hours)
                 </label>
                 <input
+                  id="max-run-duration"
+                  name="max-run-duration"
                   type="number"
                   min={1}
                   max={16}
@@ -797,10 +799,12 @@ export function CopilotStep3Intent({
                 />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
+                <label htmlFor="shift-start" className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
                   <Clock className="h-3 w-3" /> Shift start
                 </label>
                 <input
+                  id="shift-start"
+                  name="shift-start"
                   type="number"
                   min={0}
                   max={12}
@@ -810,10 +814,12 @@ export function CopilotStep3Intent({
                 />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
+                <label htmlFor="shift-end" className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
                   <Clock className="h-3 w-3" /> Shift end
                 </label>
                 <input
+                  id="shift-end"
+                  name="shift-end"
                   type="number"
                   min={12}
                   max={24}

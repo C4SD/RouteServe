@@ -180,6 +180,8 @@ export function ForensicTimelineBar({
       {/* Slider */}
       <div className="flex-1 min-w-[200px]">
         <input
+          id="forensic-timeline"
+          name="forensic-timeline"
           type="range"
           min="0"
           max="100"
@@ -200,6 +202,8 @@ export function ForensicTimelineBar({
 
       {/* Speed selector */}
       <select
+        id="playback-speed"
+        name="playback-speed"
         value={speed}
         onChange={(e) => onSpeedChange(parseFloat(e.target.value) as PlaybackSpeed)}
         className="text-xs px-2 py-1 rounded border bg-background text-foreground cursor-pointer"

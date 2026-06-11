@@ -261,8 +261,10 @@ function RunCard({ run, vehicles, drivers, onUpdateRun }: RunCardProps) {
               <p className="text-xs font-medium">Override Run Details</p>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Departure</label>
+                  <label htmlFor="edit-departure" className="text-xs text-muted-foreground mb-1 block">Departure</label>
                   <input
+                    id="edit-departure"
+                    name="edit-departure"
                     type="time"
                     value={editDeparture}
                     onChange={(e) => setEditDeparture(e.target.value)}
@@ -270,8 +272,10 @@ function RunCard({ run, vehicles, drivers, onUpdateRun }: RunCardProps) {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Return</label>
+                  <label htmlFor="edit-return" className="text-xs text-muted-foreground mb-1 block">Return</label>
                   <input
+                    id="edit-return"
+                    name="edit-return"
                     type="time"
                     value={editReturn}
                     onChange={(e) => setEditReturn(e.target.value)}
@@ -281,8 +285,10 @@ function RunCard({ run, vehicles, drivers, onUpdateRun }: RunCardProps) {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Vehicle</label>
+                  <label htmlFor="edit-vehicle" className="text-xs text-muted-foreground mb-1 block">Vehicle</label>
                   <select
+                    id="edit-vehicle"
+                    name="edit-vehicle"
                     value={editVehicle}
                     onChange={(e) => setEditVehicle(e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
@@ -296,8 +302,10 @@ function RunCard({ run, vehicles, drivers, onUpdateRun }: RunCardProps) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Driver</label>
+                  <label htmlFor="edit-driver" className="text-xs text-muted-foreground mb-1 block">Driver</label>
                   <select
+                    id="edit-driver"
+                    name="edit-driver"
                     value={editDriver}
                     onChange={(e) => setEditDriver(e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
