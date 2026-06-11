@@ -49,3 +49,6 @@ supabase/.temp/
 
 # Claude Code runtime files
 .github/context-mode/
+.agents/
+.claude/
+skills-lock.json
