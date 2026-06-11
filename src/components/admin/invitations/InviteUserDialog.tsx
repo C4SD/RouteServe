@@ -62,8 +62,9 @@ export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSucces
     if (!email || !appRole) return;
 
     try {
-      // 1. Create invitation record in DB
-      const invitationId = await inviteUser.mutateAsync({
+      // 1. Create invitation record in DB — RPC returns { id, invitation_token }
+      //    using SECURITY DEFINER so the token is always readable regardless of RLS.
+      const result = await inviteUser.mutateAsync({
         email,
         workspace_id: workspaceId,
         role_code: appRole,
@@ -71,42 +72,27 @@ export function InviteUserDialog({ workspaceId, workspaceName, trigger, onSucces
         personal_message: personalMessage || undefined,
       });
 
-      // 2. Fetch the invitation token directly by ID (avoids JOIN-based RLS issues on the view)
-      const { data: invitation } = await supabase
-        .from('user_invitations')
-        .select('invitation_token')
-        .eq('id', invitationId)
-        .single();
+      // 2. Send invitation email via Edge Function
+      const { error: emailError } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email,
+          invitation_token: result.invitation_token,
+          workspace_name: workspaceName,
+        },
+      });
 
-      if (invitation?.invitation_token) {
-        // 3. Send invitation email via Edge Function
-        const { error: emailError } = await supabase.functions.invoke('invite-user', {
-          body: {
-            email,
-            invitation_token: invitation.invitation_token,
-            workspace_name: workspaceName,
-          },
-        });
-
-        if (emailError) {
-          // Email failed but invitation was created - show link for manual sharing
-          const inviteUrl = buildInvitationUrl(invitation.invitation_token);
-          toast.warning('Invitation created but email could not be sent', {
-            description: 'Copy the invitation link to share manually.',
-            action: {
-              label: 'Copy Link',
-              onClick: () => {
-                navigator.clipboard.writeText(inviteUrl);
-                toast.success('Link copied to clipboard');
-              },
-            },
-            duration: 10000,
-          });
-        }
-      } else {
-        // Token fetch failed — invitation exists in DB but email couldn't be sent
+      if (emailError) {
+        // Email failed but invitation was created — show link for manual sharing
+        const inviteUrl = buildInvitationUrl(result.invitation_token);
         toast.warning('Invitation created but email could not be sent', {
-          description: 'Use Resend from the Invitations list to try again.',
+          description: 'Copy the invitation link to share manually.',
+          action: {
+            label: 'Copy Link',
+            onClick: () => {
+              navigator.clipboard.writeText(inviteUrl);
+              toast.success('Link copied to clipboard');
+            },
+          },
           duration: 10000,
         });
       }

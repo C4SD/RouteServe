@@ -156,7 +156,7 @@ export function useInviteUser() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: InviteUserParams): Promise<string> => {
+    mutationFn: async (params: InviteUserParams): Promise<{ id: string; invitation_token: string }> => {
       const { data, error } = await supabase.rpc('invite_user', {
         p_email: params.email,
         p_workspace_id: params.workspace_id,
@@ -170,7 +170,7 @@ export function useInviteUser() {
         throw error;
       }
 
-      return data as string;
+      return data as { id: string; invitation_token: string };
     },
     onSuccess: (_, params) => {
       toast.success('Invitation Created', {
@@ -339,7 +339,7 @@ export function useResendInvitation() {
       });
       if (revokeError && !revokeError.message?.includes('not pending')) throw revokeError;
 
-      // Create a fresh invitation
+      // Create a fresh invitation — RPC returns { id, invitation_token }
       const { data, error } = await supabase.rpc('invite_user', {
         p_email: email,
         p_workspace_id: workspaceId,
@@ -350,27 +350,18 @@ export function useResendInvitation() {
 
       if (error) throw error;
 
-      // Fetch the new token directly by ID (avoids JOIN-based RLS issues on the view)
-      const { data: invitation } = await supabase
-        .from('user_invitations')
-        .select('invitation_token')
-        .eq('id', data)
-        .single();
+      const result = data as { id: string; invitation_token: string };
 
-      if (invitation?.invitation_token) {
-        const { error: emailError } = await supabase.functions.invoke('invite-user', {
-          body: {
-            email,
-            invitation_token: invitation.invitation_token,
-            workspace_name: workspaceName,
-          },
-        });
-        if (emailError) throw new Error('Invitation created but email could not be sent.');
-      } else {
-        throw new Error('Invitation created but email could not be sent.');
-      }
+      const { error: emailError } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email,
+          invitation_token: result.invitation_token,
+          workspace_name: workspaceName,
+        },
+      });
+      if (emailError) throw new Error('Invitation created but email could not be sent.');
 
-      return data as string;
+      return result.id;
     },
     onSuccess: (_, { email, workspaceId }) => {
       toast.success('Invitation Resent', {
