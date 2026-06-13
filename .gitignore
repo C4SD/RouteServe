@@ -47,6 +47,11 @@ supabase/.temp/
 /blob-report/
 /playwright/.cache/
 
+# Database dumps
+*.sql.dump
+dump_*.sql
+dump_*.txt
+
 # Claude Code runtime files
 .github/context-mode/
 .agents/

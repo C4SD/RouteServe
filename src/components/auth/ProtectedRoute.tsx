@@ -4,6 +4,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAbilityContext } from '@/rbac/AbilityProvider';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { encodeInviteToken } from '@/lib/inviteToken';
 import type { Permission } from '@/rbac/types';
 
 interface ProtectedRouteProps {
@@ -43,12 +44,46 @@ export function ProtectedRoute({
     staleTime: 5 * 60 * 1000, // Onboarding status rarely changes — 5 min is safe
   });
 
+  // Check for pending invitations when the user has no workspace.
+  // Invited members should be redirected to accept their invitation, not to org onboarding.
+  const needsInvitationCheck =
+    !!user &&
+    !isOnboardingRoute &&
+    !isInviteRoute &&
+    onboardingStatus &&
+    !onboardingStatus.has_workspace &&
+    !onboardingStatus.has_role &&
+    !onboardingStatus.onboarding_completed;
+
+  const { data: pendingInvitation, isLoading: invitationLoading } = useQuery({
+    queryKey: ['pending-invitation-redirect'],
+    queryFn: async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser?.email) return null;
+
+      const { data, error } = await supabase
+        .from('user_invitations')
+        .select('invitation_token')
+        .eq('email', currentUser.email)
+        .eq('status', 'pending')
+        .order('invited_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return data.invitation_token as string;
+    },
+    enabled: !!needsInvitationCheck,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Combined loading state
   const isLoading =
     loading ||
     // Only block on workspace loading if we need permission checks (avoids waterfall for regular routes)
     (!!permission && isLoadingWorkspaces) ||
     (!isOnboardingRoute && !isProfileCompletionRoute && !isInviteRoute && onboardingLoading) ||
+    (!!needsInvitationCheck && invitationLoading) ||
     (!!permission && abilityLoading);
 
   if (isLoading) {
@@ -68,15 +103,12 @@ export function ProtectedRoute({
     return <Navigate to={redirectTo} state={{ from: location }} replace />;
   }
 
-  // Check if user needs onboarding (no workspace yet)
-  if (
-    !isOnboardingRoute &&
-    !isInviteRoute &&
-    onboardingStatus &&
-    !onboardingStatus.has_workspace &&
-    !onboardingStatus.has_role &&
-    !onboardingStatus.onboarding_completed
-  ) {
+  // Check if user needs onboarding (no workspace yet).
+  // Invited members get redirected to accept their invitation instead of org onboarding.
+  if (needsInvitationCheck) {
+    if (pendingInvitation) {
+      return <Navigate to={`/invite/${encodeInviteToken(pendingInvitation)}`} replace />;
+    }
     return <Navigate to="/onboarding" replace />;
   }
 
