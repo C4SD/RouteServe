@@ -106,6 +106,19 @@ export function useInvitationByToken(token: string | null | undefined) {
       });
 
       if (error) {
+        // A stale/expired JWT causes PostgREST to return 401 even though the
+        // RPC is granted to anon. Clear the dead session and retry once.
+        if (error.message?.includes('401') || (error as any).status === 401) {
+          await supabase.auth.signOut();
+          const retry = await supabase.rpc('get_invitation_by_token', {
+            p_token: token,
+          });
+          if (retry.error) {
+            console.error('Error fetching invitation by token (retry):', retry.error);
+            throw retry.error;
+          }
+          return retry.data as InvitationDetails;
+        }
         console.error('Error fetching invitation by token:', error);
         throw error;
       }

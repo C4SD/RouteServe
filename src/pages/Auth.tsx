@@ -243,9 +243,16 @@ export default function Auth() {
     if (inviteToken && !formData.email) {
       const fetchInvitationEmail = async () => {
         try {
-          const { data, error } = await supabase.rpc('get_invitation_by_token', {
+          let { data, error } = await supabase.rpc('get_invitation_by_token', {
             p_token: decodeInviteToken(inviteToken),
           });
+          // Stale JWT → 401; clear dead session and retry as anon
+          if (error && (error.message?.includes('401') || (error as any).status === 401)) {
+            await supabase.auth.signOut();
+            ({ data, error } = await supabase.rpc('get_invitation_by_token', {
+              p_token: decodeInviteToken(inviteToken),
+            }));
+          }
           if (data && !error && data.email) {
             setFormData((prev) => ({ ...prev, email: data.email }));
           }
@@ -293,6 +300,8 @@ export default function Auth() {
   };
 
   const handleLogin = async () => {
+    if (loading) return; // prevent double-submission
+
     const loginErrors: Record<string, string> = {};
     if (!formData.email || !z.string().email().safeParse(formData.email).success) {
       loginErrors.email = 'Please enter a valid email address';
@@ -309,7 +318,19 @@ export default function Auth() {
     try {
       const { error } = await signIn(formData.email, formData.password);
       if (error) {
-        toast.error('Login Failed', { description: error.message });
+        // Map common Supabase Auth errors to user-friendly messages
+        const msg = error.message?.toLowerCase() || '';
+        if (msg.includes('email not confirmed')) {
+          toast.error('Email Not Verified', {
+            description: 'Please check your inbox and click the verification link before signing in.',
+          });
+        } else if (msg.includes('invalid login credentials') || msg.includes('invalid_credentials')) {
+          toast.error('Login Failed', {
+            description: 'Incorrect email or password. Please try again.',
+          });
+        } else {
+          toast.error('Login Failed', { description: error.message });
+        }
       } else {
         if (inviteToken) {
           navigate(`/invite/${inviteToken}`);
@@ -319,7 +340,9 @@ export default function Auth() {
         }
       }
     } catch {
-      toast.error('An error occurred during login');
+      toast.error('Login Failed', {
+        description: 'Unable to reach the server. Please check your connection and try again.',
+      });
     } finally {
       setLoading(false);
     }
@@ -386,6 +409,15 @@ export default function Auth() {
           toast.error('Signup Failed', { description: error.message });
         }
       } else {
+        // For invited users, auto-confirm their email — the invitation
+        // already validated the address so requiring a second confirmation
+        // email creates a broken flow (can't sign in → can't accept).
+        if (inviteToken) {
+          await supabase.rpc('confirm_invited_email', {
+            p_token: decodeInviteToken(inviteToken),
+          });
+        }
+
         // Check if user was auto-logged in (email confirmation not required)
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
@@ -400,6 +432,21 @@ export default function Auth() {
               description: "Let's set up your workspace!",
             });
             navigate('/onboarding');
+          }
+        } else if (inviteToken) {
+          // Email was just confirmed by the RPC — sign in and accept
+          const { error: signInErr } = await signIn(formData.email, formData.password);
+          if (!signInErr) {
+            toast.success('Account Created', {
+              description: 'Accepting your invitation...',
+            });
+            navigate(`/invite/${inviteToken}`);
+          } else {
+            // Fallback: show verification prompt
+            setStep('complete');
+            toast.success('Account Created', {
+              description: 'Please check your email to verify your account.',
+            });
           }
         } else {
           // Email verification required — show verification prompt

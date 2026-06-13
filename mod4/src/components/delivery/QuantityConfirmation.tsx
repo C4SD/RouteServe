@@ -135,6 +135,7 @@ export function QuantityConfirmation({
                   </Button>
                   
                   <input
+                    name={`quantity-${item.id}`}
                     type="number"
                     value={item.delivered_quantity}
                     onChange={(e) => setQuantity(item.id, parseInt(e.target.value) || 0)}

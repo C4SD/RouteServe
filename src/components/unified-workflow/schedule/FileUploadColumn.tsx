@@ -313,6 +313,7 @@ export function FileUploadColumn({
             </div>
             <input
               ref={inputRef}
+              name="schedule-file-upload"
               type="file"
               accept={ACCEPTED_TYPES}
               onChange={handleInputChange}

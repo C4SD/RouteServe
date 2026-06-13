@@ -193,6 +193,7 @@ export default function ProfileCompletionPage() {
             </button>
             <input
               ref={fileInputRef}
+              name="avatar-upload"
               type="file"
               accept="image/png,image/jpeg,image/webp"
               onChange={handleAvatarChange}

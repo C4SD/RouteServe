@@ -5,6 +5,18 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
+// Fix malformed Supabase redirect URLs before React Router mounts.
+// Supabase sometimes redirects /auth/callback&token_hash=XXX&type=recovery
+// (using & instead of ? as the first query separator), which React Router
+// can't match. Normalize it to /auth/callback?token_hash=XXX&type=recovery.
+(function normalizeCallbackUrl() {
+  const path = window.location.pathname;
+  if (path.startsWith('/auth/callback&')) {
+    const fixed = '/auth/callback?' + path.slice('/auth/callback&'.length) + window.location.hash;
+    window.history.replaceState(null, '', fixed);
+  }
+})();
+
 function renderCrashFallback(error: unknown) {
   const root = document.getElementById("root");
   if (!root) return;

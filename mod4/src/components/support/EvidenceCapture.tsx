@@ -103,6 +103,7 @@ export function EvidenceCapture({
       {/* Hidden Inputs */}
       <input
         ref={cameraInputRef}
+        name="evidence-camera"
         type="file"
         accept="image/*"
         capture="environment"
@@ -111,6 +112,7 @@ export function EvidenceCapture({
       />
       <input
         ref={fileInputRef}
+        name="evidence-file"
         type="file"
         accept="image/*"
         onChange={handleCapture}

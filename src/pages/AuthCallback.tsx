@@ -2,11 +2,28 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Parse query-like parameters from the full URL.
+ * Supabase sometimes redirects with `&` instead of `?` as the first separator,
+ * e.g. /auth/callback&token_hash=XXX&type=recovery  (malformed)
+ * This function handles `?`, `&`, and `#` as separators robustly.
+ */
+function parseCallbackParams(): URLSearchParams {
+  const url = window.location.href;
+  // Find the first occurrence of ? or & after '/auth/callback'
+  const callbackIdx = url.indexOf('/auth/callback');
+  if (callbackIdx === -1) return new URLSearchParams(window.location.search);
+  const afterCallback = url.substring(callbackIdx + '/auth/callback'.length);
+  // Replace leading & or # with ? so URLSearchParams can parse it
+  const normalized = afterCallback.replace(/^[&#]/, '?');
+  return new URLSearchParams(normalized.startsWith('?') ? normalized : `?${normalized}`);
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = parseCallbackParams();
     const tokenHash = params.get('token_hash');
     const type = params.get('type');
 
